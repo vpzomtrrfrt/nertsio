@@ -146,6 +146,14 @@ impl Stack {
         }
     }
 
+    pub fn last(&self) -> Option<&CardInstance> {
+        self.cards.last()
+    }
+
+    pub fn len(&self) -> usize {
+        self.cards.len()
+    }
+
     pub fn try_add(&mut self, card: CardInstance) -> Result<(), RejectedByOrdering> {
         let ok = match self.cards.last() {
             None => {
@@ -164,10 +172,6 @@ impl Stack {
         } else {
             Err(RejectedByOrdering)
         }
-    }
-
-    pub fn last(&self) -> Option<&CardInstance> {
-        self.cards.last()
     }
 
     pub fn pop(&mut self) -> Option<CardInstance> {
@@ -202,7 +206,7 @@ impl HandPlayerState {
             .collect();
         rand::seq::SliceRandom::shuffle(&mut cards[..], &mut rand::thread_rng());
 
-        let nerts_stack = Stack::from_list_unordered(cards.split_off(13));
+        let nerts_stack = Stack::from_list_unordered(cards.split_off(cards.len() - 13));
         let tableau_stacks = (0..tableau_stacks_count)
             .map(|_| Stack::from_one(Ordering::AlternatingDown, false, cards.pop().unwrap()))
             .collect();

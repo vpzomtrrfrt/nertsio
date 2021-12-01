@@ -9,11 +9,11 @@ fn main() {
     ))
     .unwrap();
 
-    {
-        let content = std::fs::read("res/cards.svg").unwrap();
+    for (name, size) in [("cards", (1700, 770)), ("backs", (140, 200))] {
+        let content = std::fs::read(format!("res/{}.svg", name)).unwrap();
         let tree = usvg::Tree::from_data(&content, &usvg::Options::default().to_ref()).unwrap();
 
-        let mut pixmap = tiny_skia::Pixmap::new(1700, 770).unwrap();
+        let mut pixmap = tiny_skia::Pixmap::new(size.0, size.1).unwrap();
         resvg::render(
             &tree,
             usvg::FitTo::Size(pixmap.width(), pixmap.height()),
@@ -23,15 +23,18 @@ fn main() {
 
         pixmap
             .save_png(format!(
-                "{}{}cards.png",
+                "{}{}{}.png",
                 std::env::var("OUT_DIR").unwrap(),
-                std::path::MAIN_SEPARATOR
+                std::path::MAIN_SEPARATOR,
+                name,
             ))
             .unwrap();
 
         writeln!(
             mod_output,
-            "pub const CARDS: &[u8] = include_bytes!(\"cards.png\");"
+            "pub const {}: &[u8] = include_bytes!(\"{}.png\");",
+            name.to_uppercase(),
+            name,
         )
         .unwrap();
     }
