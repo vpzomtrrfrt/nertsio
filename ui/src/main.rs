@@ -5,6 +5,7 @@ const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 
 const CARD_WIDTH: f32 = 90.0;
 const CARD_HEIGHT: f32 = 135.0;
+const VERTICAL_STACK_SPACING: f32 = 20.0;
 
 fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     const SPACING: f32 = 10.0;
@@ -72,7 +73,7 @@ async fn main() {
 
     let draw_vertical_stack_cards = |cards: &[ni_ty::CardInstance], x: f32, y: f32| {
         for (i, card) in cards.iter().enumerate() {
-            draw_card(card.card, x, y + (i as f32) * 10.0);
+            draw_card(card.card, x, y + (i as f32) * VERTICAL_STACK_SPACING);
         }
     };
 
@@ -107,17 +108,20 @@ async fn main() {
                                 140.0 + CARD_WIDTH + (i as f32) * (CARD_WIDTH + 10.0),
                                 10.0,
                                 CARD_WIDTH,
-                                CARD_HEIGHT + ((stack.len() - 1) as f32) * 10.0,
+                                CARD_HEIGHT + ((stack.len() as f32) - 1.0) * VERTICAL_STACK_SPACING,
                             )
                             .contains(mouse_vec)
                             {
-                                let found_idx =
-                                    (((mouse_pos.1 - 10.0) / 10.0) as usize).min(stack.len() - 1);
+                                let loc = ni_ty::PlayerStackLocation::Tableau(i as u8);
+                                if stack.len() > 0 {
+                                    let found_idx =
+                                        (((mouse_pos.1 - 10.0) / VERTICAL_STACK_SPACING) as usize)
+                                            .min(stack.len() - 1);
 
-                                Some((
-                                    ni_ty::PlayerStackLocation::Tableau(i as u8),
-                                    stack.len() - found_idx,
-                                ))
+                                    Some((loc, stack.len() - found_idx))
+                                } else {
+                                    Some((loc, 0))
+                                }
                             } else {
                                 None
                             }
@@ -135,23 +139,29 @@ async fn main() {
                             if target_loc == src_loc {
                                 held_cards = None;
                             } else {
-                                if let Some(target_stack) = player_state.stack_at(target_loc) {
-                                    if let Some(src_stack) = player_state.stack_at(src_loc) {
-                                        let stack_cards = src_stack.cards();
-                                        let back_card = &stack_cards[stack_cards.len() - src_count];
+                                if matches!(target_loc, ni_ty::PlayerStackLocation::Tableau(_)) {
+                                    if let Some(target_stack) = player_state.stack_at(target_loc) {
+                                        if let Some(src_stack) = player_state.stack_at(src_loc) {
+                                            let stack_cards = src_stack.cards();
+                                            let back_card =
+                                                &stack_cards[stack_cards.len() - src_count];
 
-                                        if target_stack.can_add(*back_card) {
-                                            let action = ni_ty::HandAction::Move {
-                                                from: ni_ty::StackLocation::Player(0, src_loc),
-                                                count: src_count as u8,
-                                                to: ni_ty::StackLocation::Player(0, target_loc),
-                                            };
+                                            if target_stack.can_add(*back_card) {
+                                                let action = ni_ty::HandAction::Move {
+                                                    from: ni_ty::StackLocation::Player(0, src_loc),
+                                                    count: src_count as u8,
+                                                    to: ni_ty::StackLocation::Player(0, target_loc),
+                                                };
 
-                                            let _ = player_state;
-                                            if let Err(err) = hand_state.apply(0, action) {
-                                                eprintln!("failed to apply movement: {:?}", err);
+                                                let _ = player_state;
+                                                if let Err(err) = hand_state.apply(0, action) {
+                                                    eprintln!(
+                                                        "failed to apply movement: {:?}",
+                                                        err
+                                                    );
+                                                }
+                                                held_cards = None;
                                             }
-                                            held_cards = None;
                                         }
                                     }
                                 }
