@@ -96,8 +96,13 @@ impl Ordering {
     pub fn allows(self, below: Card, above: Card) -> bool {
         match self {
             Ordering::Any => true,
-            Ordering::AlternatingDown => below.rank.decrement() == Some(above.rank) && below.suit.color() == above.suit.color().opposite(),
-            Ordering::SingleSuitUp => below.rank.increment() == Some(above.rank) && below.suit == above.suit,
+            Ordering::AlternatingDown => {
+                below.rank.decrement() == Some(above.rank)
+                    && below.suit.color() == above.suit.color().opposite()
+            }
+            Ordering::SingleSuitUp => {
+                below.rank.increment() == Some(above.rank) && below.suit == above.suit
+            }
         }
     }
 }
@@ -143,11 +148,13 @@ impl Stack {
 
     pub fn try_add(&mut self, card: CardInstance) -> Result<(), RejectedByOrdering> {
         let ok = match self.cards.last() {
-            None => if self.start_with_ace {
-                card.card.rank == Rank::ACE
-            } else {
-                true
-            },
+            None => {
+                if self.start_with_ace {
+                    card.card.rank == Rank::ACE
+                } else {
+                    true
+                }
+            }
             Some(below) => self.ordering.allows(below.card, card.card),
         };
 
@@ -186,13 +193,19 @@ pub struct HandPlayerState {
 
 impl HandPlayerState {
     pub fn generate(owner_id: u8, tableau_stacks_count: usize) -> Self {
-        let mut cards: Vec<_> = FULL_DECK.iter().map(|card| CardInstance { owner_id, card: *card }).collect();
+        let mut cards: Vec<_> = FULL_DECK
+            .iter()
+            .map(|card| CardInstance {
+                owner_id,
+                card: *card,
+            })
+            .collect();
         rand::seq::SliceRandom::shuffle(&mut cards[..], &mut rand::thread_rng());
 
         let nerts_stack = Stack::from_list_unordered(cards.split_off(13));
-        let tableau_stacks = (0..tableau_stacks_count).map(|_| {
-            Stack::from_one(Ordering::AlternatingDown, false, cards.pop().unwrap())
-        }).collect();
+        let tableau_stacks = (0..tableau_stacks_count)
+            .map(|_| Stack::from_one(Ordering::AlternatingDown, false, cards.pop().unwrap()))
+            .collect();
 
         let stock_stack = Stack::from_list_unordered(cards);
         let waste_stack = Stack::new(Ordering::Any, false);
@@ -210,7 +223,7 @@ impl HandPlayerState {
             if let Some(card) = self.stock_stack.pop() {
                 self.waste_stack.try_add(card).unwrap(); // waste stack has no constraints
             } else {
-                break
+                break;
             }
         }
     }
@@ -267,12 +280,12 @@ pub struct HandState {
 
 impl HandState {
     pub fn generate(player_count: u8) -> Self {
-        let players = (0..player_count).map(|_| {
-            HandPlayerState::generate(player_count, 4)
-        }).collect();
-        let lake_stacks = (0..(player_count * 4)).map(|_| {
-            Stack::new(Ordering::SingleSuitUp, true)
-        }).collect();
+        let players = (0..player_count)
+            .map(|_| HandPlayerState::generate(player_count, 4))
+            .collect();
+        let lake_stacks = (0..(player_count * 4))
+            .map(|_| Stack::new(Ordering::SingleSuitUp, true))
+            .collect();
 
         Self {
             players,
@@ -285,11 +298,11 @@ impl HandState {
             HandAction::FlipStock => {
                 self.players[player as usize].flip_stock();
                 Ok(())
-            },
+            }
             HandAction::ReturnStock => {
                 self.players[player as usize].return_stock();
                 Ok(())
-            },
+            }
             HandAction::Move { from, base, to } => unimplemented!(),
         }
     }
