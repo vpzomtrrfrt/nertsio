@@ -159,6 +159,10 @@ impl Stack {
         }
     }
 
+    pub fn last(&self) -> Option<&CardInstance> {
+        self.cards.last()
+    }
+
     pub fn pop(&mut self) -> Option<CardInstance> {
         self.cards.pop()
     }
