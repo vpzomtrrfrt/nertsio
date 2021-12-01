@@ -1,0 +1,13 @@
+[package]
+name = "nertsio_textures"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+resvg = "0.19.0"
+tiny-skia = "0.6.1"
+usvg = "0.19.0"
