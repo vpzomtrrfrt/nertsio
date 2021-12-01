@@ -154,8 +154,8 @@ impl Stack {
         self.cards.len()
     }
 
-    pub fn try_add(&mut self, card: CardInstance) -> Result<(), RejectedByOrdering> {
-        let ok = match self.cards.last() {
+    pub fn can_add(&self, card: CardInstance) -> bool {
+        match self.cards.last() {
             None => {
                 if self.start_with_ace {
                     card.card.rank == Rank::ACE
@@ -164,7 +164,11 @@ impl Stack {
                 }
             }
             Some(below) => self.ordering.allows(below.card, card.card),
-        };
+        }
+    }
+
+    pub fn try_add(&mut self, card: CardInstance) -> Result<(), RejectedByOrdering> {
+        let ok = self.can_add(card);
 
         if ok {
             self.cards.push(card);
@@ -185,6 +189,14 @@ impl Stack {
     pub fn cards(&self) -> &[CardInstance] {
         &self.cards
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PlayerStackLocation {
+    Nerts,
+    Tableau(u8),
+    Stock,
+    Waste,
 }
 
 #[derive(Clone, Debug)]
@@ -238,6 +250,15 @@ impl HandPlayerState {
         }
     }
 
+    pub fn stack_at(&self, loc: PlayerStackLocation) -> Option<&Stack> {
+        match loc {
+            PlayerStackLocation::Nerts => Some(self.nerts_stack()),
+            PlayerStackLocation::Stock => Some(self.stock_stack()),
+            PlayerStackLocation::Waste => Some(self.waste_stack()),
+            PlayerStackLocation::Tableau(idx) => self.tableau_stacks().get(idx as usize),
+        }
+    }
+
     pub fn nerts_stack(&self) -> &Stack {
         &self.nerts_stack
     }
@@ -252,13 +273,6 @@ impl HandPlayerState {
     }
 }
 
-pub enum PlayerStackLocation {
-    Nerts,
-    Tableau(u8),
-    Stock,
-    Waste,
-}
-
 pub enum StackLocation {
     Lake(u16),
     Player(u8, PlayerStackLocation),
@@ -269,7 +283,7 @@ pub enum HandAction {
     ReturnStock,
     Move {
         from: StackLocation,
-        base: Card,
+        count: u8,
         to: StackLocation,
     },
 }
@@ -307,7 +321,7 @@ impl HandState {
                 self.players[player as usize].return_stock();
                 Ok(())
             }
-            HandAction::Move { from, base, to } => unimplemented!(),
+            HandAction::Move { from, count, to } => unimplemented!(),
         }
     }
 
