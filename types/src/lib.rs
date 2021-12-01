@@ -288,6 +288,7 @@ pub enum HandAction {
     },
 }
 
+#[derive(Debug)]
 pub struct CannotApplyAction;
 
 #[derive(Clone, Debug)]
