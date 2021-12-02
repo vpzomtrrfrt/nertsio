@@ -1,5 +1,5 @@
 use futures_util::sink::SinkExt;
-use futures_util::stream::StreamExt;
+use futures_util::stream::{StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::collections::HashMap;
@@ -9,6 +9,15 @@ struct ServerGamePlayerState {
     name: String,
     game_stream_send_channel: tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
     ready: bool,
+}
+
+impl ServerGamePlayerState {
+    pub fn to_common_state(&self) -> ni_ty::GamePlayerState {
+        ni_ty::GamePlayerState {
+            name: self.name.clone(),
+            ready: self.ready,
+        }
+    }
 }
 
 struct ServerGameState {
@@ -78,20 +87,45 @@ async fn handle_connection(
             players: server_game_state
                 .players
                 .iter()
-                .map(|(key, value)| {
-                    (
-                        *key,
-                        ni_ty::GamePlayerState {
-                            name: value.name.clone(),
-                            ready: value.ready,
-                        },
-                    )
-                })
+                .map(|(key, value)| (*key, value.to_common_state()))
                 .collect(),
         };
 
         (player_id, game_state)
     };
+
+    let send_to_others = move |server_game_state: &ServerGameState,
+                               msg: ni_ty::protocol::GameMessageS2C| {
+        for (id, server_player_state) in &server_game_state.players {
+            if *id != player_id {
+                if let Err(err) = server_player_state
+                    .game_stream_send_channel
+                    .send(msg.clone())
+                {
+                    eprintln!("Failed to queue update to player: {:?}", err);
+                }
+            }
+        }
+    };
+
+    {
+        let server_game_state = global_state
+            .games
+            .get(&game_id)
+            .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+        send_to_others(
+            &server_game_state,
+            ni_ty::protocol::GameMessageS2C::PlayerJoin {
+                id: player_id,
+                info: server_game_state
+                    .players
+                    .get(&player_id)
+                    .unwrap()
+                    .to_common_state(),
+            },
+        );
+    }
 
     handshake_stream_send
         .send(ni_ty::protocol::HandshakeMessageS2C::Joined {
@@ -110,9 +144,47 @@ async fn handle_connection(
             game_stream.1,
         );
 
-    while let Some(msg) = game_stream_send_channel_recv.recv().await {
-        game_stream_send.send(msg).await?;
-    }
+    futures_util::future::try_join(
+        async {
+            while let Some(msg) = game_stream_send_channel_recv.recv().await {
+                game_stream_send.send(msg).await?;
+            }
+            Result::<_, anyhow::Error>::Ok(())
+        },
+        game_stream_recv
+            .map_err(Into::into)
+            .try_for_each(move |msg| {
+                let global_state = global_state.clone();
+                async move {
+                    use ni_ty::protocol::GameMessageC2S;
+
+                    match msg {
+                        GameMessageC2S::UpdateSelfReady { value } => {
+                            let mut server_game_state = global_state
+                                .games
+                                .get_mut(&game_id)
+                                .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                            let server_player_state =
+                                server_game_state.players.get_mut(&player_id).unwrap();
+                            if server_player_state.ready != value {
+                                server_player_state.ready = value;
+
+                                send_to_others(
+                                    &server_game_state,
+                                    ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
+                                        id: player_id,
+                                        value,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+            }),
+    )
+    .await?;
 
     Ok(())
 }

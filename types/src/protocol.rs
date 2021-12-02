@@ -18,10 +18,14 @@ pub enum GameMessageC2S {
     UpdateSelfReady { value: bool },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum GameMessageS2C {
     PlayerJoin {
         id: u8,
         info: crate::GamePlayerState,
+    },
+    PlayerUpdateReady {
+        id: u8,
+        value: bool,
     },
 }
