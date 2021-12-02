@@ -16,3 +16,4 @@ futures-util = { version = "0.3.18", features = ["sink"] }
 async-bincode = "0.6.1"
 dashmap = "4.0.2"
 rand = "0.8.4"
+tempfile = "3.2.0"

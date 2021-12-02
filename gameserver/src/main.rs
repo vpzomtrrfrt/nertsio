@@ -3,6 +3,7 @@ use futures_util::stream::{StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::Arc;
 
 struct ServerGamePlayerState {
@@ -197,18 +198,34 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let keypair = openssl::rsa::Rsa::generate(2048).unwrap();
-    let pkey = openssl::pkey::PKey::from_rsa(keypair).unwrap();
+    let (cert, pkey) = {
+        let mut keyfile = tempfile::NamedTempFile::new().unwrap();
+        let mut certfile = tempfile::NamedTempFile::new().unwrap();
 
-    let cert = rustls::Certificate(
-        {
-            let mut builder = openssl::x509::X509Builder::new().unwrap();
-            builder.set_pubkey(&pkey).unwrap();
-            builder.build()
+        let status = std::process::Command::new("openssl")
+            .args(&["req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout"])
+            .arg(keyfile.path())
+            .arg("-out")
+            .arg(certfile.path())
+            .args(&["-nodes", "-batch"])
+            .status().unwrap();
+
+        if !status.success() {
+            panic!("Failed to generate certificate");
         }
-        .to_der()
-        .unwrap(),
-    );
+
+        let mut key = Vec::new();
+        keyfile.read_to_end(&mut key).unwrap();
+        let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
+        let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
+
+        let mut cert = Vec::new();
+        certfile.read_to_end(&mut cert).unwrap();
+        let cert = rustls::Certificate(cert);
+
+        (cert, pkey)
+    };
+
     let privkey = rustls::PrivateKey(pkey.private_key_to_der().unwrap());
 
     let global_state = Arc::new(GlobalState {

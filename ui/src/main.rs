@@ -1,5 +1,6 @@
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
+use std::sync::Arc;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 
@@ -29,8 +30,46 @@ fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     }
 }
 
+struct InsecureVerifier;
+impl rustls::client::ServerCertVerifier for InsecureVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::client::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
+}
+
+async fn handle_connection() -> Result<(), anyhow::Error> {
+    let mut endpoint = quinn::Endpoint::client(([0, 0, 0, 0], 0).into())?;
+    endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new({
+        let mut cfg = rustls::ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(rustls::RootCertStore { roots: vec![] })
+            .with_no_client_auth();
+        cfg.dangerous()
+            .set_certificate_verifier(Arc::new(InsecureVerifier));
+        cfg
+    })));
+
+    let conn = endpoint
+        .connect(([127, 0, 0, 1], 6465).into(), "nio.invalid")?
+        .await?;
+
+    println!("connected");
+
+    Ok(())
+}
+
 #[macroquad::main("nertsio")]
 async fn main() {
+    let async_rt = tokio::runtime::Runtime::new().unwrap();
+
     let card_size = mq::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
 
     let cards_texture =
@@ -80,6 +119,12 @@ async fn main() {
     let mut hand_state = ni_ty::HandState::generate(4);
 
     let mut held_cards: Option<(ni_ty::PlayerStackLocation, usize)> = None;
+
+    async_rt.spawn(async {
+        if let Err(err) = handle_connection().await {
+            eprintln!("Failed to handle connection: {:?}", err);
+        }
+    });
 
     loop {
         let mouse_pos = mq::mouse_position();

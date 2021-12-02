@@ -9,3 +9,8 @@ edition = "2021"
 nertsio_textures = { path = "../textures" }
 nertsio_types = { path = "../types" }
 macroquad = "0.3.10"
+tokio = { version = "1.14.0", features = ["rt-multi-thread"] }
+async-bincode = "0.6.1"
+quinn = "0.8.0"
+anyhow = "1.0.51"
+rustls = { version = "0.20.2", features = ["dangerous_configuration"] }
