@@ -203,12 +203,22 @@ async fn main() {
         let mut certfile = tempfile::NamedTempFile::new().unwrap();
 
         let status = std::process::Command::new("openssl")
-            .args(&["req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout"])
+            .args(&[
+                "req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout",
+            ])
             .arg(keyfile.path())
             .arg("-out")
             .arg(certfile.path())
-            .args(&["-nodes", "-batch"])
-            .status().unwrap();
+            .args(&[
+                "-nodes",
+                "-batch",
+                "-subj",
+                "/",
+                "-addext",
+                "basicConstraints=CA:FALSE",
+            ])
+            .status()
+            .unwrap();
 
         if !status.success() {
             panic!("Failed to generate certificate");
