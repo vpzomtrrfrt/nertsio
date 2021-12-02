@@ -1,4 +1,8 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use strum::IntoEnumIterator;
+
+pub mod protocol;
 
 lazy_static::lazy_static! {
     static ref FULL_DECK: Vec<Card> = {
@@ -436,4 +440,15 @@ impl HandState {
                 .and_then(|player| player.mut_stack_at(loc)),
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GamePlayerState {
+    pub name: String,
+    pub ready: bool,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GameState {
+    pub players: HashMap<u8, GamePlayerState>,
 }

@@ -1,0 +1,18 @@
+[package]
+name = "nertsio_gameserver"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+nertsio_types = { path = "../types" }
+tokio = { version = "1.14.0", features = ["macros", "rt-multi-thread", "sync"] }
+quinn = "0.8.0"
+rustls = "0.20.2"
+openssl = "0.10.38"
+anyhow = "1.0.51"
+futures-util = { version = "0.3.18", features = ["sink"] }
+async-bincode = "0.6.1"
+dashmap = "4.0.2"
+rand = "0.8.4"

@@ -1,2 +1,2 @@
 [workspace]
-members = ["types", "ui", "textures"]
+members = ["types", "ui", "textures", "gameserver"]
