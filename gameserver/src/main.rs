@@ -120,97 +120,143 @@ async fn handle_connection(
         }
     };
 
-    {
-        let server_game_state = global_state
-            .games
-            .get(&game_id)
-            .ok_or(anyhow::anyhow!("Unknown game"))?;
+    let res = async {
+        {
+            let server_game_state = global_state
+                .games
+                .get(&game_id)
+                .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-        send_to_others(
-            &server_game_state,
-            ni_ty::protocol::GameMessageS2C::PlayerJoin {
-                id: player_id,
-                info: server_game_state
-                    .players
-                    .get(&player_id)
-                    .unwrap()
-                    .to_common_state(),
-            },
-        );
-    }
+            send_to_others(
+                &server_game_state,
+                ni_ty::protocol::GameMessageS2C::PlayerJoin {
+                    id: player_id,
+                    info: server_game_state
+                        .players
+                        .get(&player_id)
+                        .unwrap()
+                        .to_common_state(),
+                },
+            );
+        }
 
-    handshake_stream_send
-        .send(ni_ty::protocol::HandshakeMessageS2C::Hello)
-        .await?;
+        handshake_stream_send
+            .send(ni_ty::protocol::HandshakeMessageS2C::Hello)
+            .await?;
 
-    let game_stream = connection.connection.open_bi().await?;
+        let game_stream = connection.connection.open_bi().await?;
 
-    let mut game_stream_send =
-        async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageS2C, _>::from(
-            game_stream.0,
-        )
-        .for_async();
-    let game_stream_recv =
-        async_bincode::AsyncBincodeReader::<_, ni_ty::protocol::GameMessageC2S>::from(
-            game_stream.1,
-        );
+        let mut game_stream_send =
+            async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageS2C, _>::from(
+                game_stream.0,
+            )
+            .for_async();
+        let game_stream_recv = async_bincode::AsyncBincodeReader::<
+            _,
+            ni_ty::protocol::GameMessageC2S,
+        >::from(game_stream.1);
 
-    game_stream_send
-        .send(ni_ty::protocol::GameMessageS2C::Joined {
-            info: game_state,
-            your_player_id: player_id,
-        })
-        .await?;
+        game_stream_send
+            .send(ni_ty::protocol::GameMessageS2C::Joined {
+                info: game_state,
+                your_player_id: player_id,
+            })
+            .await?;
 
-    println!("iedkeinstrkdie");
+        println!("iedkeinstrkdie");
 
-    futures_util::future::try_join(
-        async {
-            println!("denrstdensrtkenaa");
-            while let Some(msg) = game_stream_send_channel_recv.recv().await {
-                println!("passing {:?} to {}", msg, player_id);
-                game_stream_send.send(msg).await?;
-            }
-            println!("and no more");
-            Result::<_, anyhow::Error>::Ok(())
-        },
-        game_stream_recv
-            .map_err(Into::into)
-            .try_for_each(move |msg| {
-                println!("received {:?}", msg);
-                let global_state = global_state.clone();
-                async move {
-                    use ni_ty::protocol::GameMessageC2S;
+        let (leave_send, mut leave_recv) = tokio::sync::oneshot::channel();
 
-                    match msg {
-                        GameMessageC2S::UpdateSelfReady { value } => {
-                            let mut server_game_state = global_state
-                                .games
-                                .get_mut(&game_id)
-                                .ok_or(anyhow::anyhow!("Unknown game"))?;
+        futures_util::future::try_join(
+            async {
+                println!("denrstdensrtkenaa");
+                loop {
+                    use futures_util::future::Either;
 
-                            let server_player_state =
-                                server_game_state.players.get_mut(&player_id).unwrap();
-                            if server_player_state.ready != value {
-                                server_player_state.ready = value;
+                    leave_recv = {
+                        let res = futures_util::future::select(
+                            Box::pin(game_stream_send_channel_recv.recv()),
+                            leave_recv,
+                        )
+                        .await;
 
-                                send_to_others(
-                                    &server_game_state,
-                                    ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
-                                        id: player_id,
-                                        value,
-                                    },
-                                );
+                        match res {
+                            Either::Left((Some(msg), leave_recv)) => {
+                                println!("passing {:?} to {}", msg, player_id);
+                                game_stream_send.send(msg).await?;
+                                leave_recv
                             }
+                            Either::Left((None, _))
+                            | Either::Right((Ok(()), _))
+                            | Either::Right((Err(_), _)) => break,
                         }
-                    }
-                    Ok(())
+                    };
                 }
-            }),
-    )
-    .await?;
+                println!("and no more");
+                Result::<_, anyhow::Error>::Ok(())
+            },
+            async {
+                let global_state = global_state.clone();
+                game_stream_recv
+                    .map_err(Into::into)
+                    .try_for_each(move |msg| {
+                        println!("received {:?}", msg);
+                        let global_state = global_state.clone();
+                        async move {
+                            use ni_ty::protocol::GameMessageC2S;
 
-    Ok(())
+                            match msg {
+                                GameMessageC2S::UpdateSelfReady { value } => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    let server_player_state =
+                                        server_game_state.players.get_mut(&player_id).unwrap();
+                                    if server_player_state.ready != value {
+                                        server_player_state.ready = value;
+
+                                        send_to_others(
+                                            &server_game_state,
+                                            ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
+                                                id: player_id,
+                                                value,
+                                            },
+                                        );
+                                    }
+                                }
+                            }
+                            Result::<_, anyhow::Error>::Ok(())
+                        }
+                    })
+                    .await?;
+
+                if let Err(_) = leave_send.send(()) {
+                    eprintln!("Failed to send leave event");
+                }
+
+                Ok(())
+            },
+        )
+        .await?;
+
+        Ok(())
+    }
+    .await;
+
+    let mut server_game_state = global_state
+        .games
+        .get_mut(&game_id)
+        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+    server_game_state.players.remove(&player_id);
+    send_to_others(
+        &server_game_state,
+        ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player_id },
+    );
+
+    res
 }
 
 #[tokio::main]

@@ -160,6 +160,14 @@ async fn handle_connection(
                                 .players
                                 .insert(id, info);
                         }
+                        GameMessageS2C::PlayerLeave { id } => {
+                            (*info_mutex.lock().unwrap())
+                                .as_mut()
+                                .unwrap()
+                                .0
+                                .players
+                                .remove(&id);
+                        }
                         GameMessageS2C::PlayerUpdateReady { id, value } => {
                             (*info_mutex.lock().unwrap())
                                 .as_mut()

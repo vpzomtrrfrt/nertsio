@@ -25,6 +25,9 @@ pub enum GameMessageS2C {
         id: u8,
         info: crate::GamePlayerState,
     },
+    PlayerLeave {
+        id: u8,
+    },
     PlayerUpdateReady {
         id: u8,
         value: bool,
