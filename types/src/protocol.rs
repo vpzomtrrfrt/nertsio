@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageC2S {
     Hello { name: String, game_id: u32 },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageS2C {
     Joined {
         info: crate::GameState,
@@ -13,7 +13,7 @@ pub enum HandshakeMessageS2C {
     },
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum GameMessageC2S {
     UpdateSelfReady { value: bool },
 }

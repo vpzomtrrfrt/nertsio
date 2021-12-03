@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
 pub mod protocol;
@@ -450,5 +450,5 @@ pub struct GamePlayerState {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameState {
-    pub players: HashMap<u8, GamePlayerState>,
+    pub players: BTreeMap<u8, GamePlayerState>,
 }

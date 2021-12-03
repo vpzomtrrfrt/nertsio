@@ -1,4 +1,7 @@
+use futures_util::sink::SinkExt;
+use futures_util::stream::StreamExt;
 use macroquad::prelude as mq;
+use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
 use std::sync::Arc;
 
@@ -54,7 +57,10 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
     }
 }
 
-async fn handle_connection() -> Result<(), anyhow::Error> {
+async fn handle_connection(
+    info_mutex: &std::sync::Mutex<Option<(ni_ty::GameState, u8)>>,
+    mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
+) -> Result<(), anyhow::Error> {
     let mut endpoint = quinn::Endpoint::client(([0, 0, 0, 0], 0).into())?;
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new({
         let mut cfg = rustls::ClientConfig::builder()
@@ -71,6 +77,63 @@ async fn handle_connection() -> Result<(), anyhow::Error> {
         .await?;
 
     println!("connected");
+
+    let handshake_stream = conn.connection.open_bi().await?;
+
+    println!("opened stream");
+
+    let mut handshake_stream_send =
+        async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::HandshakeMessageC2S, _>::from(
+            handshake_stream.0,
+        )
+        .for_async();
+    let handshake_stream_recv = async_bincode::AsyncBincodeReader::<
+        _,
+        ni_ty::protocol::HandshakeMessageS2C,
+    >::from(handshake_stream.1);
+
+    let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
+        name: "Nerter".to_owned(),
+        game_id: 42,
+    };
+    handshake_stream_send.send(hello_msg).await?;
+
+    println!("sent hello");
+
+    let (first_message, handshake_stream_recv) = handshake_stream_recv.into_future().await;
+    let first_message = first_message.ok_or(anyhow::anyhow!("Failed to complete handshake"))??;
+
+    let _ = (handshake_stream_recv, handshake_stream_send);
+
+    #[allow(irrefutable_let_patterns)]
+    if let ni_ty::protocol::HandshakeMessageS2C::Joined {
+        info,
+        your_player_id,
+    } = first_message
+    {
+        *info_mutex.lock().unwrap() = Some((info, your_player_id));
+    } else {
+        anyhow::bail!("Unknown handshake response");
+    }
+
+    println!("aaa");
+
+    let game_stream = conn.connection.open_bi().await?;
+
+    println!("bbb");
+
+    let mut game_stream_send =
+        async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageC2S, _>::from(
+            game_stream.0,
+        )
+        .for_async();
+
+    println!("wat");
+
+    while let Some(msg) = game_msg_recv.recv().await {
+        println!("sending {:?}", msg);
+        game_stream_send.send(msg).await?;
+    }
 
     Ok(())
 }
@@ -125,9 +188,15 @@ async fn main() {
         }
     };
 
-    async_rt.spawn(async {
-        if let Err(err) = handle_connection().await {
-            eprintln!("Failed to handle connection: {:?}", err);
+    let game_info_mutex = Arc::new(std::sync::Mutex::new(None));
+    let (game_msg_send, game_msg_recv) = tokio::sync::mpsc::unbounded_channel();
+
+    async_rt.spawn({
+        let game_info_mutex = game_info_mutex.clone();
+        async move {
+            if let Err(err) = handle_connection(&game_info_mutex, game_msg_recv).await {
+                eprintln!("Failed to handle connection: {:?}", err);
+            }
         }
     });
 
@@ -137,9 +206,47 @@ async fn main() {
         let mouse_pos = mq::mouse_position();
 
         state = match state {
-            State::GameNeutral | State::Connecting => {
+            State::Connecting => {
                 mq::clear_background(BACKGROUND_COLOR);
-                state
+
+                if (*game_info_mutex.lock().unwrap()).is_some() {
+                    State::GameNeutral
+                } else {
+                    State::Connecting
+                }
+            }
+            State::GameNeutral => {
+                mq::clear_background(BACKGROUND_COLOR);
+
+                let mut lock = game_info_mutex.lock().unwrap();
+                let (game, my_player_id) = (*lock).as_mut().unwrap();
+
+                for (i, (key, player)) in game.players.iter_mut().enumerate() {
+                    let y = 10.0 + (i as f32) * 25.0;
+
+                    if key == my_player_id {
+                        if mqui::root_ui().button(
+                            mq::Vec2::new(10.0, y),
+                            if player.ready { "Unready" } else { "Ready" },
+                        ) {
+                            let new_value = !player.ready;
+                            player.ready = new_value;
+
+                            game_msg_send
+                                .send(ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                    value: new_value,
+                                })
+                                .unwrap();
+                        }
+                    } else {
+                        mqui::root_ui().label(
+                            mq::Vec2::new(10.0, y),
+                            if player.ready { "Ready" } else { "Not Ready" },
+                        );
+                    }
+                }
+
+                State::GameNeutral
             }
             State::GameHand {
                 mut hand_state,

@@ -35,21 +35,31 @@ async fn handle_connection(
 ) -> Result<(), anyhow::Error> {
     let connection = connecting.await?;
 
-    let (handshake_stream_res, _bi_streams) = connection.bi_streams.into_future().await;
+    let (handshake_stream_res, bi_streams) = connection.bi_streams.into_future().await;
     let handshake_stream =
         handshake_stream_res.ok_or(anyhow::anyhow!("Stream closed without handshake"))??;
 
     let mut handshake_stream_send =
         async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::HandshakeMessageS2C, _>::from(
             handshake_stream.0,
-        );
+        )
+        .for_async();
     let handshake_stream_recv = async_bincode::AsyncBincodeReader::<
         _,
         ni_ty::protocol::HandshakeMessageC2S,
     >::from(handshake_stream.1);
 
-    let (first_message, _handshake_stream_recv) = handshake_stream_recv.into_future().await;
+    println!("init");
+
+    let (first_message, handshake_stream_recv) = handshake_stream_recv.into_future().await;
+
+    println!("hmm {:?}", first_message);
+
     let first_message = first_message.ok_or(anyhow::anyhow!("Stream closed without Hello"))??;
+
+    println!("first: {:?}", first_message);
+
+    let _ = handshake_stream_recv;
 
     #[allow(irrefutable_let_patterns)]
     let (name, game_id) =
@@ -135,7 +145,9 @@ async fn handle_connection(
         })
         .await?;
 
-    let game_stream = connection.connection.open_bi().await?;
+    let (game_stream_res, _bi_streams) = bi_streams.into_future().await;
+    let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
+
     let mut game_stream_send =
         async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageS2C, _>::from(
             game_stream.0,
@@ -144,6 +156,8 @@ async fn handle_connection(
         async_bincode::AsyncBincodeReader::<_, ni_ty::protocol::GameMessageC2S>::from(
             game_stream.1,
         );
+
+    println!("iedkeinstrkdie");
 
     futures_util::future::try_join(
         async {
@@ -155,6 +169,7 @@ async fn handle_connection(
         game_stream_recv
             .map_err(Into::into)
             .try_for_each(move |msg| {
+                println!("received {:?}", msg);
                 let global_state = global_state.clone();
                 async move {
                     use ni_ty::protocol::GameMessageC2S;
@@ -203,12 +218,15 @@ async fn main() {
         let mut certfile = tempfile::NamedTempFile::new().unwrap();
 
         let status = std::process::Command::new("openssl")
-            .args(&["req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout"])
+            .args(&[
+                "req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout",
+            ])
             .arg(keyfile.path())
             .arg("-out")
             .arg(certfile.path())
             .args(&["-nodes", "-batch"])
-            .status().unwrap();
+            .status()
+            .unwrap();
 
         if !status.success() {
             panic!("Failed to generate certificate");
@@ -231,12 +249,21 @@ async fn main() {
     let global_state = Arc::new(GlobalState {
         games: Default::default(),
     });
+    global_state.games.insert(
+        42,
+        ServerGameState {
+            players: Default::default(),
+        },
+    );
 
-    let (_, incoming) = quinn::Endpoint::server(
-        quinn::ServerConfig::with_single_cert(vec![cert], privkey).unwrap(),
-        ([0, 0, 0, 0], port).into(),
-    )
-    .unwrap();
+    let mut transport_config = quinn::TransportConfig::default();
+    transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
+
+    let mut server_config = quinn::ServerConfig::with_single_cert(vec![cert], privkey).unwrap();
+    server_config.transport = Arc::new(transport_config);
+
+    let (_, incoming) =
+        quinn::Endpoint::server(server_config, ([0, 0, 0, 0], port).into()).unwrap();
 
     incoming
         .for_each(move |connecting| {
