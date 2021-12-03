@@ -10,7 +10,7 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Color {
     Red,
     Black,
@@ -25,7 +25,9 @@ impl Color {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, strum_macros::EnumIter)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, Hash, Debug, strum_macros::EnumIter, Serialize, Deserialize,
+)]
 pub enum Suit {
     Spades,
     Diamonds,
@@ -42,7 +44,7 @@ impl Suit {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Rank(u8);
 
 impl Rank {
@@ -77,19 +79,19 @@ impl Rank {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct Card {
     pub suit: Suit,
     pub rank: Rank,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct CardInstance {
     pub card: Card,
     pub owner_id: u8,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Ordering {
     Any,
     AlternatingDown,
@@ -114,7 +116,7 @@ impl Ordering {
 #[derive(Debug)]
 pub struct RejectedByOrdering;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Stack {
     ordering: Ordering,
     start_with_ace: bool,
@@ -213,8 +215,10 @@ pub enum PlayerStackLocation {
     Waste,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HandPlayerState {
+    player_id: u8,
+
     nerts_stack: Stack,
     stock_stack: Stack,
     waste_stack: Stack,
@@ -222,11 +226,11 @@ pub struct HandPlayerState {
 }
 
 impl HandPlayerState {
-    pub fn generate(owner_id: u8, tableau_stacks_count: usize) -> Self {
+    pub fn generate(player_id: u8, hand_player_id: u8, tableau_stacks_count: usize) -> Self {
         let mut cards: Vec<_> = FULL_DECK
             .iter()
             .map(|card| CardInstance {
-                owner_id,
+                owner_id: hand_player_id,
                 card: *card,
             })
             .collect();
@@ -241,6 +245,8 @@ impl HandPlayerState {
         let waste_stack = Stack::new(Ordering::Any, false);
 
         Self {
+            player_id,
+
             nerts_stack,
             tableau_stacks,
             stock_stack,
@@ -294,6 +300,9 @@ impl HandPlayerState {
     pub fn tableau_stacks(&self) -> &[Stack] {
         &self.tableau_stacks
     }
+    pub fn player_id(&self) -> u8 {
+        self.player_id
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -315,18 +324,19 @@ pub enum HandAction {
 #[derive(Debug)]
 pub struct CannotApplyAction;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct HandState {
     players: Vec<HandPlayerState>,
     lake_stacks: Vec<Stack>,
 }
 
 impl HandState {
-    pub fn generate(player_count: u8) -> Self {
-        let players = (0..player_count)
-            .map(|_| HandPlayerState::generate(player_count, 4))
+    pub fn generate(players: impl Iterator<Item = u8>) -> Self {
+        let players: Vec<_> = players
+            .enumerate()
+            .map(|(idx, player_id)| HandPlayerState::generate(player_id, idx as u8, 4))
             .collect();
-        let lake_stacks = (0..(player_count * 4))
+        let lake_stacks = (0..(players.len() * 4))
             .map(|_| Stack::new(Ordering::SingleSuitUp, true))
             .collect();
 
@@ -451,4 +461,5 @@ pub struct GamePlayerState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameState {
     pub players: BTreeMap<u8, GamePlayerState>,
+    pub hand: Option<HandState>,
 }

@@ -14,8 +14,8 @@ enum State {
     Connecting,
     GameNeutral,
     GameHand {
-        hand_state: ni_ty::HandState,
         held_cards: Option<(ni_ty::PlayerStackLocation, usize)>,
+        my_player_idx: usize,
     },
 }
 
@@ -178,6 +178,9 @@ async fn handle_connection(
                                 .unwrap()
                                 .ready = value;
                         }
+                        GameMessageS2C::HandStart { info } => {
+                            (*info_mutex.lock().unwrap()).as_mut().unwrap().0.hand = Some(info);
+                        }
                     }
 
                     Ok(())
@@ -273,39 +276,56 @@ async fn main() {
                 let mut lock = game_info_mutex.lock().unwrap();
                 let (game, my_player_id) = (*lock).as_mut().unwrap();
 
-                for (i, (key, player)) in game.players.iter_mut().enumerate() {
-                    let y = 10.0 + (i as f32) * 25.0;
+                match &game.hand {
+                    None => {
+                        for (i, (key, player)) in game.players.iter_mut().enumerate() {
+                            let y = 10.0 + (i as f32) * 25.0;
 
-                    if key == my_player_id {
-                        if mqui::root_ui().button(
-                            mq::Vec2::new(10.0, y),
-                            if player.ready { "Unready" } else { "Ready" },
-                        ) {
-                            let new_value = !player.ready;
-                            player.ready = new_value;
+                            if key == my_player_id {
+                                if mqui::root_ui().button(
+                                    mq::Vec2::new(10.0, y),
+                                    if player.ready { "Unready" } else { "Ready" },
+                                ) {
+                                    let new_value = !player.ready;
+                                    player.ready = new_value;
 
-                            game_msg_send
-                                .send(ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
-                                    value: new_value,
-                                })
-                                .unwrap();
+                                    game_msg_send
+                                        .send(ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                            value: new_value,
+                                        })
+                                        .unwrap();
+                                }
+                            } else {
+                                mqui::root_ui().label(
+                                    mq::Vec2::new(10.0, y),
+                                    if player.ready { "Ready" } else { "Not Ready" },
+                                );
+                            }
                         }
-                    } else {
-                        mqui::root_ui().label(
-                            mq::Vec2::new(10.0, y),
-                            if player.ready { "Ready" } else { "Not Ready" },
-                        );
-                    }
-                }
 
-                State::GameNeutral
+                        State::GameNeutral
+                    }
+                    Some(hand) => State::GameHand {
+                        held_cards: None,
+                        my_player_idx: hand
+                            .players()
+                            .iter()
+                            .position(|player| player.player_id() == *my_player_id)
+                            .unwrap(),
+                    },
+                }
             }
             State::GameHand {
-                mut hand_state,
                 mut held_cards,
+                my_player_idx,
             } => {
+                let mut lock = game_info_mutex.lock().unwrap();
+                let (game, _my_player_id) = (*lock).as_mut().unwrap();
+
+                let hand_state = game.hand.as_mut().unwrap();
+
                 {
-                    let player_state = &hand_state.players()[0];
+                    let player_state = &hand_state.players()[my_player_idx];
 
                     if mq::is_mouse_button_pressed(mq::MouseButton::Left) {
                         let mouse_vec = mouse_pos.into();
@@ -407,7 +427,7 @@ async fn main() {
                     }
                 }
 
-                let player_state = &hand_state.players()[0];
+                let player_state = &hand_state.players()[my_player_idx];
 
                 mq::clear_background(BACKGROUND_COLOR);
 
@@ -464,7 +484,7 @@ async fn main() {
 
                 State::GameHand {
                     held_cards,
-                    hand_state,
+                    my_player_idx,
                 }
             }
         };

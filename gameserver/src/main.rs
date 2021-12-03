@@ -23,6 +23,7 @@ impl ServerGamePlayerState {
 
 struct ServerGameState {
     players: HashMap<u8, ServerGamePlayerState>,
+    hand: Option<ni_ty::HandState>,
 }
 
 struct GlobalState {
@@ -100,6 +101,7 @@ async fn handle_connection(
                 .iter()
                 .map(|(key, value)| (*key, value.to_common_state()))
                 .collect(),
+            hand: server_game_state.hand.clone(),
         };
 
         (player_id, game_state)
@@ -116,6 +118,19 @@ async fn handle_connection(
                 {
                     eprintln!("Failed to queue update to player: {:?}", err);
                 }
+            }
+        }
+    };
+
+    let send_to_all = move |server_game_state: &ServerGameState,
+                            msg: ni_ty::protocol::GameMessageS2C| {
+        for (id, server_player_state) in &server_game_state.players {
+            println!("sending {:?} to {}", msg, id);
+            if let Err(err) = server_player_state
+                .game_stream_send_channel
+                .send(msg.clone())
+            {
+                eprintln!("Failed to queue update to player: {:?}", err);
             }
         }
     };
@@ -212,18 +227,39 @@ async fn handle_connection(
                                         .get_mut(&game_id)
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-                                    let server_player_state =
-                                        server_game_state.players.get_mut(&player_id).unwrap();
-                                    if server_player_state.ready != value {
-                                        server_player_state.ready = value;
+                                    if server_game_state.hand.is_none() {
+                                        let server_player_state =
+                                            server_game_state.players.get_mut(&player_id).unwrap();
+                                        if server_player_state.ready != value {
+                                            server_player_state.ready = value;
 
-                                        send_to_others(
-                                            &server_game_state,
-                                            ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
-                                                id: player_id,
-                                                value,
-                                            },
-                                        );
+                                            send_to_others(
+                                                &server_game_state,
+                                                ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
+                                                    id: player_id,
+                                                    value,
+                                                },
+                                            );
+                                        }
+
+                                        if server_game_state
+                                            .players
+                                            .values()
+                                            .all(|player| player.ready)
+                                        {
+                                            // all ready, start hand
+
+                                            let new_hand = ni_ty::HandState::generate(
+                                                server_game_state.players.keys().copied(),
+                                            );
+                                            server_game_state.hand = Some(new_hand.clone());
+                                            send_to_all(
+                                                &server_game_state,
+                                                ni_ty::protocol::GameMessageS2C::HandStart {
+                                                    info: new_hand,
+                                                },
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -307,6 +343,7 @@ async fn main() {
         42,
         ServerGameState {
             players: Default::default(),
+            hand: None,
         },
     );
 

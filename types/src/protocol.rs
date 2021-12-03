@@ -32,4 +32,7 @@ pub enum GameMessageS2C {
         id: u8,
         value: bool,
     },
+    HandStart {
+        info: crate::HandState,
+    },
 }
