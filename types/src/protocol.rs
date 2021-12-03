@@ -7,10 +7,7 @@ pub enum HandshakeMessageC2S {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageS2C {
-    Joined {
-        info: crate::GameState,
-        your_player_id: u8,
-    },
+    Hello,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -20,6 +17,10 @@ pub enum GameMessageC2S {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum GameMessageS2C {
+    Joined {
+        info: crate::GameState,
+        your_player_id: u8,
+    },
     PlayerJoin {
         id: u8,
         info: crate::GamePlayerState,

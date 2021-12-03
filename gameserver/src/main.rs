@@ -35,7 +35,7 @@ async fn handle_connection(
 ) -> Result<(), anyhow::Error> {
     let connection = connecting.await?;
 
-    let (handshake_stream_res, bi_streams) = connection.bi_streams.into_future().await;
+    let (handshake_stream_res, _bi_streams) = connection.bi_streams.into_future().await;
     let handshake_stream =
         handshake_stream_res.ok_or(anyhow::anyhow!("Stream closed without handshake"))??;
 
@@ -109,6 +109,7 @@ async fn handle_connection(
                                msg: ni_ty::protocol::GameMessageS2C| {
         for (id, server_player_state) in &server_game_state.players {
             if *id != player_id {
+                println!("sending {:?} to {}", msg, id);
                 if let Err(err) = server_player_state
                     .game_stream_send_channel
                     .send(msg.clone())
@@ -139,31 +140,38 @@ async fn handle_connection(
     }
 
     handshake_stream_send
-        .send(ni_ty::protocol::HandshakeMessageS2C::Joined {
-            info: game_state,
-            your_player_id: player_id,
-        })
+        .send(ni_ty::protocol::HandshakeMessageS2C::Hello)
         .await?;
 
-    let (game_stream_res, _bi_streams) = bi_streams.into_future().await;
-    let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
+    let game_stream = connection.connection.open_bi().await?;
 
     let mut game_stream_send =
         async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageS2C, _>::from(
             game_stream.0,
-        );
+        )
+        .for_async();
     let game_stream_recv =
         async_bincode::AsyncBincodeReader::<_, ni_ty::protocol::GameMessageC2S>::from(
             game_stream.1,
         );
 
+    game_stream_send
+        .send(ni_ty::protocol::GameMessageS2C::Joined {
+            info: game_state,
+            your_player_id: player_id,
+        })
+        .await?;
+
     println!("iedkeinstrkdie");
 
     futures_util::future::try_join(
         async {
+            println!("denrstdensrtkenaa");
             while let Some(msg) = game_stream_send_channel_recv.recv().await {
+                println!("passing {:?} to {}", msg, player_id);
                 game_stream_send.send(msg).await?;
             }
+            println!("and no more");
             Result::<_, anyhow::Error>::Ok(())
         },
         game_stream_recv

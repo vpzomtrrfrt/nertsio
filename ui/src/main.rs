@@ -1,5 +1,4 @@
-use futures_util::sink::SinkExt;
-use futures_util::stream::StreamExt;
+use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
@@ -106,19 +105,15 @@ async fn handle_connection(
     let _ = (handshake_stream_recv, handshake_stream_send);
 
     #[allow(irrefutable_let_patterns)]
-    if let ni_ty::protocol::HandshakeMessageS2C::Joined {
-        info,
-        your_player_id,
-    } = first_message
-    {
-        *info_mutex.lock().unwrap() = Some((info, your_player_id));
+    if let ni_ty::protocol::HandshakeMessageS2C::Hello = first_message {
     } else {
         anyhow::bail!("Unknown handshake response");
     }
 
     println!("aaa");
 
-    let game_stream = conn.connection.open_bi().await?;
+    let (game_stream_res, _bi_streams) = conn.bi_streams.into_future().await;
+    let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
 
     println!("bbb");
 
@@ -127,13 +122,62 @@ async fn handle_connection(
             game_stream.0,
         )
         .for_async();
+    let game_stream_recv =
+        async_bincode::AsyncBincodeReader::<_, ni_ty::protocol::GameMessageS2C>::from(
+            game_stream.1,
+        );
 
     println!("wat");
 
-    while let Some(msg) = game_msg_recv.recv().await {
-        println!("sending {:?}", msg);
-        game_stream_send.send(msg).await?;
-    }
+    futures_util::future::try_join(
+        async {
+            while let Some(msg) = game_msg_recv.recv().await {
+                println!("sending {:?}", msg);
+                game_stream_send.send(msg).await?;
+            }
+            Result::<_, anyhow::Error>::Ok(())
+        },
+        async {
+            game_stream_recv
+                .map_err(Into::into)
+                .try_for_each(|msg| async {
+                    use ni_ty::protocol::GameMessageS2C;
+
+                    println!("received {:?}", msg);
+
+                    match msg {
+                        GameMessageS2C::Joined {
+                            info,
+                            your_player_id,
+                        } => {
+                            *info_mutex.lock().unwrap() = Some((info, your_player_id));
+                        }
+                        GameMessageS2C::PlayerJoin { id, info } => {
+                            (*info_mutex.lock().unwrap())
+                                .as_mut()
+                                .unwrap()
+                                .0
+                                .players
+                                .insert(id, info);
+                        }
+                        GameMessageS2C::PlayerUpdateReady { id, value } => {
+                            (*info_mutex.lock().unwrap())
+                                .as_mut()
+                                .unwrap()
+                                .0
+                                .players
+                                .get_mut(&id)
+                                .unwrap()
+                                .ready = value;
+                        }
+                    }
+
+                    Ok(())
+                })
+                .await
+        },
+    )
+    .await?;
 
     Ok(())
 }
