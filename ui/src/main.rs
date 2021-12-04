@@ -743,6 +743,8 @@ async fn main() {
                     }
                 }
 
+                mq::set_default_camera();
+
                 for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
                     let x = lake_start_x + (i as f32) * (CARD_WIDTH + LAKE_SPACING);
                     let y = screen_center.1 - CARD_HEIGHT / 2.0;
@@ -756,8 +758,6 @@ async fn main() {
                         }
                     }
                 }
-
-                mq::set_default_camera();
 
                 let my_player_state = &pred_hand_state.players()[my_player_idx];
                 if let Some((ni_ty::StackLocation::Player(_, stack_loc), count)) = held_cards {
