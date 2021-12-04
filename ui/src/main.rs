@@ -13,7 +13,7 @@ const LAKE_SPACING: f32 = 10.0;
 const HORIZONTAL_STACK_SPACING: f32 = 10.0;
 const VERTICAL_STACK_SPACING: f32 = 20.0;
 const PLAYER_SPACING: f32 = 20.0;
-const PLAYER_Y: f32 = 300.0;
+const PLAYER_Y: f32 = 200.0;
 
 enum State {
     Connecting,
