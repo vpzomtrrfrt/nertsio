@@ -329,6 +329,7 @@ pub struct CannotApplyAction;
 pub struct HandState {
     players: Vec<HandPlayerState>,
     lake_stacks: Vec<Stack>,
+    pub nerts_called: bool,
 }
 
 impl HandState {
@@ -344,6 +345,7 @@ impl HandState {
         Self {
             players,
             lake_stacks,
+            nerts_called: false,
         }
     }
 
@@ -460,6 +462,7 @@ impl HandState {
 pub struct GamePlayerState {
     pub name: String,
     pub ready: bool,
+    pub score: i32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

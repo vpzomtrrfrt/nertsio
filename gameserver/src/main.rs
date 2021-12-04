@@ -10,6 +10,7 @@ struct ServerGamePlayerState {
     name: String,
     game_stream_send_channel: tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
     ready: bool,
+    score: i32,
 }
 
 impl ServerGamePlayerState {
@@ -17,6 +18,7 @@ impl ServerGamePlayerState {
         ni_ty::GamePlayerState {
             name: self.name.clone(),
             ready: self.ready,
+            score: 0,
         }
     }
 }
@@ -28,6 +30,18 @@ struct ServerGameState {
 
 struct GlobalState {
     games: dashmap::DashMap<u32, ServerGameState>,
+}
+
+fn send_to_all(server_game_state: &ServerGameState, msg: ni_ty::protocol::GameMessageS2C) {
+    for (id, server_player_state) in &server_game_state.players {
+        println!("sending {:?} to {}", msg, id);
+        if let Err(err) = server_player_state
+            .game_stream_send_channel
+            .send(msg.clone())
+        {
+            eprintln!("Failed to queue update to player: {:?}", err);
+        }
+    }
 }
 
 async fn handle_connection(
@@ -88,6 +102,7 @@ async fn handle_connection(
                         name,
                         game_stream_send_channel: game_stream_send_channel_send,
                         ready: false,
+                        score: 0,
                     },
                 );
 
@@ -118,19 +133,6 @@ async fn handle_connection(
                 {
                     eprintln!("Failed to queue update to player: {:?}", err);
                 }
-            }
-        }
-    };
-
-    let send_to_all = move |server_game_state: &ServerGameState,
-                            msg: ni_ty::protocol::GameMessageS2C| {
-        for (id, server_player_state) in &server_game_state.players {
-            println!("sending {:?} to {}", msg, id);
-            if let Err(err) = server_player_state
-                .game_stream_send_channel
-                .send(msg.clone())
-            {
-                eprintln!("Failed to queue update to player: {:?}", err);
             }
         }
     };
@@ -277,6 +279,50 @@ async fn handle_connection(
                                                 Ok(_) => {
                                                     send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::PlayerHandAction { player: player_idx as u8, action });
                                                 }
+                                            }
+                                        }
+                                    }
+                                }
+                                GameMessageC2S::CallNerts => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if let Some(ref mut hand_state) = server_game_state.hand {
+                                        if let Some(player_idx) = hand_state.players().iter().position(|player| player.player_id() == player_id) {
+                                            if hand_state.players()[player_idx].nerts_stack().len() == 0 {
+                                                hand_state.nerts_called = true;
+                                                send_to_others(&server_game_state, ni_ty::protocol::GameMessageS2C::NertsCalled { player: player_idx as u8 });
+                                                let _ = server_game_state;
+
+                                                let global_state = global_state.clone();
+                                                tokio::spawn(async move {
+                                                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+                                                    if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
+                                                        if let Some(hand_state) = server_game_state.hand.take() {
+                                                            let mut scores: Vec<_> = hand_state.players().iter().map(|player| (player.nerts_stack().len() as i32) * (-2)).collect();
+                                                            for stack in hand_state.lake_stacks() {
+                                                                for card in stack.cards() {
+                                                                    scores[card.owner_id as usize] += 1;
+                                                                }
+                                                            }
+
+                                                            hand_state.players().iter().zip(scores.iter()).for_each(|(player, score)| {
+                                                                if let Some(info) = server_game_state.players.get_mut(&player.player_id()) {
+                                                                    info.score += score;
+                                                                }
+                                                            });
+
+                                                            for player in server_game_state.players.iter_mut() {
+                                                                player.ready = false;
+                                                            }
+
+                                                            send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::HandEnd { scores });
+                                                        }
+                                                    }
+                                                });
                                             }
                                         }
                                     }

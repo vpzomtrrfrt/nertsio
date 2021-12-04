@@ -14,6 +14,7 @@ pub enum HandshakeMessageS2C {
 pub enum GameMessageC2S {
     UpdateSelfReady { value: bool },
     ApplyHandAction { action: crate::HandAction },
+    CallNerts,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -39,5 +40,11 @@ pub enum GameMessageS2C {
     PlayerHandAction {
         player: u8,
         action: crate::HandAction,
+    },
+    NertsCalled {
+        player: u8,
+    },
+    HandEnd {
+        scores: Vec<i32>,
     },
 }
