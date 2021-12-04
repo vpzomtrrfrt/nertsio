@@ -490,14 +490,15 @@ async fn main() {
                                     .unwrap();
                             }
                         } else {
-                            let found = if mq::Rect::new(
-                                my_position.0
-                                    + ((player_state.nerts_stack().len() - 1) as f32) * 10.0,
-                                my_position.1,
-                                CARD_WIDTH,
-                                CARD_HEIGHT,
-                            )
-                            .contains(mouse_vec)
+                            let found = if player_state.nerts_stack().len() > 0
+                                && mq::Rect::new(
+                                    my_position.0
+                                        + ((player_state.nerts_stack().len() - 1) as f32) * 10.0,
+                                    my_position.1,
+                                    CARD_WIDTH,
+                                    CARD_HEIGHT,
+                                )
+                                .contains(mouse_vec)
                             {
                                 Some((
                                     ni_ty::StackLocation::Player(
@@ -653,10 +654,11 @@ async fn main() {
                         mq::set_default_camera();
                     }
 
-                    for i in 0..(player_state.nerts_stack().len() - 1) {
-                        draw_back(position.0 + (i as f32) * 10.0, position.1);
-                    }
-                    if let Some(card) = player_state.nerts_stack().last() {
+                    if player_state.nerts_stack().len() > 0 {
+                        for i in 0..(player_state.nerts_stack().len() - 1) {
+                            draw_back(position.0 + (i as f32) * 10.0, position.1);
+                        }
+                        let card = player_state.nerts_stack().last().unwrap();
                         if idx != my_player_idx
                             || !matches!(
                                 held_cards,
@@ -674,6 +676,18 @@ async fn main() {
                                 position.0 + ((player_state.nerts_stack().len() - 1) as f32) * 10.0,
                                 position.1,
                             );
+                        }
+                    } else {
+                        if idx == my_player_idx {
+                            if mqui::root_ui().button(
+                                mq::Vec2::new(
+                                    position.0 + CARD_WIDTH / 2.0,
+                                    position.1 + CARD_HEIGHT / 2.0,
+                                ),
+                                "Nerts!",
+                            ) {
+                                // TODO
+                            }
                         }
                     }
 
