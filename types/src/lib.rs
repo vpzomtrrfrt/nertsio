@@ -207,7 +207,7 @@ impl Stack {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PlayerStackLocation {
     Nerts,
     Tableau(u8),
@@ -305,12 +305,13 @@ impl HandPlayerState {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum StackLocation {
     Lake(u16),
     Player(u8, PlayerStackLocation),
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HandAction {
     FlipStock,
     ReturnStock,
@@ -394,6 +395,9 @@ impl HandState {
                         let src_stack = self.players[player as usize]
                             .stack_at(src_loc)
                             .ok_or(CannotApplyAction)?;
+
+                        println!("src_stack = {:?}", src_stack);
+
                         let first_card = &src_stack.cards()[src_stack.len() - count as usize];
 
                         let dest_stack = self.stack_at(to).ok_or(CannotApplyAction)?;

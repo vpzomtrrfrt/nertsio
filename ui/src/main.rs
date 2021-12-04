@@ -2,6 +2,7 @@ use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
@@ -60,7 +61,7 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
 }
 
 async fn handle_connection(
-    info_mutex: &std::sync::Mutex<Option<(ni_ty::GameState, u8)>>,
+    info_mutex: &std::sync::Mutex<Option<(ni_ty::GameState, u8, VecDeque<ni_ty::HandAction>)>>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
 ) -> Result<(), anyhow::Error> {
     let mut endpoint = quinn::Endpoint::client(([0, 0, 0, 0], 0).into())?;
@@ -153,7 +154,8 @@ async fn handle_connection(
                             info,
                             your_player_id,
                         } => {
-                            *info_mutex.lock().unwrap() = Some((info, your_player_id));
+                            *info_mutex.lock().unwrap() =
+                                Some((info, your_player_id, Default::default()));
                         }
                         GameMessageS2C::PlayerJoin { id, info } => {
                             (*info_mutex.lock().unwrap())
@@ -183,6 +185,30 @@ async fn handle_connection(
                         }
                         GameMessageS2C::HandStart { info } => {
                             (*info_mutex.lock().unwrap()).as_mut().unwrap().0.hand = Some(info);
+                        }
+                        GameMessageS2C::PlayerHandAction { player, action } => {
+                            let mut lock = info_mutex.lock().unwrap();
+                            let info = lock.as_mut().unwrap();
+
+                            let hand = info.0.hand.as_mut().unwrap();
+
+                            let my_player_idx = hand
+                                .players()
+                                .iter()
+                                .position(|player| player.player_id() == info.1)
+                                .unwrap();
+
+                            if player == my_player_idx as u8 {
+                                // my move, check if matches expected
+
+                                while let Some(front) = info.2.pop_front() {
+                                    if front == action {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            hand.apply(player, action).unwrap();
                         }
                     }
 
@@ -301,7 +327,7 @@ async fn main() {
                 mq::clear_background(BACKGROUND_COLOR);
 
                 let mut lock = game_info_mutex.lock().unwrap();
-                let (game, my_player_id) = (*lock).as_mut().unwrap();
+                let (game, my_player_id, _pending_actions) = (*lock).as_mut().unwrap();
 
                 match &game.hand {
                     None => {
@@ -357,21 +383,22 @@ async fn main() {
                 };
 
                 let mut lock = game_info_mutex.lock().unwrap();
-                let (game, _my_player_id) = (*lock).as_mut().unwrap();
+                let (game, _my_player_id, pending_actions) = (*lock).as_mut().unwrap();
 
-                let hand_state = game.hand.as_mut().unwrap();
+                let real_hand_state = game.hand.as_mut().unwrap();
 
                 let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
 
                 let player_hand_width = 130.0
                     + CARD_WIDTH
-                    + (hand_state.players()[0].tableau_stacks().len() as f32) * (CARD_WIDTH + 10.0);
+                    + (real_hand_state.players()[0].tableau_stacks().len() as f32)
+                        * (CARD_WIDTH + 10.0);
 
-                let lake_width = ((hand_state.lake_stacks().len() as f32) * CARD_WIDTH)
-                    + ((hand_state.lake_stacks().len() - 1) as f32) * LAKE_SPACING;
+                let lake_width = ((real_hand_state.lake_stacks().len() as f32) * CARD_WIDTH)
+                    + ((real_hand_state.lake_stacks().len() - 1) as f32) * LAKE_SPACING;
                 let lake_start_x = screen_center.0 - lake_width / 2.0;
 
-                let player_count = hand_state.players().len();
+                let player_count = real_hand_state.players().len();
                 let min_side_player_count = player_count / 2;
 
                 let get_player_location = |player_idx: usize| {
@@ -398,8 +425,13 @@ async fn main() {
 
                 let my_location = get_player_location(my_player_idx);
 
+                let mut pred_hand_state = (*real_hand_state).clone();
+                for action in pending_actions.iter() {
+                    let _ = pred_hand_state.apply(my_player_idx_u8, *action); // ignore error, will get cleared out eventually
+                }
+
                 {
-                    let player_state = &hand_state.players()[my_player_idx];
+                    let player_state = &pred_hand_state.players()[my_player_idx];
                     let my_position = (screen_center.0 + my_location.0, screen_center.1 + PLAYER_Y);
 
                     if mq::is_mouse_button_pressed(mq::MouseButton::Left) {
@@ -495,10 +527,10 @@ async fn main() {
                                             ) | ni_ty::StackLocation::Lake(_)
                                         ) {
                                             if let Some(target_stack) =
-                                                hand_state.stack_at(target_loc)
+                                                pred_hand_state.stack_at(target_loc)
                                             {
                                                 if let Some(src_stack) =
-                                                    hand_state.stack_at(src_loc)
+                                                    pred_hand_state.stack_at(src_loc)
                                                 {
                                                     let stack_cards = src_stack.cards();
                                                     let back_card =
@@ -511,14 +543,15 @@ async fn main() {
                                                             to: target_loc,
                                                         };
 
-                                                        if let Err(err) = hand_state
+                                                        println!("applying for check");
+                                                        if pred_hand_state
                                                             .apply(my_player_idx_u8, action)
+                                                            .is_ok()
                                                         {
-                                                            eprintln!(
-                                                                "failed to apply movement: {:?}",
-                                                                err
-                                                            );
+                                                            pending_actions.push_back(action);
+                                                            game_msg_send.send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }).unwrap();
                                                         }
+
                                                         held_cards = None;
                                                     } else {
                                                         println!(
@@ -538,7 +571,7 @@ async fn main() {
 
                 mq::clear_background(BACKGROUND_COLOR);
 
-                for (idx, player_state) in hand_state.players().iter().enumerate() {
+                for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
                     let location = get_player_location(idx);
                     let position = (screen_center.0 + location.0, screen_center.1 + PLAYER_Y);
 
@@ -603,7 +636,7 @@ async fn main() {
                     }
                 }
 
-                for (i, stack) in hand_state.lake_stacks().iter().enumerate() {
+                for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
                     let x = lake_start_x + (i as f32) * (CARD_WIDTH + LAKE_SPACING);
                     let y = screen_center.1 - CARD_HEIGHT / 2.0;
 
@@ -634,7 +667,7 @@ async fn main() {
 
                 mq::set_default_camera();
 
-                let my_player_state = &hand_state.players()[my_player_idx];
+                let my_player_state = &pred_hand_state.players()[my_player_idx];
                 if let Some((ni_ty::StackLocation::Player(_, stack_loc), count)) = held_cards {
                     let stack = my_player_state.stack_at(stack_loc);
                     if let Some(stack) = stack {

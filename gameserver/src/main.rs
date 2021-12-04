@@ -262,6 +262,25 @@ async fn handle_connection(
                                         }
                                     }
                                 }
+                                GameMessageC2S::ApplyHandAction { action } => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if let Some(ref mut hand_state) = server_game_state.hand {
+                                        if let Some(player_idx) = hand_state.players().iter().position(|player| player.player_id() == player_id) {
+                                            match hand_state.apply(player_idx as u8, action) {
+                                                Err(_) => {
+                                                    println!("cannot apply action {:?}", action);
+                                                }
+                                                Ok(_) => {
+                                                    send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::PlayerHandAction { player: player_idx as u8, action });
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             Result::<_, anyhow::Error>::Ok(())
                         }

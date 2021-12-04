@@ -13,6 +13,7 @@ pub enum HandshakeMessageS2C {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum GameMessageC2S {
     UpdateSelfReady { value: bool },
+    ApplyHandAction { action: crate::HandAction },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -34,5 +35,9 @@ pub enum GameMessageS2C {
     },
     HandStart {
         info: crate::HandState,
+    },
+    PlayerHandAction {
+        player: u8,
+        action: crate::HandAction,
     },
 }
