@@ -10,7 +10,7 @@ const CARD_WIDTH: f32 = 90.0;
 const CARD_HEIGHT: f32 = 135.0;
 const VERTICAL_STACK_SPACING: f32 = 20.0;
 const PLAYER_SPACING: f32 = 20.0;
-const PLAYER_Y: f32 = 200.0;
+const PLAYER_Y: f32 = 300.0;
 
 enum State {
     Connecting,
@@ -205,6 +205,10 @@ async fn main() {
         mq::Texture2D::from_file_with_format(nertsio_textures::CARDS, Some(mq::ImageFormat::Png));
     let backs_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::BACKS, Some(mq::ImageFormat::Png));
+    let placeholder_texture = mq::Texture2D::from_file_with_format(
+        nertsio_textures::PLACEHOLDER,
+        Some(mq::ImageFormat::Png),
+    );
 
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
@@ -240,8 +244,27 @@ async fn main() {
     };
 
     let draw_vertical_stack_cards = |cards: &[ni_ty::CardInstance], x: f32, y: f32| {
-        for (i, card) in cards.iter().enumerate() {
-            draw_card(card.card, x, y + (i as f32) * VERTICAL_STACK_SPACING);
+        if cards.is_empty() {
+            mq::draw_texture_ex(
+                placeholder_texture,
+                x,
+                y,
+                mq::WHITE,
+                mq::DrawTextureParams {
+                    source: Some(mq::Rect {
+                        x: 10.0,
+                        y: 10.0,
+                        w: 120.0,
+                        h: 180.0,
+                    }),
+                    dest_size: Some(card_size),
+                    ..Default::default()
+                },
+            );
+        } else {
+            for (i, card) in cards.iter().enumerate() {
+                draw_card(card.card, x, y + (i as f32) * VERTICAL_STACK_SPACING);
+            }
         }
     };
 
