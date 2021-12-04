@@ -19,7 +19,7 @@ enum State {
     Connecting,
     GameNeutral,
     GameHand {
-        held_cards: Option<(ni_ty::StackLocation, usize)>,
+        held_cards: Option<(ni_ty::StackLocation, usize, mq::Vec2)>,
         my_player_idx: usize,
     },
 }
@@ -506,6 +506,13 @@ async fn main() {
                                         ni_ty::PlayerStackLocation::Nerts,
                                     ),
                                     1,
+                                    mouse_vec
+                                        - mq::Vec2::new(
+                                            my_position.0
+                                                + ((player_state.nerts_stack().len() - 1) as f32)
+                                                    * 10.0,
+                                            my_position.1,
+                                        ),
                                 ))
                             } else if mq::Rect::new(
                                 lake_start_x,
@@ -515,12 +522,18 @@ async fn main() {
                             )
                             .contains(mouse_vec)
                             {
+                                let stack_idx = ((mouse_pos.0 - lake_start_x)
+                                    / (CARD_WIDTH + LAKE_SPACING))
+                                    as u16;
                                 Some((
-                                    ni_ty::StackLocation::Lake(
-                                        ((mouse_pos.0 - lake_start_x) / (CARD_WIDTH + LAKE_SPACING))
-                                            as u16,
-                                    ),
+                                    ni_ty::StackLocation::Lake(stack_idx),
                                     1,
+                                    mouse_vec
+                                        - mq::Vec2::new(
+                                            lake_start_x
+                                                + (CARD_WIDTH + LAKE_SPACING) * (stack_idx as f32),
+                                            screen_center.1 - CARD_HEIGHT / 2.0,
+                                        ),
                                 ))
                             } else if mq::Rect::new(
                                 my_position.0 + CARD_WIDTH + 10.0,
@@ -536,6 +549,16 @@ async fn main() {
                                         ni_ty::PlayerStackLocation::Waste,
                                     ),
                                     1,
+                                    mouse_vec
+                                        - mq::Vec2::new(
+                                            my_position.0
+                                                + CARD_WIDTH
+                                                + 10.0
+                                                + (HORIZONTAL_STACK_SPACING
+                                                    * ((player_state.waste_stack().len().min(3) - 1)
+                                                        as f32)),
+                                            my_position.1 + CARD_HEIGHT + 10.0,
+                                        ),
                                 ))
                             } else {
                                 player_state
@@ -543,11 +566,12 @@ async fn main() {
                                     .iter()
                                     .enumerate()
                                     .filter_map(|(i, stack)| {
+                                        let x = my_position.0
+                                            + 130.0
+                                            + CARD_WIDTH
+                                            + (i as f32) * (CARD_WIDTH + 10.0);
                                         if mq::Rect::new(
-                                            my_position.0
-                                                + 130.0
-                                                + CARD_WIDTH
-                                                + (i as f32) * (CARD_WIDTH + 10.0),
+                                            x,
                                             my_position.1,
                                             CARD_WIDTH,
                                             CARD_HEIGHT
@@ -566,9 +590,17 @@ async fn main() {
                                                     as usize)
                                                     .min(stack.len() - 1);
 
-                                                Some((loc, stack.len() - found_idx))
+                                                Some((
+                                                    loc,
+                                                    stack.len() - found_idx,
+                                                    mouse_vec - mq::Vec2::new(x, my_position.1),
+                                                ))
                                             } else {
-                                                Some((loc, 0))
+                                                Some((
+                                                    loc,
+                                                    0,
+                                                    mouse_vec - mq::Vec2::new(x, my_position.1),
+                                                ))
                                             }
                                         } else {
                                             None
@@ -586,7 +618,7 @@ async fn main() {
                                     None => {
                                         held_cards = Some(found);
                                     }
-                                    Some((src_loc, src_count)) => {
+                                    Some((src_loc, src_count, _)) => {
                                         let (target_loc, ..) = found;
                                         if target_loc == src_loc {
                                             held_cards = None;
@@ -700,6 +732,7 @@ async fn main() {
                                     ni_ty::PlayerStackLocation::Tableau(stack_idx),
                                 ),
                                 count,
+                                _,
                             )) = held_cards
                             {
                                 if i == (stack_idx as usize) {
@@ -738,6 +771,7 @@ async fn main() {
                         if let Some((
                             ni_ty::StackLocation::Player(_, ni_ty::PlayerStackLocation::Waste),
                             count,
+                            _,
                         )) = held_cards
                         {
                             &waste_cards[..(waste_cards.len() - count)]
@@ -774,7 +808,9 @@ async fn main() {
                 }
 
                 let my_player_state = &pred_hand_state.players()[my_player_idx];
-                if let Some((ni_ty::StackLocation::Player(_, stack_loc), count)) = held_cards {
+                if let Some((ni_ty::StackLocation::Player(_, stack_loc), count, offset)) =
+                    held_cards
+                {
                     let stack = my_player_state.stack_at(stack_loc);
                     if let Some(stack) = stack {
                         let stack_cards = stack.cards();
@@ -782,8 +818,8 @@ async fn main() {
 
                         draw_vertical_stack_cards(
                             cards,
-                            mouse_pos.0 - CARD_WIDTH / 2.0,
-                            mouse_pos.1 - CARD_HEIGHT / 2.0,
+                            mouse_pos.0 - offset[0],
+                            mouse_pos.1 - offset[1],
                         );
                     } else {
                         held_cards = None;
