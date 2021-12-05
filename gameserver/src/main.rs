@@ -315,7 +315,7 @@ async fn handle_connection(
                                                                 }
                                                             });
 
-                                                            for player in server_game_state.players.iter_mut() {
+                                                            for player in server_game_state.players.values_mut() {
                                                                 player.ready = false;
                                                             }
 
