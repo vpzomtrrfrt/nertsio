@@ -643,9 +643,18 @@ async fn main() {
                                 )
                                 .contains(mouse_pos)
                                 {
-                                    let stack_idx = ((mouse_pos[0] - lake_start_x)
+                                    let stack_idx_for_me = ((mouse_pos[0] - lake_start_x)
                                         / (CARD_WIDTH + LAKE_SPACING))
                                         as u16;
+
+                                    let stack_idx = if my_location.1 {
+                                        (pred_hand_state.lake_stacks().len() as u16)
+                                            - stack_idx_for_me
+                                            - 1
+                                    } else {
+                                        stack_idx_for_me
+                                    };
+
                                     Some((
                                         ni_ty::StackLocation::Lake(stack_idx),
                                         1,
@@ -964,7 +973,11 @@ async fn main() {
                         }
                     }
 
-                    mq::set_default_camera();
+                    if my_location.1 {
+                        mq::set_camera(&inverted_camera);
+                    } else {
+                        mq::set_default_camera();
+                    }
 
                     for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
                         let x = lake_start_x + (i as f32) * (CARD_WIDTH + LAKE_SPACING);
