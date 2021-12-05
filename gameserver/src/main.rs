@@ -11,6 +11,12 @@ struct ServerGamePlayerState {
     game_stream_send_channel: tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
     ready: bool,
     score: i32,
+    connection: quinn::Connection,
+}
+
+struct ServerHandState {
+    hand: ni_ty::HandState,
+    mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
 }
 
 impl ServerGamePlayerState {
@@ -25,7 +31,7 @@ impl ServerGamePlayerState {
 
 struct ServerGameState {
     players: HashMap<u8, ServerGamePlayerState>,
-    hand: Option<ni_ty::HandState>,
+    hand: Option<ServerHandState>,
 }
 
 struct GlobalState {
@@ -103,6 +109,7 @@ async fn handle_connection(
                         game_stream_send_channel: game_stream_send_channel_send,
                         ready: false,
                         score: 0,
+                        connection: connection.connection.clone(),
                     },
                 );
 
@@ -116,7 +123,10 @@ async fn handle_connection(
                 .iter()
                 .map(|(key, value)| (*key, value.to_common_state()))
                 .collect(),
-            hand: server_game_state.hand.clone(),
+            hand: server_game_state
+                .hand
+                .as_ref()
+                .map(|hand| hand.hand.clone()),
         };
 
         (player_id, game_state)
@@ -184,7 +194,7 @@ async fn handle_connection(
 
         let (leave_send, mut leave_recv) = tokio::sync::oneshot::channel();
 
-        futures_util::future::try_join(
+        futures_util::try_join!(
             async {
                 println!("denrstdensrtkenaa");
                 loop {
@@ -211,6 +221,55 @@ async fn handle_connection(
                 }
                 println!("and no more");
                 Result::<_, anyhow::Error>::Ok(())
+            },
+            async {
+                let global_state = global_state.clone();
+                connection.datagrams.map_err(Into::into).try_for_each(|bytes| {
+                    let global_state = global_state.clone();
+                    async move {
+                        use ni_ty::protocol::DatagramMessageC2S;
+
+                        let msg: DatagramMessageC2S = bincode::deserialize(&bytes)?;
+                        match msg {
+                            DatagramMessageC2S::UpdateMouseState { seq, state } => {
+                                let mut server_game_state = global_state
+                                    .games
+                                    .get_mut(&game_id)
+                                    .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                if let Some(ref mut hand_state) = server_game_state.hand {
+                                    if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
+                                        if match hand_state.mouse_states[player_idx] {
+                                            Some(ref state) => state.0 < seq,
+                                                None => true,
+                                        } {
+                                            hand_state.mouse_states[player_idx] = Some((seq, state.clone()));
+
+                                            let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
+                                                player_idx: player_idx as u8,
+                                                seq,
+                                                state,
+                                            }).unwrap().into();
+
+                                            for (id, server_player_state) in &server_game_state.players {
+                                                if *id != player_id {
+                                                    if let Err(err) = server_player_state.connection.send_datagram(out_msg.clone())
+                                                    {
+                                                        eprintln!("Failed to queue update to player: {:?}", err);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Result::<_, anyhow::Error>::Ok(())
+                    }
+                }).await?;
+
+                Ok(())
             },
             async {
                 let global_state = global_state.clone();
@@ -254,7 +313,7 @@ async fn handle_connection(
                                             let new_hand = ni_ty::HandState::generate(
                                                 server_game_state.players.keys().copied(),
                                             );
-                                            server_game_state.hand = Some(new_hand.clone());
+                                            server_game_state.hand = Some(ServerHandState { hand: new_hand.clone(), mouse_states: vec![None; new_hand.players().len()] });
                                             send_to_all(
                                                 &server_game_state,
                                                 ni_ty::protocol::GameMessageS2C::HandStart {
@@ -271,8 +330,8 @@ async fn handle_connection(
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
                                     if let Some(ref mut hand_state) = server_game_state.hand {
-                                        if let Some(player_idx) = hand_state.players().iter().position(|player| player.player_id() == player_id) {
-                                            match hand_state.apply(player_idx as u8, action) {
+                                        if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
+                                            match hand_state.hand.apply(player_idx as u8, action) {
                                                 Err(_) => {
                                                     println!("cannot apply action {:?}", action);
                                                 }
@@ -290,9 +349,9 @@ async fn handle_connection(
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
                                     if let Some(ref mut hand_state) = server_game_state.hand {
-                                        if let Some(player_idx) = hand_state.players().iter().position(|player| player.player_id() == player_id) {
-                                            if hand_state.players()[player_idx].nerts_stack().len() == 0 {
-                                                hand_state.nerts_called = true;
+                                        if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
+                                            if hand_state.hand.players()[player_idx].nerts_stack().len() == 0 {
+                                                hand_state.hand.nerts_called = true;
                                                 send_to_others(&server_game_state, ni_ty::protocol::GameMessageS2C::NertsCalled { player: player_idx as u8 });
                                                 let _ = server_game_state;
 
@@ -302,14 +361,14 @@ async fn handle_connection(
 
                                                     if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
                                                         if let Some(hand_state) = server_game_state.hand.take() {
-                                                            let mut scores: Vec<_> = hand_state.players().iter().map(|player| (player.nerts_stack().len() as i32) * (-2)).collect();
-                                                            for stack in hand_state.lake_stacks() {
+                                                            let mut scores: Vec<_> = hand_state.hand.players().iter().map(|player| (player.nerts_stack().len() as i32) * (-2)).collect();
+                                                            for stack in hand_state.hand.lake_stacks() {
                                                                 for card in stack.cards() {
                                                                     scores[card.owner_id as usize] += 1;
                                                                 }
                                                             }
 
-                                                            hand_state.players().iter().zip(scores.iter()).for_each(|(player, score)| {
+                                                            hand_state.hand.players().iter().zip(scores.iter()).for_each(|(player, score)| {
                                                                 if let Some(info) = server_game_state.players.get_mut(&player.player_id()) {
                                                                     info.score += score;
                                                                 }
@@ -339,8 +398,7 @@ async fn handle_connection(
 
                 Ok(())
             },
-        )
-        .await?;
+        )?;
 
         Ok(())
     }

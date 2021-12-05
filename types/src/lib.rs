@@ -470,3 +470,17 @@ pub struct GameState {
     pub players: BTreeMap<u8, GamePlayerState>,
     pub hand: Option<HandState>,
 }
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+pub struct HeldInfo {
+    pub src: PlayerStackLocation,
+    pub count: u8,
+    pub offset: (f32, f32),
+    pub top_card: Card,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MouseState {
+    pub position: (f32, f32),
+    pub held: Option<HeldInfo>,
+}

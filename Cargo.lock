@@ -665,6 +665,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-bincode",
+ "bincode",
+ "bytes",
  "dashmap",
  "futures-util",
  "nertsio_types",

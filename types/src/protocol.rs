@@ -48,3 +48,17 @@ pub enum GameMessageS2C {
         scores: Vec<i32>,
     },
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum DatagramMessageC2S {
+    UpdateMouseState { seq: u32, state: crate::MouseState },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub enum DatagramMessageS2C {
+    UpdateMouseState {
+        player_idx: u8,
+        seq: u32,
+        state: crate::MouseState,
+    },
+}
