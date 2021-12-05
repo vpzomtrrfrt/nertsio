@@ -842,20 +842,47 @@ async fn main() {
                             mq::set_default_camera();
                         }
 
+                        let held_state = if idx == my_player_idx {
+                            shared.my_held_state
+                        } else {
+                            shared.hand_mouse_states.as_ref().unwrap()[idx]
+                                .as_ref()
+                                .and_then(|(_, state)| state.held)
+                                .and_then(|held| {
+                                    let stack = player_state.stack_at(held.src);
+                                    if let Some(stack) = stack {
+                                        let cards = stack.cards();
+                                        if (held.count as usize) <= cards.len() {
+                                            let cards =
+                                                &cards[(cards.len() - held.count as usize)..];
+
+                                            if cards[0].card == held.top_card {
+                                                Some(held)
+                                            } else {
+                                                None
+                                            }
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None
+                                    }
+                                })
+                        };
+
                         if player_state.nerts_stack().len() > 0 {
                             for i in 0..(player_state.nerts_stack().len() - 1) {
                                 draw_back(position.0 + (i as f32) * 10.0, position.1);
                             }
                             let card = player_state.nerts_stack().last().unwrap();
-                            if idx != my_player_idx
-                                || !matches!(
-                                    shared.my_held_state,
-                                    Some(ni_ty::HeldInfo {
-                                        src: ni_ty::PlayerStackLocation::Nerts,
-                                        ..
-                                    })
-                                )
-                            {
+
+                            if !matches!(
+                                held_state,
+                                Some(ni_ty::HeldInfo {
+                                    src: ni_ty::PlayerStackLocation::Nerts,
+                                    ..
+                                })
+                            ) {
                                 draw_card(
                                     card.card,
                                     position.0
@@ -882,18 +909,14 @@ async fn main() {
 
                         for (i, stack) in player_state.tableau_stacks().iter().enumerate() {
                             let cards = stack.cards();
-                            let cards = if idx == my_player_idx {
-                                if let Some(ni_ty::HeldInfo {
-                                    src: ni_ty::PlayerStackLocation::Tableau(stack_idx),
-                                    count,
-                                    ..
-                                }) = shared.my_held_state
-                                {
-                                    if i == (stack_idx as usize) {
-                                        &cards[..(cards.len() - count as usize)]
-                                    } else {
-                                        cards
-                                    }
+                            let cards = if let Some(ni_ty::HeldInfo {
+                                src: ni_ty::PlayerStackLocation::Tableau(stack_idx),
+                                count,
+                                ..
+                            }) = held_state
+                            {
+                                if i == (stack_idx as usize) {
+                                    &cards[..(cards.len() - count as usize)]
                                 } else {
                                     cards
                                 }
@@ -921,17 +944,13 @@ async fn main() {
                         } else {
                             waste_cards
                         };
-                        let waste_cards = if idx == my_player_idx {
-                            if let Some(ni_ty::HeldInfo {
-                                src: ni_ty::PlayerStackLocation::Waste,
-                                count,
-                                ..
-                            }) = shared.my_held_state
-                            {
-                                &waste_cards[..(waste_cards.len() - count as usize)]
-                            } else {
-                                waste_cards
-                            }
+                        let waste_cards = if let Some(ni_ty::HeldInfo {
+                            src: ni_ty::PlayerStackLocation::Waste,
+                            count,
+                            ..
+                        }) = held_state
+                        {
+                            &waste_cards[..(waste_cards.len() - count as usize)]
                         } else {
                             waste_cards
                         };
@@ -975,6 +994,26 @@ async fn main() {
                                 mq::set_camera(&inverted_camera);
                             } else {
                                 mq::set_default_camera();
+                            }
+
+                            if let Some(held) = state.held {
+                                println!("player held {:?}", held);
+
+                                let stack = pred_hand_state.players()[idx].stack_at(held.src);
+                                if let Some(stack) = stack {
+                                    let cards = stack.cards();
+                                    if (held.count as usize) <= cards.len() {
+                                        let cards = &cards[(cards.len() - held.count as usize)..];
+
+                                        if cards[0].card == held.top_card {
+                                            draw_vertical_stack_cards(
+                                                cards,
+                                                screen_center.0 + state.position.0 - held.offset.0,
+                                                screen_center.1 + state.position.1 - held.offset.1,
+                                            );
+                                        }
+                                    }
+                                }
                             }
 
                             mq::draw_rectangle(
