@@ -623,7 +623,13 @@ async fn main() {
                                                     Some((
                                                         loc,
                                                         stack.len() - found_idx,
-                                                        mouse_vec - mq::Vec2::new(x, my_position.1),
+                                                        mouse_vec
+                                                            - mq::Vec2::new(
+                                                                x,
+                                                                my_position.1
+                                                                    + ((found_idx as f32)
+                                                                        * VERTICAL_STACK_SPACING),
+                                                            ),
                                                     ))
                                                 } else {
                                                     Some((
