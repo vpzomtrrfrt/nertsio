@@ -763,15 +763,18 @@ async fn main() {
                                             {
                                                 let stack =
                                                     pred_hand_state.stack_at(found.0).unwrap();
-                                                let top_card =
-                                                    stack.cards()[stack.cards().len() - count].card;
+                                                if stack.len() > 0 {
+                                                    let top_card = stack.cards()
+                                                        [stack.cards().len() - count]
+                                                        .card;
 
-                                                shared.my_held_state = Some(ni_ty::HeldInfo {
-                                                    src,
-                                                    count: count as u8,
-                                                    offset: (offset[0], offset[1]),
-                                                    top_card,
-                                                });
+                                                    shared.my_held_state = Some(ni_ty::HeldInfo {
+                                                        src,
+                                                        count: count as u8,
+                                                        offset: (offset[0], offset[1]),
+                                                        top_card,
+                                                    });
+                                                }
                                             }
                                         }
                                         Some(ref held) => {
