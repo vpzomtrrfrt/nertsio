@@ -221,11 +221,18 @@ async fn handle_connection(
 
                             hand.nerts_called = true;
                         }
-                        GameMessageS2C::HandEnd { scores: _ } => {
+                        GameMessageS2C::HandEnd { scores } => {
                             let mut lock = info_mutex.lock().unwrap();
                             let info = lock.as_mut().unwrap();
 
-                            info.0.hand = None;
+                            let hand_state = info.0.hand.take().unwrap();
+
+                            for (player, score) in hand_state.players().iter().zip(scores) {
+                                if let Some(info) = info.0.players.get_mut(&player.player_id()) {
+                                    info.score += score;
+                                }
+                            }
+
                             for player in info.0.players.values_mut() {
                                 player.ready = false;
                             }
@@ -383,9 +390,12 @@ async fn main() {
                         for (i, (key, player)) in game.players.iter_mut().enumerate() {
                             let y = 10.0 + (i as f32) * 25.0;
 
+                            mqui::root_ui()
+                                .label(mq::Vec2::new(10.0, y), &player.score.to_string());
+
                             if key == my_player_id {
                                 if mqui::root_ui().button(
-                                    mq::Vec2::new(10.0, y),
+                                    mq::Vec2::new(30.0, y),
                                     if player.ready { "Unready" } else { "Ready" },
                                 ) {
                                     let new_value = !player.ready;
@@ -399,7 +409,7 @@ async fn main() {
                                 }
                             } else {
                                 mqui::root_ui().label(
-                                    mq::Vec2::new(10.0, y),
+                                    mq::Vec2::new(30.0, y),
                                     if player.ready { "Ready" } else { "Not Ready" },
                                 );
                             }
