@@ -70,6 +70,7 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
 }
 
 async fn handle_connection(
+    host: std::net::SocketAddr,
     info_mutex: &std::sync::Mutex<Option<SharedInfo>>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
 ) -> Result<(), anyhow::Error> {
@@ -84,9 +85,7 @@ async fn handle_connection(
         cfg
     })));
 
-    let conn = endpoint
-        .connect(([127, 0, 0, 1], 6465).into(), "nio.invalid")?
-        .await?;
+    let conn = endpoint.connect(host, "nio.invalid")?.await?;
 
     println!("connected");
 
@@ -341,6 +340,17 @@ async fn handle_connection(
 
 #[macroquad::main("nertsio")]
 async fn main() {
+    let host = match std::env::args().skip(1).next() {
+        None => ([127, 0, 0, 1], 6465).into(),
+        Some(arg) => {
+            use std::net::ToSocketAddrs;
+            arg.to_socket_addrs()
+                .expect("Invalid server address")
+                .next()
+                .unwrap()
+        }
+    };
+
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
     let card_size = mq::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
@@ -447,7 +457,7 @@ async fn main() {
     async_rt.spawn({
         let game_info_mutex = game_info_mutex.clone();
         async move {
-            if let Err(err) = handle_connection(&game_info_mutex, game_msg_recv).await {
+            if let Err(err) = handle_connection(host, &game_info_mutex, game_msg_recv).await {
                 eprintln!("Failed to handle connection: {:?}", err);
             }
         }
