@@ -226,7 +226,7 @@ async fn handle_connection(
                             let info = lock.as_mut().unwrap();
 
                             info.0.hand = None;
-                            for player in info.0.players.iter_mut() {
+                            for player in info.0.players.values_mut() {
                                 player.ready = false;
                             }
                         }
