@@ -593,7 +593,9 @@ async fn main() {
                         let my_position =
                             (screen_center.0 + my_location.0, screen_center.1 + PLAYER_Y);
 
-                        if mq::is_mouse_button_pressed(mq::MouseButton::Left) {
+                        let mouse_pressed = mq::is_mouse_button_pressed(mq::MouseButton::Left);
+
+                        if mouse_pressed || mq::is_mouse_button_released(mq::MouseButton::Left) {
                             if mq::Rect::new(
                                 my_position.0,
                                 my_position.1 + (CARD_HEIGHT + 10.0),
@@ -602,21 +604,25 @@ async fn main() {
                             )
                             .contains(mouse_pos)
                             {
-                                let action = if player_state.stock_stack().len() > 0 {
-                                    ni_ty::HandAction::FlipStock
-                                } else {
-                                    ni_ty::HandAction::ReturnStock
-                                };
+                                if mouse_pressed {
+                                    let action = if player_state.stock_stack().len() > 0 {
+                                        ni_ty::HandAction::FlipStock
+                                    } else {
+                                        ni_ty::HandAction::ReturnStock
+                                    };
 
-                                if pred_hand_state.apply(my_player_idx_u8, action).is_ok() {
-                                    shared.pending_actions.push_back(action);
-                                    game_msg_send
-                                        .send(ni_ty::protocol::GameMessageC2S::ApplyHandAction {
-                                            action,
-                                        })
-                                        .unwrap();
+                                    if pred_hand_state.apply(my_player_idx_u8, action).is_ok() {
+                                        shared.pending_actions.push_back(action);
+                                        game_msg_send
+                                            .send(
+                                                ni_ty::protocol::GameMessageC2S::ApplyHandAction {
+                                                    action,
+                                                },
+                                            )
+                                            .unwrap();
 
-                                    shared.my_held_state = None;
+                                        shared.my_held_state = None;
+                                    }
                                 }
                             } else {
                                 let found = if player_state.nerts_stack().len() > 0
@@ -765,25 +771,28 @@ async fn main() {
                                 if let Some(found) = found {
                                     match shared.my_held_state {
                                         None => {
-                                            if let (
-                                                ni_ty::StackLocation::Player(_, src),
-                                                count,
-                                                offset,
-                                            ) = found
-                                            {
-                                                let stack =
-                                                    pred_hand_state.stack_at(found.0).unwrap();
-                                                if stack.len() > 0 {
-                                                    let top_card = stack.cards()
-                                                        [stack.cards().len() - count]
-                                                        .card;
+                                            if mouse_pressed {
+                                                if let (
+                                                    ni_ty::StackLocation::Player(_, src),
+                                                    count,
+                                                    offset,
+                                                ) = found
+                                                {
+                                                    let stack =
+                                                        pred_hand_state.stack_at(found.0).unwrap();
+                                                    if stack.len() > 0 {
+                                                        let top_card = stack.cards()
+                                                            [stack.cards().len() - count]
+                                                            .card;
 
-                                                    shared.my_held_state = Some(ni_ty::HeldInfo {
-                                                        src,
-                                                        count: count as u8,
-                                                        offset: (offset[0], offset[1]),
-                                                        top_card,
-                                                    });
+                                                        shared.my_held_state =
+                                                            Some(ni_ty::HeldInfo {
+                                                                src,
+                                                                count: count as u8,
+                                                                offset: (offset[0], offset[1]),
+                                                                top_card,
+                                                            });
+                                                    }
                                                 }
                                             }
                                         }
@@ -795,7 +804,9 @@ async fn main() {
 
                                             let (target_loc, ..) = found;
                                             if target_loc == src_loc {
-                                                shared.my_held_state = None;
+                                                if mouse_pressed {
+                                                    shared.my_held_state = None;
+                                                }
                                             } else {
                                                 if matches!(
                                                     target_loc,
