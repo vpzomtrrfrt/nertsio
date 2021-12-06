@@ -74,7 +74,20 @@ async fn handle_connection(
     info_mutex: &std::sync::Mutex<Option<SharedInfo>>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
 ) -> Result<(), anyhow::Error> {
-    let mut endpoint = quinn::Endpoint::client(([0, 0, 0, 0], 0).into())?;
+    let mut endpoint = quinn::Endpoint::client(
+        (
+            match host {
+                std::net::SocketAddr::V4(_) => {
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
+                }
+                std::net::SocketAddr::V6(_) => {
+                    std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
+                }
+            },
+            0,
+        )
+            .into(),
+    )?;
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new({
         let mut cfg = rustls::ClientConfig::builder()
             .with_safe_defaults()
