@@ -573,6 +573,12 @@ async fn main() {
                         && real_screen_size.1 > needed_screen_height * 2.0
                     {
                         (real_screen_size.0 / 2.0, real_screen_size.1 / 2.0)
+                    } else if real_screen_size.0 < needed_screen_width
+                        || real_screen_size.1 < needed_screen_height
+                    {
+                        let factor = (needed_screen_width / real_screen_size.0)
+                            .max(needed_screen_height / real_screen_size.1);
+                        (real_screen_size.0 * factor, real_screen_size.1 * factor)
                     } else {
                         real_screen_size
                     };
