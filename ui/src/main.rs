@@ -466,7 +466,6 @@ async fn main() {
     let mut state = State::Connecting;
 
     loop {
-        let mouse_pos: mq::Vec2 = mq::mouse_position().into();
         mq::set_default_camera();
 
         state = match state {
@@ -529,20 +528,10 @@ async fn main() {
             State::GameHand { my_player_idx } => {
                 let my_player_idx_u8 = my_player_idx as u8;
 
-                let inverted_camera: mq::Camera2D = {
-                    let mut res = mq::Camera2D::from_display_rect(
-                        mq::Rect::new(0.0, 0.0, mq::screen_width(), mq::screen_height()).into(),
-                    );
-                    res.rotation = 180.0;
-                    res
-                };
-
                 let mut lock = game_info_mutex.lock().unwrap();
                 let shared = (*lock).as_mut().unwrap();
 
                 if let Some(real_hand_state) = shared.game.hand.as_mut() {
-                    let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
-
                     let player_hand_width = 130.0
                         + CARD_WIDTH
                         + (real_hand_state.players()[0].tableau_stacks().len() as f32)
@@ -550,10 +539,44 @@ async fn main() {
 
                     let lake_width = ((real_hand_state.lake_stacks().len() as f32) * CARD_WIDTH)
                         + ((real_hand_state.lake_stacks().len() - 1) as f32) * LAKE_SPACING;
-                    let lake_start_x = screen_center.0 - lake_width / 2.0;
 
                     let player_count = real_hand_state.players().len();
                     let min_side_player_count = player_count / 2;
+
+                    let max_side_player_count = if player_count % 2 == 0 {
+                        min_side_player_count
+                    } else {
+                        min_side_player_count + 1
+                    };
+
+                    let max_side_width = player_hand_width * (max_side_player_count as f32)
+                        + PLAYER_SPACING * ((max_side_player_count - 1) as f32);
+
+                    let needed_screen_width = lake_width.max(max_side_width);
+                    let needed_screen_height = PLAYER_Y * 2.0 + CARD_HEIGHT + 10.0 + CARD_HEIGHT;
+
+                    let real_screen_size = (mq::screen_width(), mq::screen_height());
+                    let screen_size = if real_screen_size.0 > needed_screen_width * 2.0
+                        && real_screen_size.1 > needed_screen_height * 2.0
+                    {
+                        (real_screen_size.0 / 2.0, real_screen_size.1 / 2.0)
+                    } else {
+                        real_screen_size
+                    };
+
+                    let normal_camera = mq::Camera2D::from_display_rect(
+                        mq::Rect::new(0.0, 0.0, screen_size.0, screen_size.1).into(),
+                    );
+
+                    let inverted_camera: mq::Camera2D = {
+                        let mut res = normal_camera.clone();
+                        res.rotation = 180.0;
+                        res
+                    };
+
+                    let screen_center = (screen_size.0 / 2.0, screen_size.1 / 2.0);
+
+                    let lake_start_x = screen_center.0 - lake_width / 2.0;
 
                     let get_player_location = |player_idx: usize| {
                         let inverted = player_idx >= min_side_player_count;
@@ -587,6 +610,12 @@ async fn main() {
                     if shared.self_called_nerts {
                         pred_hand_state.nerts_called = true;
                     }
+
+                    let mouse_pos = mq::mouse_position();
+                    let mouse_pos = mq::Vec2::new(
+                        mouse_pos.0 * screen_size.0 / real_screen_size.0,
+                        mouse_pos.1 * screen_size.1 / real_screen_size.1,
+                    );
 
                     {
                         let player_state = &pred_hand_state.players()[my_player_idx];
@@ -872,7 +901,7 @@ async fn main() {
                         if location.1 != my_location.1 {
                             mq::set_camera(&inverted_camera);
                         } else {
-                            mq::set_default_camera();
+                            mq::set_camera(&normal_camera);
                         }
 
                         let held_state = if idx == my_player_idx {
@@ -1000,7 +1029,7 @@ async fn main() {
                     if my_location.1 {
                         mq::set_camera(&inverted_camera);
                     } else {
-                        mq::set_default_camera();
+                        mq::set_camera(&normal_camera);
                     }
 
                     for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
@@ -1030,7 +1059,7 @@ async fn main() {
                             if location.1 != my_location.1 {
                                 mq::set_camera(&inverted_camera);
                             } else {
-                                mq::set_default_camera();
+                                mq::set_camera(&normal_camera);
                             }
 
                             if let Some(held) = state.held {
@@ -1063,7 +1092,7 @@ async fn main() {
                         }
                     }
 
-                    mq::set_default_camera();
+                    mq::set_camera(&normal_camera);
 
                     let my_player_state = &pred_hand_state.players()[my_player_idx];
                     if let Some(ref held) = shared.my_held_state {
