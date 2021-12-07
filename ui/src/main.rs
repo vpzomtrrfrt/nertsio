@@ -16,6 +16,8 @@ const PLAYER_SPACING: f32 = 20.0;
 const PLAYER_Y: f32 = 200.0;
 const OTHER_CURSOR_SIZE: f32 = 4.0;
 
+const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
+
 struct SharedInfo {
     game: ni_ty::GameState,
     my_player_id: u8,
@@ -27,6 +29,8 @@ struct SharedInfo {
 }
 
 enum State {
+    MainMenu,
+    JoinGameForm { input: String },
     Connecting,
     GameNeutral,
     GameHand { my_player_idx: usize },
@@ -71,6 +75,7 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
 
 async fn handle_connection(
     host: std::net::SocketAddr,
+    game_id: Option<u32>,
     info_mutex: &std::sync::Mutex<Option<SharedInfo>>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
 ) -> Result<(), anyhow::Error> {
@@ -118,7 +123,7 @@ async fn handle_connection(
 
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
         name: "Nerter".to_owned(),
-        game_id: 42,
+        game_id,
     };
     handshake_stream_send.send(hello_msg).await?;
 
@@ -467,21 +472,62 @@ async fn main() {
     let game_info_mutex = Arc::new(std::sync::Mutex::new(None));
     let (game_msg_send, game_msg_recv) = tokio::sync::mpsc::unbounded_channel();
 
-    async_rt.spawn({
-        let game_info_mutex = game_info_mutex.clone();
-        async move {
-            if let Err(err) = handle_connection(host, &game_info_mutex, game_msg_recv).await {
-                eprintln!("Failed to handle connection: {:?}", err);
-            }
-        }
-    });
+    let mut game_msg_recv_opt = Some(game_msg_recv);
 
-    let mut state = State::Connecting;
+    let mut do_connection = |game_id| {
+        async_rt.spawn({
+            let game_info_mutex = game_info_mutex.clone();
+            let game_msg_recv = game_msg_recv_opt.take().unwrap();
+            async move {
+                if let Err(err) =
+                    handle_connection(host, game_id, &game_info_mutex, game_msg_recv).await
+                {
+                    eprintln!("Failed to handle connection: {:?}", err);
+                }
+            }
+        });
+    };
+
+    let mut state = State::MainMenu;
 
     loop {
         mq::set_default_camera();
 
         state = match state {
+            State::MainMenu => {
+                mq::clear_background(BACKGROUND_COLOR);
+
+                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Create Game") {
+                    do_connection(None);
+                    State::Connecting
+                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 40.0), "Join Game") {
+                    State::JoinGameForm {
+                        input: String::new(),
+                    }
+                } else {
+                    State::MainMenu
+                }
+            }
+            State::JoinGameForm { mut input } => {
+                use mqui::hash;
+
+                mq::clear_background(BACKGROUND_COLOR);
+
+                mqui::root_ui().input_text(hash!(), "Room Code", &mut input);
+                if mqui::root_ui().button(None, "Join") {
+                    if let Ok(game_id) = lexical::parse_with_options::<_, _, GAME_ID_FORMAT>(
+                        &input,
+                        &lexical::parse_integer_options::Options::default(),
+                    ) {
+                        do_connection(Some(game_id));
+                        State::Connecting
+                    } else {
+                        State::JoinGameForm { input }
+                    }
+                } else {
+                    State::JoinGameForm { input }
+                }
+            }
             State::Connecting => {
                 mq::clear_background(BACKGROUND_COLOR);
 
@@ -499,8 +545,19 @@ async fn main() {
 
                 match &shared.game.hand {
                     None => {
+                        mqui::root_ui().label(
+                            mq::Vec2::new(20.0, 10.0),
+                            &format!(
+                                "Room Code: {}",
+                                lexical::to_string_with_options::<_, GAME_ID_FORMAT>(
+                                    shared.game.id,
+                                    &lexical::write_integer_options::Options::default()
+                                )
+                            ),
+                        );
+
                         for (i, (key, player)) in shared.game.players.iter_mut().enumerate() {
-                            let y = 10.0 + (i as f32) * 25.0;
+                            let y = 30.0 + (i as f32) * 25.0;
 
                             mqui::root_ui()
                                 .label(mq::Vec2::new(10.0, y), &player.score.to_string());

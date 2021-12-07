@@ -34,6 +34,15 @@ struct ServerGameState {
     hand: Option<ServerHandState>,
 }
 
+impl ServerGameState {
+    pub fn new() -> Self {
+        Self {
+            players: Default::default(),
+            hand: None,
+        }
+    }
+}
+
 struct GlobalState {
     games: dashmap::DashMap<u32, ServerGameState>,
 }
@@ -93,11 +102,27 @@ async fn handle_connection(
     let (game_stream_send_channel_send, mut game_stream_send_channel_recv) =
         tokio::sync::mpsc::unbounded_channel();
 
-    let (player_id, game_state) = {
-        let mut server_game_state = global_state
-            .games
-            .get_mut(&game_id)
-            .ok_or(anyhow::anyhow!("Unknown game"))?;
+    let (player_id, game_state, game_id) = {
+        let (mut server_game_state, game_id) = {
+            if let Some(game_id) = game_id {
+                (
+                    global_state
+                        .games
+                        .get_mut(&game_id)
+                        .ok_or(anyhow::anyhow!("Unknown game"))?,
+                    game_id,
+                )
+            } else {
+                loop {
+                    let game_id: u32 = rand::thread_rng().gen();
+                    if let dashmap::mapref::entry::Entry::Vacant(entry) =
+                        global_state.games.entry(game_id)
+                    {
+                        break (entry.insert(ServerGameState::new()), game_id);
+                    }
+                }
+            }
+        };
 
         let player_id = loop {
             let player_id = rand::thread_rng().gen();
@@ -118,6 +143,7 @@ async fn handle_connection(
         };
 
         let game_state = ni_ty::GameState {
+            id: game_id,
             players: server_game_state
                 .players
                 .iter()
@@ -129,7 +155,7 @@ async fn handle_connection(
                 .map(|hand| hand.hand.clone()),
         };
 
-        (player_id, game_state)
+        (player_id, game_state, game_id)
     };
 
     let send_to_others = move |server_game_state: &ServerGameState,
@@ -462,13 +488,6 @@ async fn main() {
     let global_state = Arc::new(GlobalState {
         games: Default::default(),
     });
-    global_state.games.insert(
-        42,
-        ServerGameState {
-            players: Default::default(),
-            hand: None,
-        },
-    );
 
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));

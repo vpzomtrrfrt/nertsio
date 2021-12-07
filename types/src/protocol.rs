@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageC2S {
-    Hello { name: String, game_id: u32 },
+    Hello { name: String, game_id: Option<u32> },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
