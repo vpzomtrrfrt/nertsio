@@ -1,8 +1,10 @@
 use futures_util::{TryFutureExt, TryStreamExt};
 use nertsio_types as ni_ty;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
+const PUBLIC_GAME_COUNT: usize = 8;
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,7 +22,7 @@ impl<T: 'static + std::error::Error + Send> From<T> for Error {
 }
 
 struct GlobalState {
-    gameservers: dashmap::DashMap<u8, (std::time::Instant, ni_ty::protocol::ServerStatusMessage)>,
+    gameservers: RwLock<HashMap<u8, (std::time::Instant, ni_ty::protocol::ServerStatusMessage)>>,
 }
 
 type RouteNode<P> = trout::Node<
@@ -53,6 +55,39 @@ pub fn json_response(body: &impl serde::Serialize) -> Result<hyper::Response<hyp
         .body(body.into())?)
 }
 
+async fn handler_public_games_list(
+    _: (),
+    ctx: Arc<GlobalState>,
+    _req: hyper::Request<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    use rand::seq::IteratorRandom;
+
+    let list_games = ctx
+        .gameservers
+        .read()
+        .unwrap()
+        .iter()
+        .flat_map(|(server_id, (_, info))| {
+            let server_address_ipv4 = info.address_ipv4;
+            info.open_public_games
+                .iter()
+                .map(move |game| ni_ty::protocol::PublicGameInfoExpanded {
+                    game_id: game.game_id,
+                    players: game.players,
+                    waiting: game.waiting,
+                    server: ni_ty::protocol::ServerConnectionInfo {
+                        server_id: *server_id,
+                        address_ipv4: server_address_ipv4,
+                    },
+                })
+        })
+        .choose_multiple(&mut rand::thread_rng(), PUBLIC_GAME_COUNT);
+
+    let info = ni_ty::protocol::RespList { items: list_games };
+
+    json_response(&info)
+}
+
 async fn handler_servers_pick_for_new_game(
     _: (),
     ctx: Arc<GlobalState>,
@@ -60,12 +95,12 @@ async fn handler_servers_pick_for_new_game(
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     use rand::seq::IteratorRandom;
 
-    let value = ctx
-        .gameservers
+    let lock = ctx.gameservers.read().unwrap();
+    let value = lock
         .iter()
         .choose(&mut rand::thread_rng())
         .ok_or(Error::InternalStrStatic("no available servers"))?;
-    let value = &value.value().1;
+    let value = &value.1 .1;
 
     let info = ni_ty::protocol::ServerConnectionInfo {
         server_id: value.server_id,
@@ -82,8 +117,8 @@ async fn handler_servers_get(
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     let (server_id,) = params;
 
-    if let Some(value) = ctx.gameservers.get(&server_id) {
-        let value = &value.value().1;
+    if let Some(value) = ctx.gameservers.read().unwrap().get(&server_id) {
+        let value = &value.1;
 
         let info = ni_ty::protocol::ServerConnectionInfo {
             server_id: value.server_id,
@@ -105,6 +140,10 @@ async fn main() {
 
     let routes: Arc<RouteNode<()>> = Arc::new(
         RouteNode::new()
+            .with_child(
+                "public_games",
+                RouteNode::new().with_handler_async("GET", handler_public_games_list),
+            )
             .with_child(
                 "servers:pick_for_new_game",
                 RouteNode::new().with_handler_async("POST", handler_servers_pick_for_new_game),
@@ -205,7 +244,7 @@ async fn main() {
                                 Ok(message) => {
                                     println!("message = {:?}", message);
 
-                                    global_state.gameservers.insert(
+                                    global_state.gameservers.write().unwrap().insert(
                                         message.server_id,
                                         (std::time::Instant::now(), message),
                                     );
@@ -232,6 +271,8 @@ async fn main() {
 
                 global_state
                     .gameservers
+                    .write()
+                    .unwrap()
                     .retain(|_key, value| value.0.elapsed() < GAMESERVER_TIMEOUT);
             }
 

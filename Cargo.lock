@@ -961,7 +961,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "dashmap",
  "futures-util",
  "http",
  "hyper 0.14.15",
