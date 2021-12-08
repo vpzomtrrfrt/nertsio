@@ -18,6 +18,8 @@ const OTHER_CURSOR_SIZE: f32 = 4.0;
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
+const COORDINATOR_URL: &str = "http://localhost:6462/";
+
 struct SharedInfo {
     game: ni_ty::GameState,
     my_player_id: u8,
@@ -26,6 +28,7 @@ struct SharedInfo {
     hand_mouse_states: Option<Vec<Option<(u32, ni_ty::MouseState)>>>,
     my_held_state: Option<ni_ty::HeldInfo>,
     last_mouse_position: Option<(f32, f32)>,
+    server_id: u8,
 }
 
 enum State {
@@ -34,6 +37,22 @@ enum State {
     Connecting,
     GameNeutral,
     GameHand { my_player_idx: usize },
+}
+
+fn parse_full_game_id_str(src: &str) -> Result<(u8, u32), lexical::Error> {
+    let result: u64 = lexical::parse_with_options::<_, _, GAME_ID_FORMAT>(
+        &src,
+        &lexical::parse_integer_options::Options::default(),
+    )?;
+
+    Ok(((result >> 32) as u8, (result & (u32::MAX as u64)) as u32))
+}
+
+fn to_full_game_id_str(server_id: u8, game_id: u32) -> String {
+    lexical::to_string_with_options::<_, GAME_ID_FORMAT>(
+        u64::from(game_id) + (u64::from(server_id) << 32),
+        &lexical::write_integer_options::Options::default(),
+    )
 }
 
 fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
@@ -73,12 +92,85 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
     }
 }
 
-async fn handle_connection(
-    host: std::net::SocketAddr,
-    game_id: Option<u32>,
+enum ConnectionType {
+    CreateGame {
+        public: bool,
+    },
+    JoinPublicGame {
+        server: ni_ty::protocol::ServerConnectionInfo,
+        game_id: u32,
+    },
+    JoinPrivateGame {
+        server_id: u8,
+        game_id: u32,
+    },
+}
+
+pub async fn res_to_error(
+    res: hyper::Response<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>, anyhow::Error> {
+    let status = res.status();
+    if status.is_success() {
+        Ok(res)
+    } else {
+        let bytes = hyper::body::to_bytes(res.into_body()).await?;
+        Err(anyhow::anyhow!(
+            "Remote error {}: {}",
+            status,
+            String::from_utf8_lossy(&bytes)
+        ))
+    }
+}
+
+async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + Sync + 'static>(
+    http_client: &hyper::Client<C>,
+    connection_type: ConnectionType,
     info_mutex: &std::sync::Mutex<Option<SharedInfo>>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
 ) -> Result<(), anyhow::Error> {
+    let (server, game_id, new_game_public) = match connection_type {
+        ConnectionType::CreateGame { public } => {
+            let resp = res_to_error(
+                http_client
+                    .request(
+                        hyper::Request::post(format!(
+                            "{}servers:pick_for_new_game",
+                            COORDINATOR_URL
+                        ))
+                        .body(Default::default())
+                        .unwrap(),
+                    )
+                    .await?,
+            )
+            .await?;
+
+            let resp = hyper::body::to_bytes(resp.into_body()).await?;
+            let resp: ni_ty::protocol::ServerConnectionInfo = serde_json::from_slice(&resp)?;
+
+            (resp, None, Some(public))
+        }
+        ConnectionType::JoinPublicGame { server, game_id } => (server, Some(game_id), None),
+        ConnectionType::JoinPrivateGame { server_id, game_id } => {
+            let resp = res_to_error(
+                http_client
+                    .request(
+                        hyper::Request::post(format!("{}servers/{}", COORDINATOR_URL, server_id))
+                            .body(Default::default())
+                            .unwrap(),
+                    )
+                    .await?,
+            )
+            .await?;
+
+            let resp = hyper::body::to_bytes(resp.into_body()).await?;
+            let resp: ni_ty::protocol::ServerConnectionInfo = serde_json::from_slice(&resp)?;
+
+            (resp, Some(game_id), None)
+        }
+    };
+
+    let host = server.address_ipv4.into();
+
     let mut endpoint = quinn::Endpoint::client(
         (
             match host {
@@ -124,7 +216,7 @@ async fn handle_connection(
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
         name: "Nerter".to_owned(),
         game_id,
-        new_game_public: Some(false),
+        new_game_public,
     };
     handshake_stream_send.send(hello_msg).await?;
 
@@ -261,6 +353,7 @@ async fn handle_connection(
                                 self_called_nerts: false,
                                 my_held_state: None,
                                 last_mouse_position: None,
+                                server_id: server.server_id,
                             });
                         }
                         GameMessageS2C::PlayerJoin { id, info } => {
@@ -359,17 +452,6 @@ async fn handle_connection(
 
 #[macroquad::main("nertsio")]
 async fn main() {
-    let host = match std::env::args().skip(1).next() {
-        None => ([127, 0, 0, 1], 6465).into(),
-        Some(arg) => {
-            use std::net::ToSocketAddrs;
-            arg.to_socket_addrs()
-                .expect("Invalid server address")
-                .next()
-                .unwrap()
-        }
-    };
-
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
     let card_size = mq::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
@@ -475,13 +557,21 @@ async fn main() {
 
     let mut game_msg_recv_opt = Some(game_msg_recv);
 
-    let mut do_connection = |game_id| {
+    let http_client = hyper::Client::new();
+
+    let mut do_connection = |connection_type| {
         async_rt.spawn({
             let game_info_mutex = game_info_mutex.clone();
             let game_msg_recv = game_msg_recv_opt.take().unwrap();
+            let http_client = http_client.clone();
             async move {
-                if let Err(err) =
-                    handle_connection(host, game_id, &game_info_mutex, game_msg_recv).await
+                if let Err(err) = handle_connection(
+                    &http_client,
+                    connection_type,
+                    &game_info_mutex,
+                    game_msg_recv,
+                )
+                .await
                 {
                     eprintln!("Failed to handle connection: {:?}", err);
                 }
@@ -498,10 +588,13 @@ async fn main() {
             State::MainMenu => {
                 mq::clear_background(BACKGROUND_COLOR);
 
-                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Create Game") {
-                    do_connection(None);
+                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Create Public Game") {
+                    do_connection(ConnectionType::CreateGame { public: true });
                     State::Connecting
-                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 40.0), "Join Game") {
+                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 40.0), "Create Private Game") {
+                    do_connection(ConnectionType::CreateGame { public: false });
+                    State::Connecting
+                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 70.0), "Join Game") {
                     State::JoinGameForm {
                         input: String::new(),
                     }
@@ -516,11 +609,8 @@ async fn main() {
 
                 mqui::root_ui().input_text(hash!(), "Room Code", &mut input);
                 if mqui::root_ui().button(None, "Join") {
-                    if let Ok(game_id) = lexical::parse_with_options::<_, _, GAME_ID_FORMAT>(
-                        &input,
-                        &lexical::parse_integer_options::Options::default(),
-                    ) {
-                        do_connection(Some(game_id));
+                    if let Ok((server_id, game_id)) = parse_full_game_id_str(&input) {
+                        do_connection(ConnectionType::JoinPrivateGame { server_id, game_id });
                         State::Connecting
                     } else {
                         State::JoinGameForm { input }
@@ -550,10 +640,7 @@ async fn main() {
                             mq::Vec2::new(20.0, 10.0),
                             &format!(
                                 "Room Code: {}",
-                                lexical::to_string_with_options::<_, GAME_ID_FORMAT>(
-                                    shared.game.id,
-                                    &lexical::write_integer_options::Options::default()
-                                )
+                                to_full_game_id_str(shared.server_id, shared.game.id),
                             ),
                         );
 
