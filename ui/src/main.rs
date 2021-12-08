@@ -124,6 +124,7 @@ async fn handle_connection(
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
         name: "Nerter".to_owned(),
         game_id,
+        new_game_public: Some(false),
     };
     handshake_stream_send.send(hello_msg).await?;
 

@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
 
+const MAX_PLAYERS: usize = 6;
+
 struct ServerGamePlayerState {
     name: String,
     game_stream_send_channel: tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
@@ -32,13 +34,15 @@ impl ServerGamePlayerState {
 struct ServerGameState {
     players: HashMap<u8, ServerGamePlayerState>,
     hand: Option<ServerHandState>,
+    public: bool,
 }
 
 impl ServerGameState {
-    pub fn new() -> Self {
+    pub fn new(public: bool) -> Self {
         Self {
             players: Default::default(),
             hand: None,
+            public,
         }
     }
 }
@@ -92,12 +96,16 @@ async fn handle_connection(
     let _ = handshake_stream_recv;
 
     #[allow(irrefutable_let_patterns)]
-    let (name, game_id) =
-        if let ni_ty::protocol::HandshakeMessageC2S::Hello { name, game_id } = first_message {
-            (name, game_id)
-        } else {
-            anyhow::bail!("Wrong first handshake message");
-        };
+    let (name, game_id, new_game_public) = if let ni_ty::protocol::HandshakeMessageC2S::Hello {
+        name,
+        game_id,
+        new_game_public,
+    } = first_message
+    {
+        (name, game_id, new_game_public == Some(true))
+    } else {
+        anyhow::bail!("Wrong first handshake message");
+    };
 
     let (game_stream_send_channel_send, mut game_stream_send_channel_recv) =
         tokio::sync::mpsc::unbounded_channel();
@@ -118,7 +126,7 @@ async fn handle_connection(
                     if let dashmap::mapref::entry::Entry::Vacant(entry) =
                         global_state.games.entry(game_id)
                     {
-                        break (entry.insert(ServerGameState::new()), game_id);
+                        break (entry.insert(ServerGameState::new(new_game_public)), game_id);
                     }
                 }
             }
@@ -495,20 +503,76 @@ async fn main() {
     let mut server_config = quinn::ServerConfig::with_single_cert(vec![cert], privkey).unwrap();
     server_config.transport = Arc::new(transport_config);
 
+    let server_id: u16 = rand::Rng::gen(&mut rand::thread_rng());
+
+    let redis_conn_details = match std::env::var("REDIS_URI") {
+        Ok(value) => Some((
+            std::env::var("MY_HOST_ADDRESS")
+                .expect("Missing MY_HOST_ADDRESS")
+                .parse()
+                .expect("Invalid value for MY_HOST_ADDRESS"),
+            redis_async::client::paired_connect(value)
+                .await
+                .expect("Failed to connnect to Redis"),
+        )),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
+    };
+
     let (_, incoming) =
         quinn::Endpoint::server(server_config, ([0, 0, 0, 0], port).into()).unwrap();
 
-    incoming
-        .for_each(move |connecting| {
+    futures_util::join!(
+        {
             let global_state = global_state.clone();
-            tokio::spawn(async {
-                let res = handle_connection(global_state, connecting).await;
-                if let Err(err) = res {
-                    eprintln!("Failed to handle connection: {:?}", err);
-                }
-            });
+            incoming.for_each(move |connecting| {
+                let global_state = global_state.clone();
+                tokio::spawn(async {
+                    let res = handle_connection(global_state, connecting).await;
+                    if let Err(err) = res {
+                        eprintln!("Failed to handle connection: {:?}", err);
+                    }
+                });
 
-            futures_util::future::ready(())
-        })
-        .await;
+                futures_util::future::ready(())
+            })
+        },
+        async move {
+            if let Some((my_address_ipv4, redis_conn)) = redis_conn_details {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+
+                loop {
+                    interval.tick().await;
+
+                    let status = ni_ty::protocol::ServerStatusMessage {
+                        server_id,
+                        address_ipv4: my_address_ipv4,
+                        open_public_games: global_state
+                            .games
+                            .iter()
+                            .filter(|entry| {
+                                entry.value().public && entry.value().players.len() < MAX_PLAYERS
+                            })
+                            .map(|entry| ni_ty::protocol::PublicGameInfo {
+                                game_id: *entry.key(),
+                                players: entry.value().players.len() as u8,
+                                waiting: entry.value().hand.is_none(),
+                            })
+                            .collect(),
+                    };
+
+                    if let Err(err) = redis_conn
+                        .send::<i64>(redis_async::resp_array!(
+                            "PUBLISH",
+                            ni_ty::protocol::COORDINATOR_CHANNEL,
+                            bincode::serialize(&status).unwrap()
+                        ))
+                        .await
+                    {
+                        eprintln!("failed to publish status: {:?}", err);
+                    }
+                }
+            }
+        },
+    );
 }
