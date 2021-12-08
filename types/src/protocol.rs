@@ -78,7 +78,13 @@ pub struct PublicGameInfo {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ServerStatusMessage {
-    pub server_id: u16,
+    pub server_id: u8,
     pub address_ipv4: std::net::SocketAddrV4,
     pub open_public_games: Vec<PublicGameInfo>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ServerConnectionInfo {
+    pub server_id: u8,
+    pub address_ipv4: std::net::SocketAddrV4,
 }

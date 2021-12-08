@@ -1,4 +1,8 @@
+use futures_util::{TryFutureExt, TryStreamExt};
+use nertsio_types as ni_ty;
 use std::sync::Arc;
+
+const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 
 #[derive(Debug)]
 pub enum Error {
@@ -15,7 +19,9 @@ impl<T: 'static + std::error::Error + Send> From<T> for Error {
     }
 }
 
-struct RouteContext {}
+struct GlobalState {
+    gameservers: dashmap::DashMap<u8, (std::time::Instant, ni_ty::protocol::ServerStatusMessage)>,
+}
 
 type RouteNode<P> = trout::Node<
     P,
@@ -23,7 +29,7 @@ type RouteNode<P> = trout::Node<
     std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<hyper::Response<hyper::Body>, Error>> + Send>,
     >,
-    Arc<RouteContext>,
+    Arc<GlobalState>,
 >;
 
 pub fn common_response_builder() -> http::response::Builder {
@@ -40,73 +46,200 @@ pub fn simple_response(
         .unwrap()
 }
 
+pub fn json_response(body: &impl serde::Serialize) -> Result<hyper::Response<hyper::Body>, Error> {
+    let body = serde_json::to_vec(&body)?;
+    Ok(common_response_builder()
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .body(body.into())?)
+}
+
+async fn handler_servers_pick_for_new_game(
+    _: (),
+    ctx: Arc<GlobalState>,
+    _req: hyper::Request<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    use rand::seq::IteratorRandom;
+
+    let value = ctx
+        .gameservers
+        .iter()
+        .choose(&mut rand::thread_rng())
+        .ok_or(Error::InternalStrStatic("no available servers"))?;
+    let value = &value.value().1;
+
+    let info = ni_ty::protocol::ServerConnectionInfo {
+        server_id: value.server_id,
+        address_ipv4: value.address_ipv4,
+    };
+
+    json_response(&info)
+}
+
+async fn handler_servers_get(
+    params: (u8,),
+    ctx: Arc<GlobalState>,
+    _req: hyper::Request<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    let (server_id,) = params;
+
+    if let Some(value) = ctx.gameservers.get(&server_id) {
+        let value = &value.value().1;
+
+        let info = ni_ty::protocol::ServerConnectionInfo {
+            server_id: value.server_id,
+            address_ipv4: value.address_ipv4,
+        };
+
+        json_response(&info)
+    } else {
+        Ok(simple_response(
+            hyper::StatusCode::NOT_FOUND,
+            "No such server",
+        ))
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let addr = ([0, 0, 0, 0], 6462).into();
 
-    let routes: Arc<RouteNode<()>> = Arc::new(RouteNode::new());
+    let routes: Arc<RouteNode<()>> = Arc::new(
+        RouteNode::new()
+            .with_child(
+                "servers:pick_for_new_game",
+                RouteNode::new().with_handler_async("POST", handler_servers_pick_for_new_game),
+            )
+            .with_child(
+                "servers",
+                RouteNode::new().with_child_parse::<u8, _>(
+                    RouteNode::new().with_handler_async("GET", handler_servers_get),
+                ),
+            ),
+    );
 
-    let context = Arc::new(RouteContext {});
+    let global_state = Arc::new(GlobalState {
+        gameservers: Default::default(),
+    });
 
-    let server = hyper::Server::bind(&addr).serve(hyper::service::make_service_fn(move |_conn| {
-        let context = context.clone();
-        let routes = routes.clone();
+    let server = hyper::Server::bind(&addr).serve({
+        let global_state = global_state.clone();
+        hyper::service::make_service_fn(move |_conn| {
+            let global_state = global_state.clone();
+            let routes = routes.clone();
 
-        futures_util::future::ok::<_, std::convert::Infallible>(hyper::service::service_fn(
-            move |req| {
-                let context = context.clone();
-                let routes = routes.clone();
+            futures_util::future::ok::<_, std::convert::Infallible>(hyper::service::service_fn(
+                move |req| {
+                    let global_state = global_state.clone();
+                    let routes = routes.clone();
 
-                async move {
-                    let result = match routes.route(req, context) {
-                        Ok(fut) => fut.await,
-                        Err(err) => Err(Error::RoutingError(err)),
-                    };
+                    async move {
+                        let result = match routes.route(req, global_state) {
+                            Ok(fut) => fut.await,
+                            Err(err) => Err(Error::RoutingError(err)),
+                        };
 
-                    Ok::<_, hyper::Error>(match result {
-                        Ok(val) => val,
-                        Err(Error::UserError(res)) => res,
-                        Err(Error::RoutingError(err)) => {
-                            let code = match err {
-                                trout::RoutingFailure::NotFound => hyper::StatusCode::NOT_FOUND,
-                                trout::RoutingFailure::MethodNotAllowed => {
-                                    hyper::StatusCode::METHOD_NOT_ALLOWED
+                        Ok::<_, hyper::Error>(match result {
+                            Ok(val) => val,
+                            Err(Error::UserError(res)) => res,
+                            Err(Error::RoutingError(err)) => {
+                                let code = match err {
+                                    trout::RoutingFailure::NotFound => hyper::StatusCode::NOT_FOUND,
+                                    trout::RoutingFailure::MethodNotAllowed => {
+                                        hyper::StatusCode::METHOD_NOT_ALLOWED
+                                    }
+                                };
+
+                                simple_response(code, code.canonical_reason().unwrap())
+                            }
+                            Err(Error::Internal(err)) => {
+                                eprintln!("Error: {:?}", err);
+
+                                simple_response(
+                                    hyper::StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Internal Server Error",
+                                )
+                            }
+                            Err(Error::InternalStr(err)) => {
+                                eprintln!("Error: {}", err);
+
+                                simple_response(
+                                    hyper::StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Internal Server Error",
+                                )
+                            }
+                            Err(Error::InternalStrStatic(err)) => {
+                                eprintln!("Error: {}", err);
+
+                                simple_response(
+                                    hyper::StatusCode::INTERNAL_SERVER_ERROR,
+                                    "Internal Server Error",
+                                )
+                            }
+                        })
+                    }
+                },
+            ))
+        })
+    });
+
+    let redis_conn =
+        redis_async::client::pubsub_connect(std::env::var("REDIS_URI").expect("Missing REDIS_URI"))
+            .await
+            .expect("Failed to connect to Redis");
+    let sub_stream = redis_conn
+        .subscribe(ni_ty::protocol::COORDINATOR_CHANNEL)
+        .await
+        .expect("Failed to subscribe to channel");
+
+    if let Err(err) = futures_util::try_join!(
+        server.map_err(Into::into),
+        {
+            let global_state = global_state.clone();
+            async move {
+                sub_stream
+                    .try_for_each(|value| {
+                        if let redis_async::resp::RespValue::BulkString(bytes) = value {
+                            match bincode::deserialize::<ni_ty::protocol::ServerStatusMessage>(
+                                &bytes,
+                            ) {
+                                Ok(message) => {
+                                    println!("message = {:?}", message);
+
+                                    global_state.gameservers.insert(
+                                        message.server_id,
+                                        (std::time::Instant::now(), message),
+                                    );
                                 }
-                            };
-
-                            simple_response(code, code.canonical_reason().unwrap())
+                                Err(err) => {
+                                    eprintln!("failed to parse message: {:?}", err);
+                                }
+                            }
+                        } else {
+                            eprintln!("received unknown message {:?}", value);
                         }
-                        Err(Error::Internal(err)) => {
-                            eprintln!("Error: {:?}", err);
 
-                            simple_response(
-                                hyper::StatusCode::INTERNAL_SERVER_ERROR,
-                                "Internal Server Error",
-                            )
-                        }
-                        Err(Error::InternalStr(err)) => {
-                            eprintln!("Error: {}", err);
-
-                            simple_response(
-                                hyper::StatusCode::INTERNAL_SERVER_ERROR,
-                                "Internal Server Error",
-                            )
-                        }
-                        Err(Error::InternalStrStatic(err)) => {
-                            eprintln!("Error: {}", err);
-
-                            simple_response(
-                                hyper::StatusCode::INTERNAL_SERVER_ERROR,
-                                "Internal Server Error",
-                            )
-                        }
+                        futures_util::future::ok(())
                     })
-                }
-            },
-        ))
-    }));
+                    .await?;
+                Result::<(), _>::Err(anyhow::anyhow!("subscription stream ended"))
+            }
+        },
+        async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
 
-    if let Err(err) = server.await {
-        eprintln!("Failed to run server: {:?}", err);
+            loop {
+                interval.tick().await;
+
+                global_state
+                    .gameservers
+                    .retain(|_key, value| value.0.elapsed() < GAMESERVER_TIMEOUT);
+            }
+
+            // helps infer return type
+            #[allow(unreachable_code)]
+            Ok(())
+        }
+    ) {
+        eprintln!("Error: {:?}", err);
     }
 }

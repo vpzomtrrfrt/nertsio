@@ -503,17 +503,48 @@ async fn main() {
     let mut server_config = quinn::ServerConfig::with_single_cert(vec![cert], privkey).unwrap();
     server_config.transport = Arc::new(transport_config);
 
-    let server_id: u16 = rand::Rng::gen(&mut rand::thread_rng());
-
     let redis_conn_details = match std::env::var("REDIS_URI") {
         Ok(value) => Some((
             std::env::var("MY_HOST_ADDRESS")
                 .expect("Missing MY_HOST_ADDRESS")
                 .parse()
                 .expect("Invalid value for MY_HOST_ADDRESS"),
-            redis_async::client::paired_connect(value)
-                .await
-                .expect("Failed to connnect to Redis"),
+            {
+                let conn = redis_async::client::paired_connect(value)
+                    .await
+                    .expect("Failed to connnect to Redis");
+
+                let server_id = loop {
+                    let server_id: u8 = rand::thread_rng().gen();
+
+                    let res = conn
+                        .send::<redis_async::resp::RespValue>(redis_async::resp_array!(
+                            "SET",
+                            format!("server_ids/{}", server_id),
+                            "yes",
+                            "EX",
+                            "120",
+                            "NX",
+                        ))
+                        .await
+                        .expect("Failed to reserve server ID");
+
+                    match res {
+                        redis_async::resp::RespValue::Nil => {
+                            // try again
+                        }
+                        redis_async::resp::RespValue::SimpleString(_) => {
+                            // success
+                            break server_id;
+                        }
+                        _ => {
+                            panic!("Unknown response from server ID reservation: {:?}", res);
+                        }
+                    }
+                };
+
+                (server_id, conn)
+            },
         )),
         Err(std::env::VarError::NotPresent) => None,
         Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
@@ -537,42 +568,68 @@ async fn main() {
                 futures_util::future::ready(())
             })
         },
-        async move {
-            if let Some((my_address_ipv4, redis_conn)) = redis_conn_details {
-                let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
+        {
+            let redis_conn_details = redis_conn_details.clone();
+            async move {
+                if let Some((my_address_ipv4, (server_id, redis_conn))) = redis_conn_details {
+                    let mut interval = tokio::time::interval(std::time::Duration::from_secs(2));
 
-                loop {
-                    interval.tick().await;
+                    loop {
+                        interval.tick().await;
 
-                    let status = ni_ty::protocol::ServerStatusMessage {
-                        server_id,
-                        address_ipv4: my_address_ipv4,
-                        open_public_games: global_state
-                            .games
-                            .iter()
-                            .filter(|entry| {
-                                entry.value().public && entry.value().players.len() < MAX_PLAYERS
-                            })
-                            .map(|entry| ni_ty::protocol::PublicGameInfo {
-                                game_id: *entry.key(),
-                                players: entry.value().players.len() as u8,
-                                waiting: entry.value().hand.is_none(),
-                            })
-                            .collect(),
-                    };
+                        let status = ni_ty::protocol::ServerStatusMessage {
+                            server_id,
+                            address_ipv4: my_address_ipv4,
+                            open_public_games: global_state
+                                .games
+                                .iter()
+                                .filter(|entry| {
+                                    entry.value().public
+                                        && entry.value().players.len() < MAX_PLAYERS
+                                })
+                                .map(|entry| ni_ty::protocol::PublicGameInfo {
+                                    game_id: *entry.key(),
+                                    players: entry.value().players.len() as u8,
+                                    waiting: entry.value().hand.is_none(),
+                                })
+                                .collect(),
+                        };
 
-                    if let Err(err) = redis_conn
-                        .send::<i64>(redis_async::resp_array!(
-                            "PUBLISH",
-                            ni_ty::protocol::COORDINATOR_CHANNEL,
-                            bincode::serialize(&status).unwrap()
-                        ))
-                        .await
-                    {
-                        eprintln!("failed to publish status: {:?}", err);
+                        if let Err(err) = redis_conn
+                            .send::<i64>(redis_async::resp_array!(
+                                "PUBLISH",
+                                ni_ty::protocol::COORDINATOR_CHANNEL,
+                                bincode::serialize(&status).unwrap()
+                            ))
+                            .await
+                        {
+                            eprintln!("failed to publish status: {:?}", err);
+                        }
                     }
                 }
             }
         },
+        async move {
+            if let Some((_, (server_id, redis_conn))) = &redis_conn_details {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(100));
+
+                loop {
+                    interval.tick().await;
+
+                    if let Err(err) = redis_conn
+                        .send::<String>(redis_async::resp_array!(
+                            "SET",
+                            format!("server_ids/{}", server_id),
+                            "yes",
+                            "EX",
+                            "120",
+                        ))
+                        .await
+                    {
+                        eprintln!("failed to renew ID reservation: {:?}", err);
+                    }
+                }
+            }
+        }
     );
 }
