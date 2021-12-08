@@ -154,7 +154,7 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
             let resp = res_to_error(
                 http_client
                     .request(
-                        hyper::Request::post(format!("{}servers/{}", COORDINATOR_URL, server_id))
+                        hyper::Request::get(format!("{}servers/{}", COORDINATOR_URL, server_id))
                             .body(Default::default())
                             .unwrap(),
                     )
