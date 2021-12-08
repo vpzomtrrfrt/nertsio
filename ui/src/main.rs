@@ -1,4 +1,4 @@
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use futures_util::{FutureExt, SinkExt, StreamExt, TryStreamExt};
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
@@ -33,10 +33,20 @@ struct SharedInfo {
 
 enum State {
     MainMenu,
-    JoinGameForm { input: String },
+    JoinGameForm {
+        input: String,
+    },
+    PublicGameListLoading {
+        channel: tokio::sync::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded>>,
+    },
+    PublicGameList {
+        list: Vec<ni_ty::protocol::PublicGameInfoExpanded>,
+    },
     Connecting,
     GameNeutral,
-    GameHand { my_player_idx: usize },
+    GameHand {
+        my_player_idx: usize,
+    },
 }
 
 fn parse_full_game_id_str(src: &str) -> Result<(u8, u32), lexical::Error> {
@@ -579,6 +589,38 @@ async fn main() {
         });
     };
 
+    let start_loading_public_games = || {
+        let (send, recv) = tokio::sync::oneshot::channel();
+
+        let req_fut = http_client.request(
+            hyper::Request::get(format!("{}public_games", COORDINATOR_URL))
+                .body(Default::default())
+                .unwrap(),
+        );
+        async_rt.spawn(
+            (async move {
+                let resp = res_to_error(req_fut.await?).await?;
+
+                let resp = hyper::body::to_bytes(resp.into_body()).await?;
+                let resp: ni_ty::protocol::RespList<ni_ty::protocol::PublicGameInfoExpanded> =
+                    serde_json::from_slice(&resp)?;
+
+                let _ = send.send(resp.items); // if this fails, then we didn't need it anyway
+
+                Result::<_, anyhow::Error>::Ok(())
+            })
+            .then(|res| {
+                if let Err(err) = res {
+                    eprintln!("Failed to list public games: {:?}", err);
+                }
+
+                futures_util::future::ready(())
+            }),
+        );
+
+        recv
+    };
+
     let mut state = State::MainMenu;
 
     loop {
@@ -594,7 +636,10 @@ async fn main() {
                 } else if mqui::root_ui().button(mq::Vec2::new(10.0, 40.0), "Create Private Game") {
                     do_connection(ConnectionType::CreateGame { public: false });
                     State::Connecting
-                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 70.0), "Join Game") {
+                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 70.0), "Join Public Game") {
+                    let channel = start_loading_public_games();
+                    State::PublicGameListLoading { channel }
+                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 100.0), "Join Private Game") {
                     State::JoinGameForm {
                         input: String::new(),
                     }
@@ -617,6 +662,52 @@ async fn main() {
                     }
                 } else {
                     State::JoinGameForm { input }
+                }
+            }
+            State::PublicGameListLoading { mut channel } => {
+                mq::clear_background(BACKGROUND_COLOR);
+                mq::draw_text("Loading...", 10.0, 10.0, 20.0, mq::BLACK);
+
+                match channel.try_recv() {
+                    Ok(list) => State::PublicGameList { list },
+                    Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                        State::PublicGameListLoading { channel }
+                    }
+                    Err(tokio::sync::oneshot::error::TryRecvError::Closed) => State::MainMenu,
+                }
+            }
+            State::PublicGameList { list } => {
+                mq::clear_background(BACKGROUND_COLOR);
+
+                let mut joining = None;
+
+                for (idx, game) in list.iter().enumerate() {
+                    let y = 30.0 + (idx as f32) * 25.0;
+
+                    mqui::root_ui().label(
+                        mq::Vec2::new(10.0, y),
+                        &to_full_game_id_str(game.server.server_id, game.game_id),
+                    );
+                    mqui::root_ui()
+                        .label(mq::Vec2::new(90.0, y), &format!("{} players", game.players));
+                    mqui::root_ui().label(
+                        mq::Vec2::new(170.0, y),
+                        if game.waiting { "waiting" } else { "playing" },
+                    );
+                    if mqui::root_ui().button(mq::Vec2::new(250.0, y), "Join") {
+                        joining = Some(game);
+                    }
+                }
+
+                match joining {
+                    None => State::PublicGameList { list },
+                    Some(game) => {
+                        do_connection(ConnectionType::JoinPublicGame {
+                            server: game.server.clone(),
+                            game_id: game.game_id,
+                        });
+                        State::Connecting
+                    }
                 }
             }
             State::Connecting => {
