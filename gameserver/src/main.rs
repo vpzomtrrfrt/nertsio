@@ -569,6 +569,21 @@ async fn main() {
             })
         },
         {
+            let global_state = global_state.clone();
+
+            async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+
+                loop {
+                    interval.tick().await;
+
+                    global_state
+                        .games
+                        .retain(|_key, value| !value.players.is_empty())
+                }
+            }
+        },
+        {
             let redis_conn_details = redis_conn_details.clone();
             async move {
                 if let Some((my_address_ipv4, (server_id, redis_conn))) = redis_conn_details {
