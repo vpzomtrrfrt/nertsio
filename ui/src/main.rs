@@ -623,6 +623,39 @@ async fn main() {
         recv
     };
 
+    let draw_text_centered = |text, x, y, font_size, color| {
+        let metrics = mq::measure_text(
+            text,
+            None,
+            font_size,
+            mq::camera_font_scale(font_size.into()).1,
+        );
+
+        mq::draw_text(
+            text,
+            x - metrics.width / 2.0,
+            y - metrics.height / 2.0 + metrics.offset_y,
+            font_size.into(),
+            color,
+        );
+    };
+
+    let skin = {
+        let style = mqui::root_ui()
+            .style_builder()
+            .font_size(64)
+            .color_hovered(mq::Color::from_rgba(170, 170, 170, 255))
+            .build();
+
+        let mut skin = mqui::root_ui().default_skin().clone();
+        skin.label_style = style.clone();
+        skin.button_style = style;
+
+        skin
+    };
+
+    mqui::root_ui().push_skin(&skin);
+
     let mut state = State::MainMenu;
 
     loop {
@@ -632,16 +665,37 @@ async fn main() {
             State::MainMenu => {
                 mq::clear_background(BACKGROUND_COLOR);
 
-                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Create Public Game") {
+                let button_height = 50.0;
+                let button_spacing = 25.0;
+
+                let button_count = 4;
+
+                let menu_width = 600.0;
+                let menu_height = button_height * (button_count as f32)
+                    + ((button_count - 1) as f32) * button_spacing;
+                let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
+                let menu_y = mq::screen_height() / 2.0 - menu_height / 2.0;
+
+                let menu_button = |idx, label| {
+                    mqui::widgets::Button::new(label)
+                        .position(mq::Vec2::new(
+                            menu_x,
+                            menu_y + (button_height + button_spacing) * (idx as f32),
+                        ))
+                        .size(mq::Vec2::new(menu_width, button_height))
+                        .ui(&mut mqui::root_ui())
+                };
+
+                if menu_button(0, "Create Public Game") {
                     do_connection(ConnectionType::CreateGame { public: true });
                     State::Connecting
-                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 40.0), "Create Private Game") {
+                } else if menu_button(1, "Create Private Game") {
                     do_connection(ConnectionType::CreateGame { public: false });
                     State::Connecting
-                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 70.0), "Join Public Game") {
+                } else if menu_button(2, "Join Public Game") {
                     let channel = start_loading_public_games();
                     State::PublicGameListLoading { channel }
-                } else if mqui::root_ui().button(mq::Vec2::new(10.0, 100.0), "Join Private Game") {
+                } else if menu_button(3, "Join Private Game") {
                     State::JoinGameForm {
                         input: String::new(),
                     }
@@ -668,7 +722,7 @@ async fn main() {
             }
             State::PublicGameListLoading { mut channel } => {
                 mq::clear_background(BACKGROUND_COLOR);
-                mq::draw_text("Loading...", 10.0, 10.0, 20.0, mq::BLACK);
+                mq::draw_text("Loading...", 30.0, 50.0, 60.0, mq::BLACK);
 
                 match channel.try_recv() {
                     Ok(list) => State::PublicGameList { list },
@@ -684,19 +738,21 @@ async fn main() {
                 let mut joining = None;
 
                 for (idx, game) in list.iter().enumerate() {
-                    let y = 30.0 + (idx as f32) * 25.0;
+                    let y = 90.0 + (idx as f32) * 75.0;
 
                     mqui::root_ui().label(
-                        mq::Vec2::new(10.0, y),
+                        mq::Vec2::new(30.0, y),
                         &to_full_game_id_str(game.server.server_id, game.game_id),
                     );
-                    mqui::root_ui()
-                        .label(mq::Vec2::new(90.0, y), &format!("{} players", game.players));
                     mqui::root_ui().label(
-                        mq::Vec2::new(170.0, y),
+                        mq::Vec2::new(300.0, y),
+                        &format!("{} players", game.players),
+                    );
+                    mqui::root_ui().label(
+                        mq::Vec2::new(600.0, y),
                         if game.waiting { "waiting" } else { "playing" },
                     );
-                    if mqui::root_ui().button(mq::Vec2::new(250.0, y), "Join") {
+                    if mqui::root_ui().button(mq::Vec2::new(850.0, y), "Join") {
                         joining = Some(game);
                     }
                 }
@@ -730,7 +786,7 @@ async fn main() {
                 match &shared.game.hand {
                     None => {
                         mqui::root_ui().label(
-                            mq::Vec2::new(20.0, 10.0),
+                            mq::Vec2::new(60.0, 30.0),
                             &format!(
                                 "Room Code: {}",
                                 to_full_game_id_str(shared.server_id, shared.game.id),
@@ -738,14 +794,14 @@ async fn main() {
                         );
 
                         for (i, (key, player)) in shared.game.players.iter_mut().enumerate() {
-                            let y = 30.0 + (i as f32) * 25.0;
+                            let y = 90.0 + (i as f32) * 75.0;
 
                             mqui::root_ui()
-                                .label(mq::Vec2::new(10.0, y), &player.score.to_string());
+                                .label(mq::Vec2::new(30.0, y), &player.score.to_string());
 
                             if *key == shared.my_player_id {
                                 if mqui::root_ui().button(
-                                    mq::Vec2::new(30.0, y),
+                                    mq::Vec2::new(90.0, y),
                                     if player.ready { "Unready" } else { "Ready" },
                                 ) {
                                     let new_value = !player.ready;
@@ -759,7 +815,7 @@ async fn main() {
                                 }
                             } else {
                                 mqui::root_ui().label(
-                                    mq::Vec2::new(30.0, y),
+                                    mq::Vec2::new(90.0, y),
                                     if player.ready { "Ready" } else { "Not Ready" },
                                 );
                             }
@@ -1369,7 +1425,13 @@ async fn main() {
                     }
 
                     if pred_hand_state.nerts_called {
-                        mq::draw_text("Nerts!", screen_center.0, screen_center.1, 100.0, mq::BLACK);
+                        draw_text_centered(
+                            "Nerts!",
+                            screen_center.0,
+                            screen_center.1,
+                            100,
+                            mq::BLACK,
+                        );
                     }
 
                     shared.last_mouse_position = Some((
