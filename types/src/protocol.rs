@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
+pub const PROTOCOL_VERSION: u16 = 1;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageC2S {
@@ -8,6 +9,8 @@ pub enum HandshakeMessageC2S {
         name: String,
         game_id: Option<u32>,
         new_game_public: Option<bool>,
+        protocol_version: u16,
+        min_protocol_version: u16,
     },
 }
 
@@ -79,6 +82,8 @@ pub struct PublicGameInfo {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ServerStatusMessage {
     pub server_id: u8,
+    pub protocol_version: u16,
+    pub min_protocol_version: u16,
     pub address_ipv4: std::net::SocketAddrV4,
     pub open_public_games: Vec<PublicGameInfo>,
 }

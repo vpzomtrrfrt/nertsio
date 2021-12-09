@@ -100,8 +100,15 @@ async fn handle_connection(
         name,
         game_id,
         new_game_public,
+        protocol_version,
+        min_protocol_version,
     } = first_message
     {
+        if ni_ty::protocol::PROTOCOL_VERSION < min_protocol_version
+            || protocol_version < ni_ty::protocol::PROTOCOL_VERSION
+        {
+            anyhow::bail!("Mismatched protocol");
+        }
         (name, game_id, new_game_public == Some(true))
     } else {
         anyhow::bail!("Wrong first handshake message");
@@ -595,6 +602,8 @@ async fn main() {
                         let status = ni_ty::protocol::ServerStatusMessage {
                             server_id,
                             address_ipv4: my_address_ipv4,
+                            min_protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
+                            protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
                             open_public_games: global_state
                                 .games
                                 .iter()

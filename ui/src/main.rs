@@ -227,6 +227,8 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
         name: "Nerter".to_owned(),
         game_id,
         new_game_public,
+        protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
+        min_protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
     };
     handshake_stream_send.send(hello_msg).await?;
 
