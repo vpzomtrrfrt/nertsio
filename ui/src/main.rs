@@ -18,7 +18,7 @@ const OTHER_CURSOR_SIZE: f32 = 4.0;
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
-const COORDINATOR_URL: &str = "http://localhost:6462/";
+const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
 
 struct SharedInfo {
     game: ni_ty::GameState,
