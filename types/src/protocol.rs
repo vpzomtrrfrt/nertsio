@@ -1,8 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageC2S {
-    Hello { name: String, game_id: Option<u32> },
+    Hello {
+        name: String,
+        game_id: Option<u32>,
+        new_game_public: Option<bool>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -61,4 +67,37 @@ pub enum DatagramMessageS2C {
         seq: u32,
         state: crate::MouseState,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PublicGameInfo {
+    pub game_id: u32,
+    pub players: u8,
+    pub waiting: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ServerStatusMessage {
+    pub server_id: u8,
+    pub address_ipv4: std::net::SocketAddrV4,
+    pub open_public_games: Vec<PublicGameInfo>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ServerConnectionInfo {
+    pub server_id: u8,
+    pub address_ipv4: std::net::SocketAddrV4,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RespList<T> {
+    pub items: Vec<T>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PublicGameInfoExpanded {
+    pub game_id: u32,
+    pub players: u8,
+    pub waiting: bool,
+    pub server: ServerConnectionInfo,
 }

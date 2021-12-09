@@ -484,7 +484,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio 0.2.25",
- "tokio-util",
+ "tokio-util 0.3.1",
  "tracing",
  "tracing-futures",
 ]
@@ -960,9 +960,15 @@ name = "nertsio_coordinator"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "futures-util",
  "http",
  "hyper 0.14.15",
+ "nertsio_types",
+ "rand",
+ "redis-async",
+ "serde",
+ "serde_json",
  "tokio 1.14.0",
  "trout",
 ]
@@ -981,6 +987,7 @@ dependencies = [
  "openssl",
  "quinn",
  "rand",
+ "redis-async",
  "rustls",
  "tempfile",
  "tokio 1.14.0",
@@ -1016,12 +1023,14 @@ dependencies = [
  "async-bincode",
  "bincode",
  "futures-util",
+ "hyper 0.14.15",
  "lexical",
  "macroquad",
  "nertsio_textures",
  "nertsio_types",
  "quinn",
  "rustls",
+ "serde_json",
  "tokio 1.14.0",
 ]
 
@@ -1378,6 +1387,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ae028b272a6e99d9f8260ceefa3caa09300a8d6c8d2b2001316474bc52122e9"
 
 [[package]]
+name = "redis-async"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62fc49acd543c9e0dc6e97b865096cb1d0ca6bb7f3478a763952d01aabc0b326"
+dependencies = [
+ "bytes 1.1.0",
+ "futures-channel",
+ "futures-sink",
+ "futures-util",
+ "log",
+ "tokio 1.14.0",
+ "tokio-util 0.6.9",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1498,6 +1522,12 @@ dependencies = [
  "unicode-general-category",
  "unicode-script",
 ]
+
+[[package]]
+name = "ryu"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c9613b5a66ab9ba26415184cfc41156594925a9cf3a2057e57f31ff145f6568"
 
 [[package]]
 name = "safe_arch"
@@ -1630,6 +1660,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_json"
+version = "1.0.72"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0ffa0837f2dfa6fb90868c2b5468cad482e175f7dad97e7421951e663f2b527"
+dependencies = [
+ "itoa",
+ "ryu",
+ "serde",
 ]
 
 [[package]]
@@ -1868,6 +1909,20 @@ dependencies = [
  "log",
  "pin-project-lite 0.1.12",
  "tokio 0.2.25",
+]
+
+[[package]]
+name = "tokio-util"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e99e1983e5d376cd8eb4b66604d2e99e79f5bd988c3055891dcd8c9e2604cc0"
+dependencies = [
+ "bytes 1.1.0",
+ "futures-core",
+ "futures-sink",
+ "log",
+ "pin-project-lite 0.2.7",
+ "tokio 1.14.0",
 ]
 
 [[package]]
