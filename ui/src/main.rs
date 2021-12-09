@@ -450,6 +450,8 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
                             for player in shared.game.players.values_mut() {
                                 player.ready = false;
                             }
+                            shared.self_called_nerts = false;
+                            shared.pending_actions.clear();
                         }
                     }
 
