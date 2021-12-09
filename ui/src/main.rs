@@ -802,7 +802,7 @@ async fn main() {
                         + PLAYER_SPACING * ((max_side_player_count - 1) as f32);
 
                     let needed_screen_width = lake_width.max(max_side_width);
-                    let needed_screen_height = PLAYER_Y * 2.0 + CARD_HEIGHT + 10.0 + CARD_HEIGHT;
+                    let needed_screen_height = (PLAYER_Y + CARD_HEIGHT + 10.0 + CARD_HEIGHT) * 2.0;
 
                     let real_screen_size = (mq::screen_width(), mq::screen_height());
                     let screen_size = if real_screen_size.0 > needed_screen_width * 2.0
