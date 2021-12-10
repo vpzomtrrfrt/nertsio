@@ -676,7 +676,8 @@ async fn main() {
 
         let mut skin = mqui::root_ui().default_skin().clone();
         skin.label_style = style.clone();
-        skin.button_style = style;
+        skin.button_style = style.clone();
+        skin.editbox_style = style;
 
         skin
     };
@@ -733,10 +734,26 @@ async fn main() {
             State::JoinGameForm { mut input } => {
                 use mqui::hash;
 
+                let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
+
                 mq::clear_background(BACKGROUND_COLOR);
 
-                mqui::root_ui().input_text(hash!(), "Room Code", &mut input);
-                if mqui::root_ui().button(None, "Join") {
+                mqui::widgets::InputText::new(hash!())
+                    .label("Room Code")
+                    .size(mq::Vec2::new(500.0, 70.0))
+                    .position(mq::Vec2::new(
+                        screen_center.0 - 250.0,
+                        screen_center.1 - 35.0,
+                    ))
+                    .ui(&mut mqui::root_ui(), &mut input);
+                if mqui::widgets::Button::new("Join")
+                    .position(mq::Vec2::new(
+                        screen_center.0 - 100.0,
+                        screen_center.1 + 70.0,
+                    ))
+                    .size(mq::Vec2::new(200.0, 50.0))
+                    .ui(&mut mqui::root_ui())
+                {
                     if let Ok((server_id, game_id)) = parse_full_game_id_str(&input) {
                         do_connection(ConnectionType::JoinPrivateGame { server_id, game_id });
                         State::Connecting
