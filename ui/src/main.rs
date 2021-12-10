@@ -879,6 +879,8 @@ async fn main() {
                         real_screen_size
                     };
 
+                    let scale = real_screen_size.0 / screen_size.0;
+
                     let normal_camera = mq::Camera2D::from_display_rect(
                         mq::Rect::new(0.0, 0.0, screen_size.0, screen_size.1).into(),
                     );
@@ -1271,8 +1273,8 @@ async fn main() {
                             if idx == my_player_idx {
                                 if mqui::root_ui().button(
                                     mq::Vec2::new(
-                                        position.0 + CARD_WIDTH / 2.0,
-                                        position.1 + CARD_HEIGHT / 2.0,
+                                        (position.0 + CARD_WIDTH / 2.0) * scale,
+                                        (position.1 + CARD_HEIGHT / 2.0) * scale,
                                     ),
                                     "Nerts!",
                                 ) {
