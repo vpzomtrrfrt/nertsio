@@ -325,18 +325,18 @@ pub(crate) async fn handle_connection<
 
                                 let hand = shared.game.hand.as_mut().unwrap();
 
-                                let my_player_idx = hand
+                                if let Some(my_player_idx) = hand
                                     .players()
                                     .iter()
                                     .position(|player| player.player_id() == shared.my_player_id)
-                                    .unwrap();
+                                {
+                                    if player == my_player_idx as u8 {
+                                        // my move, check if matches expected
 
-                                if player == my_player_idx as u8 {
-                                    // my move, check if matches expected
-
-                                    while let Some(front) = shared.pending_actions.pop_front() {
-                                        if front == action {
-                                            break;
+                                        while let Some(front) = shared.pending_actions.pop_front() {
+                                            if front == action {
+                                                break;
+                                            }
                                         }
                                     }
                                 }

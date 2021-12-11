@@ -2,6 +2,7 @@ use futures_util::FutureExt;
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -65,7 +66,7 @@ enum State {
     Connecting,
     GameNeutral,
     GameHand {
-        my_player_idx: usize,
+        my_player_idx: Option<usize>,
     },
     LostConnection {
         was_connected: bool,
@@ -571,8 +572,7 @@ async fn main() {
                             my_player_idx: hand
                                 .players()
                                 .iter()
-                                .position(|player| player.player_id() == shared.my_player_id)
-                                .unwrap(),
+                                .position(|player| player.player_id() == shared.my_player_id),
                         },
                     }
                 } else {
@@ -585,8 +585,6 @@ async fn main() {
                 }
             }
             State::GameHand { my_player_idx } => {
-                let my_player_idx_u8 = my_player_idx as u8;
-
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Some(shared) = (*lock).as_info_mut() {
                     if let Some(real_hand_state) = shared.game.hand.as_mut() {
@@ -668,298 +666,320 @@ async fn main() {
                             (x, inverted)
                         };
 
-                        let my_location = get_player_location(my_player_idx);
-
-                        let mut pred_hand_state = (*real_hand_state).clone();
-                        for action in shared.pending_actions.iter() {
-                            let _ = pred_hand_state.apply(my_player_idx_u8, *action);
-                            // ignore error, will get cleared out eventually
-                        }
-                        if shared.self_called_nerts {
-                            pred_hand_state.nerts_called = true;
-                        }
-
                         let mouse_pos = mq::mouse_position();
                         let mouse_pos = mq::Vec2::new(
                             mouse_pos.0 * screen_size.0 / real_screen_size.0,
                             mouse_pos.1 * screen_size.1 / real_screen_size.1,
                         );
 
+                        let (pred_hand_state, self_inverted) = if let Some(my_player_idx) =
+                            my_player_idx
                         {
-                            let player_state = &pred_hand_state.players()[my_player_idx];
-                            let my_position =
-                                (screen_center.0 + my_location.0, screen_center.1 + PLAYER_Y);
+                            let my_player_idx_u8 = my_player_idx as u8;
 
-                            let mouse_pressed = mq::is_mouse_button_pressed(mq::MouseButton::Left);
+                            let my_location = get_player_location(my_player_idx);
 
-                            if mouse_pressed || mq::is_mouse_button_released(mq::MouseButton::Left)
+                            let mut pred_hand_state = (*real_hand_state).clone();
+                            for action in shared.pending_actions.iter() {
+                                let _ = pred_hand_state.apply(my_player_idx_u8, *action);
+                                // ignore error, will get cleared out eventually
+                            }
+                            if shared.self_called_nerts {
+                                pred_hand_state.nerts_called = true;
+                            }
+
                             {
-                                if mq::Rect::new(
-                                    my_position.0,
-                                    my_position.1 + (CARD_HEIGHT + 10.0),
-                                    CARD_WIDTH,
-                                    CARD_HEIGHT,
-                                )
-                                .contains(mouse_pos)
+                                let player_state = &pred_hand_state.players()[my_player_idx];
+                                let my_position =
+                                    (screen_center.0 + my_location.0, screen_center.1 + PLAYER_Y);
+
+                                let mouse_pressed =
+                                    mq::is_mouse_button_pressed(mq::MouseButton::Left);
+
+                                if mouse_pressed
+                                    || mq::is_mouse_button_released(mq::MouseButton::Left)
                                 {
-                                    if mouse_pressed {
-                                        let action = if player_state.stock_stack().len() > 0 {
-                                            ni_ty::HandAction::FlipStock
-                                        } else {
-                                            ni_ty::HandAction::ReturnStock
-                                        };
+                                    if mq::Rect::new(
+                                        my_position.0,
+                                        my_position.1 + (CARD_HEIGHT + 10.0),
+                                        CARD_WIDTH,
+                                        CARD_HEIGHT,
+                                    )
+                                    .contains(mouse_pos)
+                                    {
+                                        if mouse_pressed {
+                                            let action = if player_state.stock_stack().len() > 0 {
+                                                ni_ty::HandAction::FlipStock
+                                            } else {
+                                                ni_ty::HandAction::ReturnStock
+                                            };
 
-                                        if pred_hand_state.apply(my_player_idx_u8, action).is_ok() {
-                                            shared.pending_actions.push_back(action);
-                                            game_msg_send
-                                                .borrow()
-                                                .as_ref()
-                                                .unwrap()
-                                                .send(
-                                                    ni_ty::protocol::GameMessageC2S::ApplyHandAction {
-                                                        action,
-                                                    }.into(),
-                                                )
-                                                .unwrap();
+                                            if pred_hand_state
+                                                .apply(my_player_idx_u8, action)
+                                                .is_ok()
+                                            {
+                                                shared.pending_actions.push_back(action);
+                                                game_msg_send
+                                                    .borrow()
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .send(
+                                                        ni_ty::protocol::GameMessageC2S::ApplyHandAction {
+                                                            action,
+                                                        }.into(),
+                                                    )
+                                                    .unwrap();
 
-                                            shared.my_held_state = None;
+                                                shared.my_held_state = None;
+                                            }
                                         }
-                                    }
-                                } else {
-                                    let found = if player_state.nerts_stack().len() > 0
-                                        && mq::Rect::new(
-                                            my_position.0
-                                                + ((player_state.nerts_stack().len() - 1) as f32)
-                                                    * 10.0,
-                                            my_position.1,
-                                            CARD_WIDTH,
+                                    } else {
+                                        let found = if player_state.nerts_stack().len() > 0
+                                            && mq::Rect::new(
+                                                my_position.0
+                                                    + ((player_state.nerts_stack().len() - 1)
+                                                        as f32)
+                                                        * 10.0,
+                                                my_position.1,
+                                                CARD_WIDTH,
+                                                CARD_HEIGHT,
+                                            )
+                                            .contains(mouse_pos)
+                                        {
+                                            Some((
+                                                ni_ty::StackLocation::Player(
+                                                    my_player_idx_u8,
+                                                    ni_ty::PlayerStackLocation::Nerts,
+                                                ),
+                                                1,
+                                                mouse_pos
+                                                    - mq::Vec2::new(
+                                                        my_position.0
+                                                            + ((player_state.nerts_stack().len()
+                                                                - 1)
+                                                                as f32)
+                                                                * 10.0,
+                                                        my_position.1,
+                                                    ),
+                                            ))
+                                        } else if mq::Rect::new(
+                                            lake_start_x,
+                                            screen_center.1 - CARD_HEIGHT / 2.0,
+                                            lake_width,
                                             CARD_HEIGHT,
                                         )
                                         .contains(mouse_pos)
-                                    {
-                                        Some((
-                                            ni_ty::StackLocation::Player(
-                                                my_player_idx_u8,
-                                                ni_ty::PlayerStackLocation::Nerts,
-                                            ),
-                                            1,
-                                            mouse_pos
-                                                - mq::Vec2::new(
-                                                    my_position.0
-                                                        + ((player_state.nerts_stack().len() - 1)
-                                                            as f32)
-                                                            * 10.0,
-                                                    my_position.1,
-                                                ),
-                                        ))
-                                    } else if mq::Rect::new(
-                                        lake_start_x,
-                                        screen_center.1 - CARD_HEIGHT / 2.0,
-                                        lake_width,
-                                        CARD_HEIGHT,
-                                    )
-                                    .contains(mouse_pos)
-                                    {
-                                        let stack_idx_for_me = ((mouse_pos[0] - lake_start_x)
-                                            / (CARD_WIDTH + LAKE_SPACING))
-                                            as u16;
+                                        {
+                                            let stack_idx_for_me = ((mouse_pos[0] - lake_start_x)
+                                                / (CARD_WIDTH + LAKE_SPACING))
+                                                as u16;
 
-                                        let stack_idx = if my_location.1 {
-                                            (pred_hand_state.lake_stacks().len() as u16)
-                                                - stack_idx_for_me
-                                                - 1
+                                            let stack_idx = if my_location.1 {
+                                                (pred_hand_state.lake_stacks().len() as u16)
+                                                    - stack_idx_for_me
+                                                    - 1
+                                            } else {
+                                                stack_idx_for_me
+                                            };
+
+                                            Some((
+                                                ni_ty::StackLocation::Lake(stack_idx),
+                                                1,
+                                                mouse_pos
+                                                    - mq::Vec2::new(
+                                                        lake_start_x
+                                                            + (CARD_WIDTH + LAKE_SPACING)
+                                                                * (stack_idx as f32),
+                                                        screen_center.1 - CARD_HEIGHT / 2.0,
+                                                    ),
+                                            ))
+                                        } else if mq::Rect::new(
+                                            my_position.0 + CARD_WIDTH + 10.0,
+                                            my_position.1 + (CARD_HEIGHT + 10.0),
+                                            CARD_WIDTH + HORIZONTAL_STACK_SPACING * 2.0,
+                                            CARD_HEIGHT,
+                                        )
+                                        .contains(mouse_pos)
+                                        {
+                                            Some((
+                                                ni_ty::StackLocation::Player(
+                                                    my_player_idx_u8,
+                                                    ni_ty::PlayerStackLocation::Waste,
+                                                ),
+                                                1,
+                                                mouse_pos
+                                                    - mq::Vec2::new(
+                                                        my_position.0
+                                                            + CARD_WIDTH
+                                                            + 10.0
+                                                            + (HORIZONTAL_STACK_SPACING
+                                                                * ((player_state
+                                                                    .waste_stack()
+                                                                    .len()
+                                                                    .min(3)
+                                                                    - 1)
+                                                                    as f32)),
+                                                        my_position.1 + CARD_HEIGHT + 10.0,
+                                                    ),
+                                            ))
                                         } else {
-                                            stack_idx_for_me
+                                            player_state
+                                                .tableau_stacks()
+                                                .iter()
+                                                .enumerate()
+                                                .filter_map(|(i, stack)| {
+                                                    let x = my_position.0
+                                                        + 130.0
+                                                        + CARD_WIDTH
+                                                        + (i as f32) * (CARD_WIDTH + 10.0);
+                                                    if mq::Rect::new(
+                                                        x,
+                                                        my_position.1,
+                                                        CARD_WIDTH,
+                                                        CARD_HEIGHT
+                                                            + ((stack.len() as f32) - 1.0)
+                                                                * VERTICAL_STACK_SPACING,
+                                                    )
+                                                    .contains(mouse_pos)
+                                                    {
+                                                        let loc = ni_ty::StackLocation::Player(
+                                                            my_player_idx_u8,
+                                                            ni_ty::PlayerStackLocation::Tableau(i as u8),
+                                                        );
+                                                        if stack.len() > 0 {
+                                                            let found_idx = (((mouse_pos[1]
+                                                                - my_position.1)
+                                                                / VERTICAL_STACK_SPACING)
+                                                                as usize)
+                                                                .min(stack.len() - 1);
+
+                                                            Some((
+                                                                loc,
+                                                                stack.len() - found_idx,
+                                                                mouse_pos
+                                                                    - mq::Vec2::new(
+                                                                        x,
+                                                                        my_position.1
+                                                                            + ((found_idx as f32)
+                                                                                * VERTICAL_STACK_SPACING),
+                                                                    ),
+                                                            ))
+                                                        } else {
+                                                            Some((
+                                                                loc,
+                                                                0,
+                                                                mouse_pos - mq::Vec2::new(x, my_position.1),
+                                                            ))
+                                                        }
+                                                    } else {
+                                                        None
+                                                    }
+                                                })
+                                                .next()
                                         };
 
-                                        Some((
-                                            ni_ty::StackLocation::Lake(stack_idx),
-                                            1,
-                                            mouse_pos
-                                                - mq::Vec2::new(
-                                                    lake_start_x
-                                                        + (CARD_WIDTH + LAKE_SPACING)
-                                                            * (stack_idx as f32),
-                                                    screen_center.1 - CARD_HEIGHT / 2.0,
-                                                ),
-                                        ))
-                                    } else if mq::Rect::new(
-                                        my_position.0 + CARD_WIDTH + 10.0,
-                                        my_position.1 + (CARD_HEIGHT + 10.0),
-                                        CARD_WIDTH + HORIZONTAL_STACK_SPACING * 2.0,
-                                        CARD_HEIGHT,
-                                    )
-                                    .contains(mouse_pos)
-                                    {
-                                        Some((
-                                            ni_ty::StackLocation::Player(
-                                                my_player_idx_u8,
-                                                ni_ty::PlayerStackLocation::Waste,
-                                            ),
-                                            1,
-                                            mouse_pos
-                                                - mq::Vec2::new(
-                                                    my_position.0
-                                                        + CARD_WIDTH
-                                                        + 10.0
-                                                        + (HORIZONTAL_STACK_SPACING
-                                                            * ((player_state
-                                                                .waste_stack()
-                                                                .len()
-                                                                .min(3)
-                                                                - 1)
-                                                                as f32)),
-                                                    my_position.1 + CARD_HEIGHT + 10.0,
-                                                ),
-                                        ))
-                                    } else {
-                                        player_state
-                                            .tableau_stacks()
-                                            .iter()
-                                            .enumerate()
-                                            .filter_map(|(i, stack)| {
-                                                let x = my_position.0
-                                                    + 130.0
-                                                    + CARD_WIDTH
-                                                    + (i as f32) * (CARD_WIDTH + 10.0);
-                                                if mq::Rect::new(
-                                                    x,
-                                                    my_position.1,
-                                                    CARD_WIDTH,
-                                                    CARD_HEIGHT
-                                                        + ((stack.len() as f32) - 1.0)
-                                                            * VERTICAL_STACK_SPACING,
-                                                )
-                                                .contains(mouse_pos)
-                                                {
-                                                    let loc = ni_ty::StackLocation::Player(
-                                                        my_player_idx_u8,
-                                                        ni_ty::PlayerStackLocation::Tableau(i as u8),
-                                                    );
-                                                    if stack.len() > 0 {
-                                                        let found_idx = (((mouse_pos[1]
-                                                            - my_position.1)
-                                                            / VERTICAL_STACK_SPACING)
-                                                            as usize)
-                                                            .min(stack.len() - 1);
+                                        let _ = player_state;
 
-                                                        Some((
-                                                            loc,
-                                                            stack.len() - found_idx,
-                                                            mouse_pos
-                                                                - mq::Vec2::new(
-                                                                    x,
-                                                                    my_position.1
-                                                                        + ((found_idx as f32)
-                                                                            * VERTICAL_STACK_SPACING),
-                                                                ),
-                                                        ))
-                                                    } else {
-                                                        Some((
-                                                            loc,
-                                                            0,
-                                                            mouse_pos - mq::Vec2::new(x, my_position.1),
-                                                        ))
-                                                    }
-                                                } else {
-                                                    None
-                                                }
-                                            })
-                                            .next()
-                                    };
+                                        println!("click found {:?}", found);
 
-                                    let _ = player_state;
+                                        if let Some(found) = found {
+                                            match shared.my_held_state {
+                                                None => {
+                                                    if mouse_pressed {
+                                                        if let (
+                                                            ni_ty::StackLocation::Player(_, src),
+                                                            count,
+                                                            offset,
+                                                        ) = found
+                                                        {
+                                                            let stack = pred_hand_state
+                                                                .stack_at(found.0)
+                                                                .unwrap();
+                                                            if stack.len() > 0 {
+                                                                let top_card = stack.cards()
+                                                                    [stack.cards().len() - count]
+                                                                    .card;
 
-                                    println!("click found {:?}", found);
-
-                                    if let Some(found) = found {
-                                        match shared.my_held_state {
-                                            None => {
-                                                if mouse_pressed {
-                                                    if let (
-                                                        ni_ty::StackLocation::Player(_, src),
-                                                        count,
-                                                        offset,
-                                                    ) = found
-                                                    {
-                                                        let stack = pred_hand_state
-                                                            .stack_at(found.0)
-                                                            .unwrap();
-                                                        if stack.len() > 0 {
-                                                            let top_card = stack.cards()
-                                                                [stack.cards().len() - count]
-                                                                .card;
-
-                                                            shared.my_held_state =
-                                                                Some(ni_ty::HeldInfo {
-                                                                    src,
-                                                                    count: count as u8,
-                                                                    offset: (offset[0], offset[1]),
-                                                                    top_card,
-                                                                });
+                                                                shared.my_held_state =
+                                                                    Some(ni_ty::HeldInfo {
+                                                                        src,
+                                                                        count: count as u8,
+                                                                        offset: (
+                                                                            offset[0], offset[1],
+                                                                        ),
+                                                                        top_card,
+                                                                    });
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
-                                            Some(ref held) => {
-                                                let src_loc = ni_ty::StackLocation::Player(
-                                                    my_player_idx_u8,
-                                                    held.src,
-                                                );
+                                                Some(ref held) => {
+                                                    let src_loc = ni_ty::StackLocation::Player(
+                                                        my_player_idx_u8,
+                                                        held.src,
+                                                    );
 
-                                                let (target_loc, ..) = found;
-                                                if target_loc == src_loc {
-                                                    if mouse_pressed {
-                                                        shared.my_held_state = None;
-                                                    }
-                                                } else {
-                                                    if matches!(
-                                                        target_loc,
-                                                        ni_ty::StackLocation::Player(
-                                                            _,
-                                                            ni_ty::PlayerStackLocation::Tableau(_)
-                                                        ) | ni_ty::StackLocation::Lake(_)
-                                                    ) {
-                                                        if let Some(target_stack) =
-                                                            pred_hand_state.stack_at(target_loc)
-                                                        {
-                                                            if let Some(src_stack) =
-                                                                pred_hand_state.stack_at(src_loc)
+                                                    let (target_loc, ..) = found;
+                                                    if target_loc == src_loc {
+                                                        if mouse_pressed {
+                                                            shared.my_held_state = None;
+                                                        }
+                                                    } else {
+                                                        if matches!(
+                                                            target_loc,
+                                                            ni_ty::StackLocation::Player(
+                                                                _,
+                                                                ni_ty::PlayerStackLocation::Tableau(
+                                                                    _
+                                                                )
+                                                            ) | ni_ty::StackLocation::Lake(_)
+                                                        ) {
+                                                            if let Some(target_stack) =
+                                                                pred_hand_state.stack_at(target_loc)
                                                             {
-                                                                let stack_cards = src_stack.cards();
-                                                                let back_card = &stack_cards
-                                                                    [stack_cards.len()
-                                                                        - held.count as usize];
-
-                                                                if target_stack.can_add(*back_card)
+                                                                if let Some(src_stack) =
+                                                                    pred_hand_state
+                                                                        .stack_at(src_loc)
                                                                 {
-                                                                    let action =
-                                                                        ni_ty::HandAction::Move {
-                                                                            from: src_loc,
-                                                                            count: held.count,
-                                                                            to: target_loc,
-                                                                        };
+                                                                    let stack_cards =
+                                                                        src_stack.cards();
+                                                                    let back_card = &stack_cards
+                                                                        [stack_cards.len()
+                                                                            - held.count as usize];
 
-                                                                    println!("applying for check");
-                                                                    if pred_hand_state
-                                                                        .apply(
-                                                                            my_player_idx_u8,
-                                                                            action,
-                                                                        )
-                                                                        .is_ok()
+                                                                    if target_stack
+                                                                        .can_add(*back_card)
                                                                     {
-                                                                        shared
-                                                                            .pending_actions
-                                                                            .push_back(action);
-                                                                        game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
-                                                                    }
+                                                                        let action =
+                                                                            ni_ty::HandAction::Move {
+                                                                                from: src_loc,
+                                                                                count: held.count,
+                                                                                to: target_loc,
+                                                                            };
 
-                                                                    shared.my_held_state = None;
-                                                                } else {
-                                                                    println!(
-                                                                        "can't add {:?} to {:?}",
-                                                                        back_card, target_stack
-                                                                    );
+                                                                        println!(
+                                                                            "applying for check"
+                                                                        );
+                                                                        if pred_hand_state
+                                                                            .apply(
+                                                                                my_player_idx_u8,
+                                                                                action,
+                                                                            )
+                                                                            .is_ok()
+                                                                        {
+                                                                            shared
+                                                                                .pending_actions
+                                                                                .push_back(action);
+                                                                            game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
+                                                                        }
+
+                                                                        shared.my_held_state = None;
+                                                                    } else {
+                                                                        println!(
+                                                                            "can't add {:?} to {:?}",
+                                                                            back_card, target_stack
+                                                                        );
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -970,7 +990,16 @@ async fn main() {
                                     }
                                 }
                             }
-                        }
+
+                            shared.last_mouse_position = Some((
+                                mouse_pos[0] - screen_center.0,
+                                mouse_pos[1] - screen_center.1,
+                            ));
+
+                            (Cow::Owned(pred_hand_state), my_location.1)
+                        } else {
+                            (Cow::Borrowed(real_hand_state), false)
+                        };
 
                         mq::clear_background(BACKGROUND_COLOR);
 
@@ -979,13 +1008,13 @@ async fn main() {
                             let position =
                                 (screen_center.0 + location.0, screen_center.1 + PLAYER_Y);
 
-                            if location.1 != my_location.1 {
+                            if location.1 != self_inverted {
                                 mq::set_camera(&inverted_camera);
                             } else {
                                 mq::set_camera(&normal_camera);
                             }
 
-                            let held_state = if idx == my_player_idx {
+                            let held_state = if Some(idx) == my_player_idx {
                                 shared.my_held_state
                             } else {
                                 shared.hand_mouse_states.as_ref().unwrap()[idx]
@@ -1035,7 +1064,7 @@ async fn main() {
                                     );
                                 }
                             } else {
-                                if idx == my_player_idx {
+                                if Some(idx) == my_player_idx {
                                     if mqui::root_ui().button(
                                         mq::Vec2::new(
                                             (position.0 + CARD_WIDTH / 2.0) * scale,
@@ -1114,7 +1143,7 @@ async fn main() {
                             }
                         }
 
-                        if my_location.1 {
+                        if self_inverted {
                             mq::set_camera(&inverted_camera);
                         } else {
                             mq::set_camera(&normal_camera);
@@ -1144,7 +1173,7 @@ async fn main() {
                             if let Some((_, state)) = value {
                                 let location = get_player_location(idx);
 
-                                if location.1 != my_location.1 {
+                                if location.1 != self_inverted {
                                     mq::set_camera(&inverted_camera);
                                 } else {
                                     mq::set_camera(&normal_camera);
@@ -1185,21 +1214,23 @@ async fn main() {
 
                         mq::set_camera(&normal_camera);
 
-                        let my_player_state = &pred_hand_state.players()[my_player_idx];
-                        if let Some(ref held) = shared.my_held_state {
-                            let stack = my_player_state.stack_at(held.src);
-                            if let Some(stack) = stack {
-                                let stack_cards = stack.cards();
-                                let cards =
-                                    &stack_cards[(stack_cards.len() - held.count as usize)..];
+                        if let Some(my_player_idx) = my_player_idx {
+                            let my_player_state = &pred_hand_state.players()[my_player_idx];
+                            if let Some(ref held) = shared.my_held_state {
+                                let stack = my_player_state.stack_at(held.src);
+                                if let Some(stack) = stack {
+                                    let stack_cards = stack.cards();
+                                    let cards =
+                                        &stack_cards[(stack_cards.len() - held.count as usize)..];
 
-                                draw_vertical_stack_cards(
-                                    cards,
-                                    mouse_pos[0] - held.offset.0,
-                                    mouse_pos[1] - held.offset.1,
-                                );
-                            } else {
-                                shared.my_held_state = None;
+                                    draw_vertical_stack_cards(
+                                        cards,
+                                        mouse_pos[0] - held.offset.0,
+                                        mouse_pos[1] - held.offset.1,
+                                    );
+                                } else {
+                                    shared.my_held_state = None;
+                                }
                             }
                         }
 
@@ -1212,11 +1243,6 @@ async fn main() {
                                 mq::BLACK,
                             );
                         }
-
-                        shared.last_mouse_position = Some((
-                            mouse_pos[0] - screen_center.0,
-                            mouse_pos[1] - screen_center.1,
-                        ));
 
                         if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
                             game_msg_send
