@@ -22,7 +22,7 @@ const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
 
 enum ConnectionState {
-    NotConnected,
+    NotConnected { expected: bool },
     Connecting,
     Connected(SharedInfo),
 }
@@ -30,9 +30,21 @@ enum ConnectionState {
 impl ConnectionState {
     pub fn as_info_mut(&mut self) -> Option<&mut SharedInfo> {
         match self {
-            ConnectionState::NotConnected | ConnectionState::Connecting => None,
+            ConnectionState::NotConnected { expected: _ } | ConnectionState::Connecting => None,
             ConnectionState::Connected(info) => Some(info),
         }
+    }
+}
+
+#[derive(Debug)]
+enum ConnectionMessage {
+    Game(ni_ty::protocol::GameMessageC2S),
+    Leave,
+}
+
+impl From<ni_ty::protocol::GameMessageC2S> for ConnectionMessage {
+    fn from(src: ni_ty::protocol::GameMessageC2S) -> Self {
+        ConnectionMessage::Game(src)
     }
 }
 
@@ -155,7 +167,7 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
     http_client: &hyper::Client<C>,
     connection_type: ConnectionType,
     info_mutex: &std::sync::Mutex<ConnectionState>,
-    mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ni_ty::protocol::GameMessageC2S>,
+    mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ConnectionMessage>,
 ) -> Result<(), anyhow::Error> {
     let (server, game_id, new_game_public) = match connection_type {
         ConnectionType::CreateGame { public } => {
@@ -199,6 +211,7 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
     };
 
     let host = server.address_ipv4.into();
+    let server_id = server.server_id;
 
     let mut endpoint = quinn::Endpoint::client(
         (
@@ -283,204 +296,223 @@ async fn handle_connection<C: hyper::client::connect::Connect + Clone + Send + S
 
     println!("wat");
 
-    futures_util::try_join!(
-        async {
-            while let Some(msg) = game_msg_recv.recv().await {
-                println!("sending {:?}", msg);
-                game_stream_send.send(msg).await?;
-            }
-            Result::<_, anyhow::Error>::Ok(())
-        },
-        async {
-            let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
-            let mut seq: u32 = 0;
+    let (send_leave, recv_leave) = tokio::sync::oneshot::channel();
 
-            loop {
-                interval.tick().await;
-
-                let mut lock = info_mutex.lock().unwrap();
-                let shared = lock.as_info_mut().unwrap();
-
-                if shared.game.hand.is_some() {
-                    if let Some(mouse_pos) = shared.last_mouse_position {
-                        conn.connection.send_datagram(
-                            bincode::serialize(
-                                &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
-                                    seq,
-                                    state: ni_ty::MouseState {
-                                        position: mouse_pos,
-                                        held: shared.my_held_state,
-                                    },
-                                },
-                            )
-                            .unwrap()
-                            .into(),
-                        )?;
-
-                        seq += 1;
+    if let futures_util::future::Either::Left((Err(err), _)) = futures_util::future::select(
+        Box::pin(futures_util::future::try_join4(
+            async move {
+                while let Some(msg) = game_msg_recv.recv().await {
+                    match msg {
+                        ConnectionMessage::Game(msg) => {
+                            println!("sending {:?}", msg);
+                            game_stream_send.send(msg).await?;
+                        }
+                        ConnectionMessage::Leave => {
+                            let _ = send_leave.send(()); // if it's dropped we must have already disconnected?
+                            break;
+                        }
                     }
                 }
-            }
+                Result::<_, anyhow::Error>::Ok(())
+            },
+            async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+                let mut seq: u32 = 0;
 
-            // allows inferring return type
-            #[allow(unreachable_code)]
-            Ok(())
-        },
-        async {
-            conn.datagrams
-                .map_err(Into::into)
-                .try_for_each(|bytes| async move {
-                    use ni_ty::protocol::DatagramMessageS2C;
+                loop {
+                    interval.tick().await;
 
-                    let msg: DatagramMessageS2C = bincode::deserialize(&bytes)?;
-                    match msg {
-                        DatagramMessageS2C::UpdateMouseState {
-                            player_idx,
-                            seq,
-                            state,
-                        } => {
-                            let mut lock = info_mutex.lock().unwrap();
-                            let shared = (*lock).as_info_mut().unwrap();
+                    let mut lock = info_mutex.lock().unwrap();
+                    let shared = lock.as_info_mut().unwrap();
 
-                            if let Some(hand_mouse_states) = shared.hand_mouse_states.as_mut() {
-                                let mouse_state = &mut hand_mouse_states[player_idx as usize];
-                                if match mouse_state {
-                                    Some(state) => state.0 < seq,
-                                    None => true,
-                                } {
-                                    *mouse_state = Some((seq, state));
-                                }
-                            }
+                    if shared.game.hand.is_some() {
+                        if let Some(mouse_pos) = shared.last_mouse_position {
+                            conn.connection.send_datagram(
+                                bincode::serialize(
+                                    &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
+                                        seq,
+                                        state: ni_ty::MouseState {
+                                            position: mouse_pos,
+                                            held: shared.my_held_state,
+                                        },
+                                    },
+                                )
+                                .unwrap()
+                                .into(),
+                            )?;
+
+                            seq += 1;
                         }
                     }
+                }
 
-                    Result::<_, anyhow::Error>::Ok(())
-                })
-                .await?;
+                // allows inferring return type
+                #[allow(unreachable_code)]
+                Ok(())
+            },
+            async {
+                conn.datagrams
+                    .map_err(Into::into)
+                    .try_for_each(|bytes| async move {
+                        use ni_ty::protocol::DatagramMessageS2C;
 
-            Ok(())
-        },
-        async {
-            game_stream_recv
-                .map_err(Into::into)
-                .try_for_each(|msg| async {
-                    use ni_ty::protocol::GameMessageS2C;
+                        let msg: DatagramMessageS2C = bincode::deserialize(&bytes)?;
+                        match msg {
+                            DatagramMessageS2C::UpdateMouseState {
+                                player_idx,
+                                seq,
+                                state,
+                            } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = (*lock).as_info_mut().unwrap();
 
-                    println!("received {:?}", msg);
-
-                    match msg {
-                        GameMessageS2C::Joined {
-                            info,
-                            your_player_id,
-                        } => {
-                            *info_mutex.lock().unwrap() = ConnectionState::Connected(SharedInfo {
-                                hand_mouse_states: info
-                                    .hand
-                                    .as_ref()
-                                    .map(|hand| vec![None; hand.players().len()]),
-                                game: info,
-                                my_player_id: your_player_id,
-                                pending_actions: Default::default(),
-                                self_called_nerts: false,
-                                my_held_state: None,
-                                last_mouse_position: None,
-                                server_id: server.server_id,
-                            });
-                        }
-                        GameMessageS2C::PlayerJoin { id, info } => {
-                            (*info_mutex.lock().unwrap())
-                                .as_info_mut()
-                                .unwrap()
-                                .game
-                                .players
-                                .insert(id, info);
-                        }
-                        GameMessageS2C::PlayerLeave { id } => {
-                            (*info_mutex.lock().unwrap())
-                                .as_info_mut()
-                                .unwrap()
-                                .game
-                                .players
-                                .remove(&id);
-                        }
-                        GameMessageS2C::PlayerUpdateReady { id, value } => {
-                            (*info_mutex.lock().unwrap())
-                                .as_info_mut()
-                                .unwrap()
-                                .game
-                                .players
-                                .get_mut(&id)
-                                .unwrap()
-                                .ready = value;
-                        }
-                        GameMessageS2C::HandStart { info } => {
-                            let mut lock = info_mutex.lock().unwrap();
-                            let shared = (*lock).as_info_mut().unwrap();
-
-                            shared.hand_mouse_states = Some(vec![None; info.players().len()]);
-                            shared.game.hand = Some(info);
-                            shared.my_held_state = None;
-                        }
-                        GameMessageS2C::PlayerHandAction { player, action } => {
-                            let mut lock = info_mutex.lock().unwrap();
-                            let shared = lock.as_info_mut().unwrap();
-
-                            let hand = shared.game.hand.as_mut().unwrap();
-
-                            let my_player_idx = hand
-                                .players()
-                                .iter()
-                                .position(|player| player.player_id() == shared.my_player_id)
-                                .unwrap();
-
-                            if player == my_player_idx as u8 {
-                                // my move, check if matches expected
-
-                                while let Some(front) = shared.pending_actions.pop_front() {
-                                    if front == action {
-                                        break;
+                                if let Some(hand_mouse_states) = shared.hand_mouse_states.as_mut() {
+                                    let mouse_state = &mut hand_mouse_states[player_idx as usize];
+                                    if match mouse_state {
+                                        Some(state) => state.0 < seq,
+                                        None => true,
+                                    } {
+                                        *mouse_state = Some((seq, state));
                                     }
                                 }
                             }
-
-                            hand.apply(player, action).unwrap();
                         }
-                        GameMessageS2C::NertsCalled { player: _ } => {
-                            let mut lock = info_mutex.lock().unwrap();
-                            let shared = lock.as_info_mut().unwrap();
 
-                            let hand = shared.game.hand.as_mut().unwrap();
+                        Result::<_, anyhow::Error>::Ok(())
+                    })
+                    .await?;
 
-                            hand.nerts_called = true;
-                        }
-                        GameMessageS2C::HandEnd { scores } => {
-                            let mut lock = info_mutex.lock().unwrap();
-                            let shared = lock.as_info_mut().unwrap();
+                Ok(())
+            },
+            async move {
+                game_stream_recv
+                    .map_err(Into::into)
+                    .try_for_each(|msg| async move {
+                        use ni_ty::protocol::GameMessageS2C;
 
-                            let hand_state = shared.game.hand.take().unwrap();
+                        println!("received {:?}", msg);
 
-                            for (player, score) in hand_state.players().iter().zip(scores) {
-                                if let Some(info) = shared.game.players.get_mut(&player.player_id())
-                                {
-                                    info.score += score;
+                        match msg {
+                            GameMessageS2C::Joined {
+                                info,
+                                your_player_id,
+                            } => {
+                                *info_mutex.lock().unwrap() =
+                                    ConnectionState::Connected(SharedInfo {
+                                        hand_mouse_states: info
+                                            .hand
+                                            .as_ref()
+                                            .map(|hand| vec![None; hand.players().len()]),
+                                        game: info,
+                                        my_player_id: your_player_id,
+                                        pending_actions: Default::default(),
+                                        self_called_nerts: false,
+                                        my_held_state: None,
+                                        last_mouse_position: None,
+                                        server_id,
+                                    });
+                            }
+                            GameMessageS2C::PlayerJoin { id, info } => {
+                                (*info_mutex.lock().unwrap())
+                                    .as_info_mut()
+                                    .unwrap()
+                                    .game
+                                    .players
+                                    .insert(id, info);
+                            }
+                            GameMessageS2C::PlayerLeave { id } => {
+                                (*info_mutex.lock().unwrap())
+                                    .as_info_mut()
+                                    .unwrap()
+                                    .game
+                                    .players
+                                    .remove(&id);
+                            }
+                            GameMessageS2C::PlayerUpdateReady { id, value } => {
+                                (*info_mutex.lock().unwrap())
+                                    .as_info_mut()
+                                    .unwrap()
+                                    .game
+                                    .players
+                                    .get_mut(&id)
+                                    .unwrap()
+                                    .ready = value;
+                            }
+                            GameMessageS2C::HandStart { info } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = (*lock).as_info_mut().unwrap();
+
+                                shared.hand_mouse_states = Some(vec![None; info.players().len()]);
+                                shared.game.hand = Some(info);
+                                shared.my_held_state = None;
+                            }
+                            GameMessageS2C::PlayerHandAction { player, action } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand = shared.game.hand.as_mut().unwrap();
+
+                                let my_player_idx = hand
+                                    .players()
+                                    .iter()
+                                    .position(|player| player.player_id() == shared.my_player_id)
+                                    .unwrap();
+
+                                if player == my_player_idx as u8 {
+                                    // my move, check if matches expected
+
+                                    while let Some(front) = shared.pending_actions.pop_front() {
+                                        if front == action {
+                                            break;
+                                        }
+                                    }
                                 }
-                            }
 
-                            for player in shared.game.players.values_mut() {
-                                player.ready = false;
+                                hand.apply(player, action).unwrap();
                             }
-                            shared.self_called_nerts = false;
-                            shared.pending_actions.clear();
+                            GameMessageS2C::NertsCalled { player: _ } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand = shared.game.hand.as_mut().unwrap();
+
+                                hand.nerts_called = true;
+                            }
+                            GameMessageS2C::HandEnd { scores } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand_state = shared.game.hand.take().unwrap();
+
+                                for (player, score) in hand_state.players().iter().zip(scores) {
+                                    if let Some(info) =
+                                        shared.game.players.get_mut(&player.player_id())
+                                    {
+                                        info.score += score;
+                                    }
+                                }
+
+                                for player in shared.game.players.values_mut() {
+                                    player.ready = false;
+                                }
+                                shared.self_called_nerts = false;
+                                shared.pending_actions.clear();
+                            }
                         }
-                    }
 
-                    Ok(())
-                })
-                .await
-        },
-    )?;
-
-    Ok(())
+                        Ok(())
+                    })
+                    .await
+            },
+        )),
+        recv_leave,
+    )
+    .await
+    {
+        Err(err)
+    } else {
+        Ok(())
+    }
 }
 
 #[macroquad::main("nertsio")]
@@ -585,7 +617,9 @@ async fn main() {
         }
     };
 
-    let game_info_mutex = Arc::new(std::sync::Mutex::new(ConnectionState::NotConnected));
+    let game_info_mutex = Arc::new(std::sync::Mutex::new(ConnectionState::NotConnected {
+        expected: true,
+    }));
     let game_msg_send = RefCell::new(None);
 
     let http_client = hyper::Client::new();
@@ -601,18 +635,20 @@ async fn main() {
                 {
                     (*game_info_mutex.lock().unwrap()) = ConnectionState::Connecting;
                 }
-                if let Err(err) = handle_connection(
+                let res = handle_connection(
                     &http_client,
                     connection_type,
                     &game_info_mutex,
                     game_msg_recv,
                 )
-                .await
-                {
-                    eprintln!("Failed to handle connection: {:?}", err);
+                .await;
 
-                    let mut lock = game_info_mutex.lock().unwrap();
-                    (*lock) = ConnectionState::NotConnected;
+                let mut lock = game_info_mutex.lock().unwrap();
+                if let Err(err) = res {
+                    (*lock) = ConnectionState::NotConnected { expected: false };
+                    eprintln!("Failed to handle connection: {:?}", err);
+                } else {
+                    (*lock) = ConnectionState::NotConnected { expected: true };
                 }
             }
         });
@@ -761,7 +797,11 @@ async fn main() {
                         State::JoinGameForm { input }
                     }
                 } else {
-                    State::JoinGameForm { input }
+                    if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                        State::MainMenu
+                    } else {
+                        State::JoinGameForm { input }
+                    }
                 }
             }
             State::PublicGameListLoading { mut channel } => {
@@ -821,7 +861,13 @@ async fn main() {
                 }
 
                 match joining {
-                    None => State::PublicGameList { list },
+                    None => {
+                        if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                            State::MainMenu
+                        } else {
+                            State::PublicGameList { list }
+                        }
+                    }
                     Some(game) => {
                         do_connection(ConnectionType::JoinPublicGame {
                             server: game.server.clone(),
@@ -837,9 +883,15 @@ async fn main() {
                 match *game_info_mutex.lock().unwrap() {
                     ConnectionState::Connecting => State::Connecting,
                     ConnectionState::Connected(_) => State::GameNeutral,
-                    ConnectionState::NotConnected => State::LostConnection {
-                        was_connected: false,
-                    },
+                    ConnectionState::NotConnected { expected } => {
+                        if expected {
+                            State::MainMenu
+                        } else {
+                            State::LostConnection {
+                                was_connected: false,
+                            }
+                        }
+                    }
                 }
             }
             State::GameNeutral => {
@@ -850,7 +902,7 @@ async fn main() {
                     match &shared.game.hand {
                         None => {
                             mqui::root_ui().label(
-                                mq::Vec2::new(60.0, 30.0),
+                                mq::Vec2::new(60.0, 100.0),
                                 &format!(
                                     "Room Code: {}",
                                     to_full_game_id_str(shared.server_id, shared.game.id),
@@ -858,7 +910,7 @@ async fn main() {
                             );
 
                             for (i, (key, player)) in shared.game.players.iter_mut().enumerate() {
-                                let y = 90.0 + (i as f32) * 75.0;
+                                let y = 160.0 + (i as f32) * 75.0;
 
                                 mqui::root_ui()
                                     .label(mq::Vec2::new(30.0, y), &player.score.to_string());
@@ -878,7 +930,8 @@ async fn main() {
                                             .send(
                                                 ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
                                                     value: new_value,
-                                                },
+                                                }
+                                                .into(),
                                             )
                                             .unwrap();
                                     }
@@ -890,6 +943,14 @@ async fn main() {
                                 }
                             }
 
+                            if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
+                                game_msg_send
+                                    .borrow()
+                                    .as_ref()
+                                    .unwrap()
+                                    .send(ConnectionMessage::Leave)
+                                    .unwrap();
+                            }
                             State::GameNeutral
                         }
                         Some(hand) => State::GameHand {
@@ -901,8 +962,11 @@ async fn main() {
                         },
                     }
                 } else {
-                    State::LostConnection {
-                        was_connected: true,
+                    match *lock {
+                        ConnectionState::NotConnected { expected: true } => State::MainMenu,
+                        _ => State::LostConnection {
+                            was_connected: true,
+                        },
                     }
                 }
             }
@@ -1040,7 +1104,7 @@ async fn main() {
                                                 .send(
                                                     ni_ty::protocol::GameMessageC2S::ApplyHandAction {
                                                         action,
-                                                    },
+                                                    }.into(),
                                                 )
                                                 .unwrap();
 
@@ -1273,7 +1337,7 @@ async fn main() {
                                                                         shared
                                                                             .pending_actions
                                                                             .push_back(action);
-                                                                        game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }).unwrap();
+                                                                        game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
                                                                     }
 
                                                                     shared.my_held_state = None;
@@ -1370,7 +1434,7 @@ async fn main() {
                                             .borrow()
                                             .as_ref()
                                             .unwrap()
-                                            .send(ni_ty::protocol::GameMessageC2S::CallNerts)
+                                            .send(ni_ty::protocol::GameMessageC2S::CallNerts.into())
                                             .unwrap();
                                     }
                                 }
@@ -1540,13 +1604,25 @@ async fn main() {
                             mouse_pos[1] - screen_center.1,
                         ));
 
+                        if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
+                            game_msg_send
+                                .borrow()
+                                .as_ref()
+                                .unwrap()
+                                .send(ConnectionMessage::Leave)
+                                .unwrap();
+                        }
+
                         State::GameHand { my_player_idx }
                     } else {
                         State::GameNeutral
                     }
                 } else {
-                    State::LostConnection {
-                        was_connected: true,
+                    match *lock {
+                        ConnectionState::NotConnected { expected: true } => State::MainMenu,
+                        _ => State::LostConnection {
+                            was_connected: true,
+                        },
                     }
                 }
             }
