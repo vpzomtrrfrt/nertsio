@@ -2,10 +2,12 @@ use futures_util::FutureExt;
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 mod connection;
 
@@ -25,6 +27,24 @@ const OTHER_CURSOR_SIZE: f32 = 4.0;
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
 const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
+
+fn default_name() -> String {
+    "Nerter".to_owned()
+}
+
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
+struct Settings {
+    #[serde(default = "default_name")]
+    name: String,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Settings {
+            name: default_name(),
+        }
+    }
+}
 
 enum ConnectionState {
     NotConnected { expected: bool },
@@ -124,6 +144,48 @@ async fn res_to_error(
             status,
             String::from_utf8_lossy(&bytes)
         ))
+    }
+}
+
+async fn run_settings_save_loop(
+    file: std::fs::File,
+    init_value: Settings,
+    mutex: Arc<Mutex<Settings>>,
+) {
+    let mut saved_value = init_value;
+
+    let mut file = tokio::fs::File::from_std(file);
+
+    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        interval.tick().await;
+
+        if {
+            let lock = mutex.lock().unwrap();
+            if saved_value != *lock {
+                saved_value = (*lock).clone();
+                true
+            } else {
+                false
+            }
+        } {
+            // value changed, need to save it
+
+            if let Err(err) = async {
+                let buf = serde_json::to_vec(&saved_value)?;
+
+                file.rewind().await?;
+                file.write_all(&buf).await?;
+
+                Result::<_, anyhow::Error>::Ok(())
+            }
+            .await
+            {
+                eprintln!("failed to save settings: {:?}", err);
+            }
+        }
     }
 }
 
@@ -236,6 +298,44 @@ async fn main() {
 
     let http_client = hyper::Client::new();
 
+    let settings_mutex;
+    {
+        let config_dir = dirs::config_dir()
+            .map(Cow::Owned)
+            .unwrap_or_else(|| std::path::Path::new(".").into());
+        match std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(config_dir.join("nertsio.json"))
+        {
+            Ok(mut file) => {
+                let init_value: Settings = match serde_json::from_reader(&mut file) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        println!("Failed to parse config file: {:?}", err);
+                        println!("Will reset config to defaults.");
+
+                        Default::default()
+                    }
+                };
+
+                settings_mutex = Arc::new(Mutex::new(init_value.clone()));
+                async_rt.spawn(run_settings_save_loop(
+                    file,
+                    init_value,
+                    settings_mutex.clone(),
+                ));
+            }
+            Err(err) => {
+                eprintln!("Failed to open settings file: {:?}", err);
+                eprintln!("Settings will not be saved.");
+
+                settings_mutex = Arc::new(Mutex::new(Default::default()));
+            }
+        }
+    }
+
     let do_connection = |connection_type| {
         let (new_game_msg_send, game_msg_recv) = tokio::sync::mpsc::unbounded_channel();
         *game_msg_send.borrow_mut() = Some(new_game_msg_send);
@@ -243,6 +343,7 @@ async fn main() {
         async_rt.spawn({
             let game_info_mutex = game_info_mutex.clone();
             let http_client = http_client.clone();
+            let settings_mutex = settings_mutex.clone();
             async move {
                 {
                     (*game_info_mutex.lock().unwrap()) = ConnectionState::Connecting;
@@ -252,6 +353,7 @@ async fn main() {
                     connection_type,
                     &game_info_mutex,
                     game_msg_recv,
+                    settings_mutex,
                 )
                 .await;
 
@@ -298,7 +400,7 @@ async fn main() {
         recv
     };
 
-    let draw_text_centered = |text, x, y, font_size, color| {
+    let draw_text_centered = |text: &str, x, y, font_size, color| {
         let metrics = mq::measure_text(
             text,
             None,
@@ -344,7 +446,7 @@ async fn main() {
                 let button_height = 50.0;
                 let button_spacing = 25.0;
 
-                let button_count = 4;
+                let button_count = 5;
 
                 let menu_width = 600.0;
                 let menu_height = button_height * (button_count as f32)
@@ -362,16 +464,30 @@ async fn main() {
                         .ui(&mut mqui::root_ui())
                 };
 
-                if menu_button(0, "Create Public Game") {
+                {
+                    use mqui::hash;
+
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    mqui::widgets::InputText::new(hash!())
+                        .label("Name")
+                        .size(mq::Vec2::new(menu_width, button_height + 20.0))
+                        .position(mq::Vec2::new(menu_x, menu_y - 20.0))
+                        .ratio(0.8)
+                        .ui(&mut mqui::root_ui(), &mut settings.name);
+                }
+
+                if menu_button(1, "Create Public Game") {
                     do_connection(connection::ConnectionType::CreateGame { public: true });
                     State::Connecting
-                } else if menu_button(1, "Create Private Game") {
+                } else if menu_button(2, "Create Private Game") {
                     do_connection(connection::ConnectionType::CreateGame { public: false });
                     State::Connecting
-                } else if menu_button(2, "Join Public Game") {
+                } else if menu_button(3, "Join Public Game") {
                     let channel = start_loading_public_games();
                     State::PublicGameListLoading { channel }
-                } else if menu_button(3, "Join Private Game") {
+                } else if menu_button(4, "Join Private Game") {
                     State::JoinGameForm {
                         input: String::new(),
                     }
@@ -998,8 +1114,9 @@ async fn main() {
 
                             (Cow::Owned(pred_hand_state), my_location.1)
                         } else {
-                            (Cow::Borrowed(real_hand_state), false)
+                            (Cow::Borrowed(shared.game.hand.as_ref().unwrap()), false)
                         };
+                        let _ = real_hand_state;
 
                         mq::clear_background(BACKGROUND_COLOR);
 
@@ -1008,10 +1125,24 @@ async fn main() {
                             let position =
                                 (screen_center.0 + location.0, screen_center.1 + PLAYER_Y);
 
+                            mq::set_camera(&normal_camera);
+                            if let Some(player) = shared.game.players.get(&player_state.player_id())
+                            {
+                                draw_text_centered(
+                                    &player.name,
+                                    position.0 + player_hand_width / 2.0,
+                                    if location.1 == self_inverted {
+                                        position.1 - 20.0
+                                    } else {
+                                        screen_center.1 - PLAYER_Y + 20.0
+                                    },
+                                    40,
+                                    mq::BLACK,
+                                );
+                            }
+
                             if location.1 != self_inverted {
                                 mq::set_camera(&inverted_camera);
-                            } else {
-                                mq::set_camera(&normal_camera);
                             }
 
                             let held_state = if Some(idx) == my_player_idx {

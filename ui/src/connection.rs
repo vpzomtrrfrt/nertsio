@@ -1,6 +1,6 @@
 use futures_util::{SinkExt, StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::{res_to_error, ConnectionState, SharedInfo};
 
@@ -37,6 +37,7 @@ pub(crate) async fn handle_connection<
     connection_type: ConnectionType,
     info_mutex: &std::sync::Mutex<ConnectionState>,
     mut game_msg_recv: tokio::sync::mpsc::UnboundedReceiver<ConnectionMessage>,
+    settings_mutex: Arc<Mutex<crate::Settings>>,
 ) -> Result<(), anyhow::Error> {
     let (server, game_id, new_game_public) = match connection_type {
         ConnectionType::CreateGame { public } => {
@@ -129,7 +130,7 @@ pub(crate) async fn handle_connection<
     >::from(handshake_stream.1);
 
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
-        name: "Nerter".to_owned(),
+        name: (*settings_mutex.lock().unwrap()).name.clone(),
         game_id,
         new_game_public,
         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
