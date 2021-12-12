@@ -648,7 +648,7 @@ async fn main() {
 
                                 if *key == shared.my_player_id {
                                     if mqui::root_ui().button(
-                                        mq::Vec2::new(90.0, y),
+                                        mq::Vec2::new(100.0, y),
                                         if player.ready { "Unready" } else { "Ready" },
                                     ) {
                                         let new_value = !player.ready;
@@ -668,10 +668,12 @@ async fn main() {
                                     }
                                 } else {
                                     mqui::root_ui().label(
-                                        mq::Vec2::new(90.0, y),
+                                        mq::Vec2::new(100.0, y),
                                         if player.ready { "Ready" } else { "Not Ready" },
                                     );
                                 }
+
+                                mqui::root_ui().label(mq::Vec2::new(400.0, y), &player.name);
                             }
 
                             if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
