@@ -26,7 +26,7 @@ impl ServerGamePlayerState {
         ni_ty::GamePlayerState {
             name: self.name.clone(),
             ready: self.ready,
-            score: 0,
+            score: self.score,
         }
     }
 }
