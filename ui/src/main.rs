@@ -531,7 +531,11 @@ async fn main() {
                     if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
                         State::MainMenu
                     } else {
-                        State::JoinGameForm { input }
+                        if mq::is_key_pressed(mq::KeyCode::Escape) {
+                            State::MainMenu
+                        } else {
+                            State::JoinGameForm { input }
+                        }
                     }
                 }
             }
@@ -548,12 +552,16 @@ async fn main() {
                     mq::BLACK,
                 );
 
-                match channel.try_recv() {
-                    Ok(list) => State::PublicGameList { list },
-                    Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                        State::PublicGameListLoading { channel }
+                if mq::is_key_pressed(mq::KeyCode::Escape) {
+                    State::MainMenu
+                } else {
+                    match channel.try_recv() {
+                        Ok(list) => State::PublicGameList { list },
+                        Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
+                            State::PublicGameListLoading { channel }
+                        }
+                        Err(tokio::sync::oneshot::error::TryRecvError::Closed) => State::MainMenu,
                     }
-                    Err(tokio::sync::oneshot::error::TryRecvError::Closed) => State::MainMenu,
                 }
             }
             State::PublicGameList { list } => {
@@ -596,7 +604,11 @@ async fn main() {
                         if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
                             State::MainMenu
                         } else {
-                            State::PublicGameList { list }
+                            if mq::is_key_pressed(mq::KeyCode::Escape) {
+                                State::MainMenu
+                            } else {
+                                State::PublicGameList { list }
+                            }
                         }
                     }
                     Some(game) => {
@@ -610,6 +622,15 @@ async fn main() {
             }
             State::Connecting => {
                 mq::clear_background(BACKGROUND_COLOR);
+
+                if mq::is_key_pressed(mq::KeyCode::Escape) {
+                    game_msg_send
+                        .borrow()
+                        .as_ref()
+                        .unwrap()
+                        .send(ConnectionMessage::Leave)
+                        .unwrap();
+                }
 
                 match *game_info_mutex.lock().unwrap() {
                     ConnectionState::Connecting => State::Connecting,
@@ -1105,6 +1126,33 @@ async fn main() {
                                                 }
                                             }
                                         }
+                                    }
+                                } else if mq::is_mouse_button_pressed(mq::MouseButton::Right)
+                                    || mq::is_key_pressed(mq::KeyCode::Escape)
+                                {
+                                    shared.my_held_state = None;
+                                } else if mq::is_key_pressed(mq::KeyCode::Tab) {
+                                    let action = if player_state.stock_stack().len() > 0 {
+                                        ni_ty::HandAction::FlipStock
+                                    } else {
+                                        ni_ty::HandAction::ReturnStock
+                                    };
+
+                                    if pred_hand_state.apply(my_player_idx_u8, action).is_ok() {
+                                        shared.pending_actions.push_back(action);
+                                        game_msg_send
+                                            .borrow()
+                                            .as_ref()
+                                            .unwrap()
+                                            .send(
+                                                ni_ty::protocol::GameMessageC2S::ApplyHandAction {
+                                                    action,
+                                                }
+                                                .into(),
+                                            )
+                                            .unwrap();
+
+                                        shared.my_held_state = None;
                                     }
                                 }
                             }
