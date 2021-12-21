@@ -63,6 +63,26 @@ fn send_to_all(server_game_state: &ServerGameState, msg: ni_ty::protocol::GameMe
     }
 }
 
+fn maybe_start_hand(server_game_state: &mut ServerGameState) {
+    if server_game_state
+        .players
+        .values()
+        .all(|player| player.ready)
+    {
+        // all ready, start hand
+
+        let new_hand = ni_ty::HandState::generate(server_game_state.players.keys().copied());
+        server_game_state.hand = Some(ServerHandState {
+            hand: new_hand.clone(),
+            mouse_states: vec![None; new_hand.players().len()],
+        });
+        send_to_all(
+            &server_game_state,
+            ni_ty::protocol::GameMessageS2C::HandStart { info: new_hand },
+        );
+    }
+}
+
 async fn handle_connection(
     global_state: Arc<GlobalState>,
     connecting: quinn::Connecting,
@@ -344,24 +364,7 @@ async fn handle_connection(
                                             );
                                         }
 
-                                        if server_game_state
-                                            .players
-                                            .values()
-                                            .all(|player| player.ready)
-                                        {
-                                            // all ready, start hand
-
-                                            let new_hand = ni_ty::HandState::generate(
-                                                server_game_state.players.keys().copied(),
-                                            );
-                                            server_game_state.hand = Some(ServerHandState { hand: new_hand.clone(), mouse_states: vec![None; new_hand.players().len()] });
-                                            send_to_all(
-                                                &server_game_state,
-                                                ni_ty::protocol::GameMessageS2C::HandStart {
-                                                    info: new_hand,
-                                                },
-                                            );
-                                        }
+                                        maybe_start_hand(&mut server_game_state);
                                     }
                                 }
                                 GameMessageC2S::ApplyHandAction { action } => {
@@ -455,6 +458,7 @@ async fn handle_connection(
         &server_game_state,
         ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player_id },
     );
+    maybe_start_hand(&mut server_game_state);
 
     res
 }
