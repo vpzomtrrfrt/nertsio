@@ -149,7 +149,7 @@ async fn handle_connection(
                 )
             } else {
                 loop {
-                    let game_id: u32 = rand::thread_rng().gen();
+                    let game_id = u32::from(rand::thread_rng().gen::<u16>());
                     if let dashmap::mapref::entry::Entry::Vacant(entry) =
                         global_state.games.entry(game_id)
                     {

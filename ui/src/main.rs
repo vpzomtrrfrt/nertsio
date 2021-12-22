@@ -27,6 +27,7 @@ const OTHER_CURSOR_SIZE: f32 = 4.0;
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
 const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
+// const COORDINATOR_URL: &str = "http://localhost:6462/";
 
 fn default_name() -> String {
     "Nerter".to_owned()
@@ -99,12 +100,12 @@ fn parse_full_game_id_str(src: &str) -> Result<(u8, u32), lexical::Error> {
         &lexical::parse_integer_options::Options::default(),
     )?;
 
-    Ok(((result >> 32) as u8, (result & (u32::MAX as u64)) as u32))
+    Ok(((result & (u8::MAX as u64)) as u8, (result >> 8) as u32))
 }
 
 fn to_full_game_id_str(server_id: u8, game_id: u32) -> String {
     lexical::to_string_with_options::<_, GAME_ID_FORMAT>(
-        u64::from(game_id) + (u64::from(server_id) << 32),
+        (u64::from(game_id) << 8) + u64::from(server_id),
         &lexical::write_integer_options::Options::default(),
     )
 }
