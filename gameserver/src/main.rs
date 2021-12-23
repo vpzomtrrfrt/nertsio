@@ -67,10 +67,11 @@ fn send_to_all(server_game_state: &ServerGameState, msg: ni_ty::protocol::GameMe
 }
 
 fn maybe_start_hand(server_game_state: &mut ServerGameState) {
-    if server_game_state
-        .players
-        .values()
-        .all(|player| player.ready)
+    if server_game_state.hand.is_none()
+        && server_game_state
+            .players
+            .values()
+            .all(|player| player.ready)
     {
         // all ready, start hand
 
