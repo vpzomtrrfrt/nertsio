@@ -205,6 +205,11 @@ impl Stack {
     pub fn cards(&self) -> &[CardInstance] {
         &self.cards
     }
+
+    pub fn shuffle(&mut self, rng: &mut impl rand::Rng) {
+        use rand::seq::SliceRandom;
+        self.cards.shuffle(rng);
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -313,6 +318,9 @@ pub enum StackLocation {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum HandAction {
+    ShuffleStock {
+        seed: u64,
+    },
     FlipStock,
     ReturnStock,
     Move {
@@ -320,6 +328,24 @@ pub enum HandAction {
         count: u8,
         to: StackLocation,
     },
+}
+
+impl HandAction {
+    pub fn should_reset_stall(&self) -> bool {
+        match self {
+            HandAction::FlipStock | HandAction::ReturnStock => false,
+            HandAction::ShuffleStock { .. } => true,
+            HandAction::Move { from, count: _, to } => {
+                if matches!(from, StackLocation::Player(_, PlayerStackLocation::Nerts)) {
+                    true
+                } else if matches!(to, StackLocation::Lake(_)) {
+                    true
+                } else {
+                    false
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -349,77 +375,108 @@ impl HandState {
         }
     }
 
-    pub fn apply(&mut self, player: u8, action: HandAction) -> Result<(), CannotApplyAction> {
+    pub fn apply(
+        &mut self,
+        player: Option<u8>,
+        action: HandAction,
+    ) -> Result<(), CannotApplyAction> {
         match action {
+            HandAction::ShuffleStock { seed } => {
+                if player.is_some() {
+                    Err(CannotApplyAction) // players cannot trigger shuffle
+                } else {
+                    use rand::SeedableRng;
+
+                    let mut shuffle_rng = rand_xoshiro::Xoshiro256PlusPlus::seed_from_u64(seed);
+                    for current in &mut self.players {
+                        current.return_stock();
+                        current.stock_stack.shuffle(&mut shuffle_rng);
+                    }
+
+                    Ok(())
+                }
+            }
             HandAction::FlipStock => {
-                self.players[player as usize].flip_stock();
-                Ok(())
+                if let Some(player) = player {
+                    self.players[player as usize].flip_stock();
+                    Ok(())
+                } else {
+                    Err(CannotApplyAction)
+                }
             }
             HandAction::ReturnStock => {
-                self.players[player as usize].return_stock();
-                Ok(())
+                if let Some(player) = player {
+                    self.players[player as usize].return_stock();
+                    Ok(())
+                } else {
+                    Err(CannotApplyAction)
+                }
             }
             HandAction::Move { from, count, to } => {
-                if let StackLocation::Player(src_player, src_loc) = from {
-                    if src_player != player {
-                        return Err(CannotApplyAction);
-                    }
-
-                    (match src_loc {
-                        PlayerStackLocation::Nerts | PlayerStackLocation::Waste => {
-                            if count == 1 {
-                                Ok(())
-                            } else {
-                                Err(CannotApplyAction)
-                            }
-                        }
-                        PlayerStackLocation::Stock => Err(CannotApplyAction),
-                        PlayerStackLocation::Tableau(_) => Ok(()),
-                    })?;
-
-                    (match to {
-                        StackLocation::Player(dest_player, dest_loc) => {
-                            if dest_player == player {
-                                match dest_loc {
-                                    PlayerStackLocation::Nerts
-                                    | PlayerStackLocation::Waste
-                                    | PlayerStackLocation::Stock => Err(CannotApplyAction),
-                                    PlayerStackLocation::Tableau(_) => Ok(()),
-                                }
-                            } else {
-                                Err(CannotApplyAction)
-                            }
-                        }
-                        StackLocation::Lake(_) => Ok(()),
-                    })?;
-
-                    {
-                        let src_stack = self.players[player as usize]
-                            .stack_at(src_loc)
-                            .ok_or(CannotApplyAction)?;
-
-                        println!("src_stack = {:?}", src_stack);
-
-                        let first_card = &src_stack.cards()[src_stack.len() - count as usize];
-
-                        let dest_stack = self.stack_at(to).ok_or(CannotApplyAction)?;
-
-                        if !dest_stack.can_add(*first_card) {
+                if let Some(player) = player {
+                    if let StackLocation::Player(src_player, src_loc) = from {
+                        if src_player != player {
                             return Err(CannotApplyAction);
                         }
-                    }
 
-                    if let Some(cards) = self.players[player as usize]
-                        .mut_stack_at(src_loc)
-                        .unwrap()
-                        .pop_many(count as usize)
-                    {
-                        let dest_stack = self.mut_stack_at(to).unwrap();
-                        for card in cards {
-                            dest_stack.try_add(card).unwrap();
+                        (match src_loc {
+                            PlayerStackLocation::Nerts | PlayerStackLocation::Waste => {
+                                if count == 1 {
+                                    Ok(())
+                                } else {
+                                    Err(CannotApplyAction)
+                                }
+                            }
+                            PlayerStackLocation::Stock => Err(CannotApplyAction),
+                            PlayerStackLocation::Tableau(_) => Ok(()),
+                        })?;
+
+                        (match to {
+                            StackLocation::Player(dest_player, dest_loc) => {
+                                if dest_player == player {
+                                    match dest_loc {
+                                        PlayerStackLocation::Nerts
+                                        | PlayerStackLocation::Waste
+                                        | PlayerStackLocation::Stock => Err(CannotApplyAction),
+                                        PlayerStackLocation::Tableau(_) => Ok(()),
+                                    }
+                                } else {
+                                    Err(CannotApplyAction)
+                                }
+                            }
+                            StackLocation::Lake(_) => Ok(()),
+                        })?;
+
+                        {
+                            let src_stack = self.players[player as usize]
+                                .stack_at(src_loc)
+                                .ok_or(CannotApplyAction)?;
+
+                            println!("src_stack = {:?}", src_stack);
+
+                            let first_card = &src_stack.cards()[src_stack.len() - count as usize];
+
+                            let dest_stack = self.stack_at(to).ok_or(CannotApplyAction)?;
+
+                            if !dest_stack.can_add(*first_card) {
+                                return Err(CannotApplyAction);
+                            }
                         }
 
-                        Ok(())
+                        if let Some(cards) = self.players[player as usize]
+                            .mut_stack_at(src_loc)
+                            .unwrap()
+                            .pop_many(count as usize)
+                        {
+                            let dest_stack = self.mut_stack_at(to).unwrap();
+                            for card in cards {
+                                dest_stack.try_add(card).unwrap();
+                            }
+
+                            Ok(())
+                        } else {
+                            Err(CannotApplyAction)
+                        }
                     } else {
                         Err(CannotApplyAction)
                     }

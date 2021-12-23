@@ -65,12 +65,30 @@ impl ConnectionState {
 struct SharedInfo {
     game: ni_ty::GameState,
     my_player_id: u8,
+    server_id: u8,
+    hand_extra: Option<HandExtra>,
+}
+
+struct HandExtra {
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
-    hand_mouse_states: Option<Vec<Option<(u32, ni_ty::MouseState)>>>,
+    mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
     my_held_state: Option<ni_ty::HeldInfo>,
     last_mouse_position: Option<(f32, f32)>,
-    server_id: u8,
+    stalled: bool,
+}
+
+impl HandExtra {
+    pub fn new(player_count: usize) -> Self {
+        Self {
+            pending_actions: Default::default(),
+            self_called_nerts: false,
+            mouse_states: vec![None; player_count],
+            my_held_state: None,
+            last_mouse_position: None,
+            stalled: false,
+        }
+    }
 }
 
 enum State {
@@ -728,6 +746,8 @@ async fn main() {
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Some(shared) = (*lock).as_info_mut() {
                     if let Some(real_hand_state) = shared.game.hand.as_mut() {
+                        let hand_extra = shared.hand_extra.as_mut().unwrap();
+
                         let player_hand_width = 130.0
                             + CARD_WIDTH
                             + (real_hand_state.players()[0].tableau_stacks().len() as f32)
@@ -820,11 +840,11 @@ async fn main() {
                             let my_location = get_player_location(my_player_idx);
 
                             let mut pred_hand_state = (*real_hand_state).clone();
-                            for action in shared.pending_actions.iter() {
-                                let _ = pred_hand_state.apply(my_player_idx_u8, *action);
+                            for action in hand_extra.pending_actions.iter() {
+                                let _ = pred_hand_state.apply(Some(my_player_idx_u8), *action);
                                 // ignore error, will get cleared out eventually
                             }
-                            if shared.self_called_nerts {
+                            if hand_extra.self_called_nerts {
                                 pred_hand_state.nerts_called = true;
                             }
 
@@ -855,10 +875,10 @@ async fn main() {
                                             };
 
                                             if pred_hand_state
-                                                .apply(my_player_idx_u8, action)
+                                                .apply(Some(my_player_idx_u8), action)
                                                 .is_ok()
                                             {
-                                                shared.pending_actions.push_back(action);
+                                                hand_extra.pending_actions.push_back(action);
                                                 game_msg_send
                                                     .borrow()
                                                     .as_ref()
@@ -870,7 +890,7 @@ async fn main() {
                                                     )
                                                     .unwrap();
 
-                                                shared.my_held_state = None;
+                                                hand_extra.my_held_state = None;
                                             }
                                         }
                                     } else {
@@ -1023,7 +1043,7 @@ async fn main() {
                                         println!("click found {:?}", found);
 
                                         if let Some(found) = found {
-                                            match shared.my_held_state {
+                                            match hand_extra.my_held_state {
                                                 None => {
                                                     if mouse_pressed {
                                                         if let (
@@ -1040,7 +1060,7 @@ async fn main() {
                                                                     [stack.cards().len() - count]
                                                                     .card;
 
-                                                                shared.my_held_state =
+                                                                hand_extra.my_held_state =
                                                                     Some(ni_ty::HeldInfo {
                                                                         src,
                                                                         count: count as u8,
@@ -1062,7 +1082,7 @@ async fn main() {
                                                     let (target_loc, ..) = found;
                                                     if target_loc == src_loc {
                                                         if mouse_pressed {
-                                                            shared.my_held_state = None;
+                                                            hand_extra.my_held_state = None;
                                                         }
                                                     } else {
                                                         if matches!(
@@ -1102,18 +1122,19 @@ async fn main() {
                                                                         );
                                                                         if pred_hand_state
                                                                             .apply(
-                                                                                my_player_idx_u8,
+                                                                                Some(my_player_idx_u8),
                                                                                 action,
                                                                             )
                                                                             .is_ok()
                                                                         {
-                                                                            shared
+                                                                            hand_extra
                                                                                 .pending_actions
                                                                                 .push_back(action);
                                                                             game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
                                                                         }
 
-                                                                        shared.my_held_state = None;
+                                                                        hand_extra.my_held_state =
+                                                                            None;
                                                                     } else {
                                                                         println!(
                                                                             "can't add {:?} to {:?}",
@@ -1131,7 +1152,7 @@ async fn main() {
                                 } else if mq::is_mouse_button_pressed(mq::MouseButton::Right)
                                     || mq::is_key_pressed(mq::KeyCode::Escape)
                                 {
-                                    shared.my_held_state = None;
+                                    hand_extra.my_held_state = None;
                                 } else if mq::is_key_pressed(mq::KeyCode::Tab) {
                                     let action = if player_state.stock_stack().len() > 0 {
                                         ni_ty::HandAction::FlipStock
@@ -1139,8 +1160,11 @@ async fn main() {
                                         ni_ty::HandAction::ReturnStock
                                     };
 
-                                    if pred_hand_state.apply(my_player_idx_u8, action).is_ok() {
-                                        shared.pending_actions.push_back(action);
+                                    if pred_hand_state
+                                        .apply(Some(my_player_idx_u8), action)
+                                        .is_ok()
+                                    {
+                                        hand_extra.pending_actions.push_back(action);
                                         game_msg_send
                                             .borrow()
                                             .as_ref()
@@ -1153,12 +1177,12 @@ async fn main() {
                                             )
                                             .unwrap();
 
-                                        shared.my_held_state = None;
+                                        hand_extra.my_held_state = None;
                                     }
                                 }
                             }
 
-                            shared.last_mouse_position = Some((
+                            hand_extra.last_mouse_position = Some((
                                 mouse_pos[0] - screen_center.0,
                                 mouse_pos[1] - screen_center.1,
                             ));
@@ -1197,9 +1221,9 @@ async fn main() {
                             }
 
                             let held_state = if Some(idx) == my_player_idx {
-                                shared.my_held_state
+                                hand_extra.my_held_state
                             } else {
-                                shared.hand_mouse_states.as_ref().unwrap()[idx]
+                                hand_extra.mouse_states[idx]
                                     .as_ref()
                                     .and_then(|(_, state)| state.held)
                                     .and_then(|held| {
@@ -1254,7 +1278,7 @@ async fn main() {
                                         ),
                                         "Nerts!",
                                     ) {
-                                        shared.self_called_nerts = true;
+                                        hand_extra.self_called_nerts = true;
                                         game_msg_send
                                             .borrow()
                                             .as_ref()
@@ -1323,6 +1347,16 @@ async fn main() {
                                     stock_pos.1,
                                 );
                             }
+
+                            if hand_extra.stalled {
+                                mq::draw_text(
+                                    "Shuffling soon if game remains stalled...",
+                                    stock_pos.0,
+                                    stock_pos.1 + CARD_HEIGHT + 30.0,
+                                    30.0,
+                                    mq::BLACK,
+                                );
+                            }
                         }
 
                         if self_inverted {
@@ -1345,13 +1379,7 @@ async fn main() {
                             }
                         }
 
-                        for (idx, value) in shared
-                            .hand_mouse_states
-                            .as_ref()
-                            .unwrap()
-                            .iter()
-                            .enumerate()
-                        {
+                        for (idx, value) in hand_extra.mouse_states.iter().enumerate() {
                             if let Some((_, state)) = value {
                                 let location = get_player_location(idx);
 
@@ -1398,7 +1426,7 @@ async fn main() {
 
                         if let Some(my_player_idx) = my_player_idx {
                             let my_player_state = &pred_hand_state.players()[my_player_idx];
-                            if let Some(ref held) = shared.my_held_state {
+                            if let Some(ref held) = hand_extra.my_held_state {
                                 let stack = my_player_state.stack_at(held.src);
                                 if let Some(stack) = stack {
                                     let stack_cards = stack.cards();
@@ -1411,7 +1439,7 @@ async fn main() {
                                         mouse_pos[1] - held.offset.1,
                                     );
                                 } else {
-                                    shared.my_held_state = None;
+                                    hand_extra.my_held_state = None;
                                 }
                             }
                         }

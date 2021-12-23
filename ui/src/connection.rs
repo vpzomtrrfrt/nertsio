@@ -200,14 +200,15 @@ pub(crate) async fn handle_connection<
                     let shared = lock.as_info_mut().unwrap();
 
                     if shared.game.hand.is_some() {
-                        if let Some(mouse_pos) = shared.last_mouse_position {
+                        let hand_extra = shared.hand_extra.as_ref().unwrap();
+                        if let Some(mouse_pos) = hand_extra.last_mouse_position {
                             conn.connection.send_datagram(
                                 bincode::serialize(
                                     &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
                                         seq,
                                         state: ni_ty::MouseState {
                                             position: mouse_pos,
-                                            held: shared.my_held_state,
+                                            held: hand_extra.my_held_state,
                                         },
                                     },
                                 )
@@ -240,8 +241,9 @@ pub(crate) async fn handle_connection<
                                 let mut lock = info_mutex.lock().unwrap();
                                 let shared = (*lock).as_info_mut().unwrap();
 
-                                if let Some(hand_mouse_states) = shared.hand_mouse_states.as_mut() {
-                                    let mouse_state = &mut hand_mouse_states[player_idx as usize];
+                                if let Some(hand_extra) = shared.hand_extra.as_mut() {
+                                    let mouse_state =
+                                        &mut hand_extra.mouse_states[player_idx as usize];
                                     if match mouse_state {
                                         Some(state) => state.0 < seq,
                                         None => true,
@@ -273,16 +275,11 @@ pub(crate) async fn handle_connection<
                             } => {
                                 *info_mutex.lock().unwrap() =
                                     ConnectionState::Connected(SharedInfo {
-                                        hand_mouse_states: info
-                                            .hand
-                                            .as_ref()
-                                            .map(|hand| vec![None; hand.players().len()]),
+                                        hand_extra: info.hand.as_ref().map(|hand| {
+                                            crate::HandExtra::new(hand.players().len())
+                                        }),
                                         game: info,
                                         my_player_id: your_player_id,
-                                        pending_actions: Default::default(),
-                                        self_called_nerts: false,
-                                        my_held_state: None,
-                                        last_mouse_position: None,
                                         server_id,
                                     });
                             }
@@ -316,15 +313,16 @@ pub(crate) async fn handle_connection<
                                 let mut lock = info_mutex.lock().unwrap();
                                 let shared = (*lock).as_info_mut().unwrap();
 
-                                shared.hand_mouse_states = Some(vec![None; info.players().len()]);
+                                shared.hand_extra =
+                                    Some(crate::HandExtra::new(info.players().len()));
                                 shared.game.hand = Some(info);
-                                shared.my_held_state = None;
                             }
                             GameMessageS2C::PlayerHandAction { player, action } => {
                                 let mut lock = info_mutex.lock().unwrap();
                                 let shared = lock.as_info_mut().unwrap();
 
                                 let hand = shared.game.hand.as_mut().unwrap();
+                                let hand_extra = shared.hand_extra.as_mut().unwrap();
 
                                 if let Some(my_player_idx) = hand
                                     .players()
@@ -334,7 +332,9 @@ pub(crate) async fn handle_connection<
                                     if player == my_player_idx as u8 {
                                         // my move, check if matches expected
 
-                                        while let Some(front) = shared.pending_actions.pop_front() {
+                                        while let Some(front) =
+                                            hand_extra.pending_actions.pop_front()
+                                        {
                                             if front == action {
                                                 break;
                                             }
@@ -342,7 +342,19 @@ pub(crate) async fn handle_connection<
                                     }
                                 }
 
-                                hand.apply(player, action).unwrap();
+                                hand.apply(Some(player), action).unwrap();
+                            }
+                            GameMessageS2C::ServerHandAction { action } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand = shared.game.hand.as_mut().unwrap();
+
+                                hand.apply(None, action).unwrap();
+
+                                if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
+                                    shared.hand_extra.as_mut().unwrap().stalled = false;
+                                }
                             }
                             GameMessageS2C::NertsCalled { player: _ } => {
                                 let mut lock = info_mutex.lock().unwrap();
@@ -369,8 +381,24 @@ pub(crate) async fn handle_connection<
                                 for player in shared.game.players.values_mut() {
                                     player.ready = false;
                                 }
-                                shared.self_called_nerts = false;
-                                shared.pending_actions.clear();
+
+                                shared.hand_extra = None;
+                            }
+                            GameMessageS2C::HandStalled => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                hand_extra.stalled = true;
+                            }
+                            GameMessageS2C::HandStallCancel => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                hand_extra.stalled = false;
                             }
                         }
 

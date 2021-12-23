@@ -7,6 +7,7 @@ use std::io::Read;
 use std::sync::Arc;
 
 const MAX_PLAYERS: usize = 6;
+const STALL_SEND_COUNT: u8 = 3;
 
 struct ServerGamePlayerState {
     name: String,
@@ -19,6 +20,8 @@ struct ServerGamePlayerState {
 struct ServerHandState {
     hand: ni_ty::HandState,
     mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
+    stalled_count: u8,
+    sent_stall: bool,
 }
 
 impl ServerGamePlayerState {
@@ -75,6 +78,8 @@ fn maybe_start_hand(server_game_state: &mut ServerGameState) {
         server_game_state.hand = Some(ServerHandState {
             hand: new_hand.clone(),
             mouse_states: vec![None; new_hand.players().len()],
+            stalled_count: 0,
+            sent_stall: false,
         });
         send_to_all(
             &server_game_state,
@@ -375,12 +380,21 @@ async fn handle_connection(
 
                                     if let Some(ref mut hand_state) = server_game_state.hand {
                                         if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
-                                            match hand_state.hand.apply(player_idx as u8, action) {
+                                            match hand_state.hand.apply(Some(player_idx as u8), action) {
                                                 Err(_) => {
                                                     println!("cannot apply action {:?}", action);
                                                 }
                                                 Ok(_) => {
                                                     send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::PlayerHandAction { player: player_idx as u8, action });
+
+                                                    if action.should_reset_stall() {
+                                                        let hand_state = server_game_state.hand.as_mut().unwrap();
+                                                        hand_state.stalled_count = 0;
+                                                        if hand_state.sent_stall {
+                                                            hand_state.sent_stall = false;
+                                                            send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -590,7 +604,35 @@ async fn main() {
 
                     global_state
                         .games
-                        .retain(|_key, value| !value.players.is_empty())
+                        .retain(|_key, value| !value.players.is_empty());
+
+                    global_state.games.alter_all(|_key, mut value| {
+                        if let Some(hand) = value.hand.as_mut() {
+                            hand.stalled_count += 1;
+                            if hand.sent_stall {
+                                use rand::Rng;
+                                let seed: u64 = rand::thread_rng().gen();
+                                let action = ni_ty::HandAction::ShuffleStock { seed };
+                                hand.hand.apply(None, action).unwrap();
+                                hand.sent_stall = false;
+                                hand.stalled_count = 0;
+
+                                send_to_all(
+                                    &value,
+                                    ni_ty::protocol::GameMessageS2C::ServerHandAction { action },
+                                );
+                            } else {
+                                if hand.stalled_count >= STALL_SEND_COUNT {
+                                    hand.sent_stall = true;
+                                    send_to_all(
+                                        &value,
+                                        ni_ty::protocol::GameMessageS2C::HandStalled,
+                                    );
+                                }
+                            }
+                        }
+                        value
+                    });
                 }
             }
         },
