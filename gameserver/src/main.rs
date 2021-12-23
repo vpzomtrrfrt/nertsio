@@ -663,6 +663,27 @@ async fn main() {
                                     waiting: entry.value().hand.is_none(),
                                 })
                                 .collect(),
+                            stats: global_state.games.iter().fold(
+                                ni_ty::protocol::ServerStats {
+                                    public_games: 0,
+                                    private_games: 0,
+                                    public_game_players: 0,
+                                    private_game_players: 0,
+                                },
+                                |mut acc, entry| {
+                                    if entry.value().public {
+                                        acc.public_games += 1;
+                                        acc.public_game_players +=
+                                            entry.value().players.len() as u32;
+                                    } else {
+                                        acc.private_games += 1;
+                                        acc.private_game_players +=
+                                            entry.value().players.len() as u32;
+                                    }
+
+                                    acc
+                                },
+                            ),
                         };
 
                         if let Err(err) = redis_conn

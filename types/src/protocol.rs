@@ -91,6 +91,7 @@ pub struct ServerStatusMessage {
     pub min_protocol_version: u16,
     pub address_ipv4: std::net::SocketAddrV4,
     pub open_public_games: Vec<PublicGameInfo>,
+    pub stats: ServerStats,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -110,4 +111,12 @@ pub struct PublicGameInfoExpanded {
     pub players: u8,
     pub waiting: bool,
     pub server: ServerConnectionInfo,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ServerStats {
+    pub public_games: u32,
+    pub private_games: u32,
+    pub public_game_players: u32,
+    pub private_game_players: u32,
 }

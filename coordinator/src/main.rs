@@ -134,6 +134,32 @@ async fn handler_servers_get(
     }
 }
 
+async fn handler_stats_get(
+    _: (),
+    ctx: Arc<GlobalState>,
+    _req: hyper::Request<hyper::Body>,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    let stats = ctx.gameservers.read().unwrap().iter().fold(
+        ni_ty::protocol::ServerStats {
+            public_games: 0,
+            private_games: 0,
+            public_game_players: 0,
+            private_game_players: 0,
+        },
+        |mut acc, entry| {
+            let stats = &entry.1 .1.stats;
+            acc.public_games += stats.public_games;
+            acc.private_games += stats.private_games;
+            acc.public_game_players += stats.public_game_players;
+            acc.private_game_players += stats.private_game_players;
+
+            acc
+        },
+    );
+
+    json_response(&stats)
+}
+
 #[tokio::main]
 async fn main() {
     let addr = ([0, 0, 0, 0], 6462).into();
@@ -153,6 +179,10 @@ async fn main() {
                 RouteNode::new().with_child_parse::<u8, _>(
                     RouteNode::new().with_handler_async("GET", handler_servers_get),
                 ),
+            )
+            .with_child(
+                "stats",
+                RouteNode::new().with_handler_async("GET", handler_stats_get),
             ),
     );
 
