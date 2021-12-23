@@ -1342,7 +1342,11 @@ async fn main() {
                                 }) = held_state
                                 {
                                     if i == (stack_idx as usize) {
-                                        &cards[..(cards.len() - count as usize)]
+                                        if count as usize <= cards.len() {
+                                            &cards[..(cards.len() - count as usize)]
+                                        } else {
+                                            cards
+                                        }
                                     } else {
                                         cards
                                     }
@@ -1379,7 +1383,11 @@ async fn main() {
                                 ..
                             }) = held_state
                             {
-                                &waste_cards[..(waste_cards.len() - count as usize)]
+                                if count as usize <= waste_cards.len() {
+                                    &waste_cards[..(waste_cards.len() - count as usize)]
+                                } else {
+                                    waste_cards
+                                }
                             } else {
                                 waste_cards
                             };
@@ -1474,14 +1482,18 @@ async fn main() {
                                 let stack = my_player_state.stack_at(held.src);
                                 if let Some(stack) = stack {
                                     let stack_cards = stack.cards();
-                                    let cards =
-                                        &stack_cards[(stack_cards.len() - held.count as usize)..];
+                                    if stack_cards.len() >= held.count as usize {
+                                        let cards = &stack_cards
+                                            [(stack_cards.len() - held.count as usize)..];
 
-                                    draw_vertical_stack_cards(
-                                        cards,
-                                        mouse_pos[0] - held.offset.0,
-                                        mouse_pos[1] - held.offset.1,
-                                    );
+                                        draw_vertical_stack_cards(
+                                            cards,
+                                            mouse_pos[0] - held.offset.0,
+                                            mouse_pos[1] - held.offset.1,
+                                        );
+                                    } else {
+                                        hand_extra.my_held_state = None;
+                                    }
                                 } else {
                                     hand_extra.my_held_state = None;
                                 }
