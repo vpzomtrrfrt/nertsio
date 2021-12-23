@@ -11,7 +11,7 @@ fn main() {
 
     for (name, size) in [
         ("cards", (1700, 770)),
-        ("backs", (140, 200)),
+        ("backs", (270, 200)),
         ("placeholder", (140, 200)),
     ] {
         let content = std::fs::read(format!("res/{}.svg", name)).unwrap();

@@ -15,6 +15,25 @@ use connection::ConnectionMessage;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 
+const PLAYER_COLORS: [mq::Color; 16] = [
+    mq::Color::new(1.0, 0.0, 0.0, 1.0),
+    mq::Color::new(1.0, 0.3, 0.0, 1.0),
+    mq::Color::new(1.0, 0.7, 0.0, 1.0),
+    mq::Color::new(0.9, 1.0, 0.0, 1.0),
+    mq::Color::new(0.6, 1.0, 0.0, 1.0),
+    mq::Color::new(0.2, 1.0, 0.0, 1.0),
+    mq::Color::new(0.0, 1.0, 0.1, 1.0),
+    mq::Color::new(0.0, 1.0, 0.5, 1.0),
+    mq::Color::new(0.0, 1.0, 0.8, 1.0),
+    mq::Color::new(0.0, 0.8, 1.0, 1.0),
+    mq::Color::new(0.0, 0.5, 1.0, 1.0),
+    mq::Color::new(0.0, 0.1, 1.0, 1.0),
+    mq::Color::new(0.2, 0.0, 1.0, 1.0),
+    mq::Color::new(0.6, 0.0, 1.0, 1.0),
+    mq::Color::new(0.9, 0.0, 1.0, 1.0),
+    mq::Color::new(1.0, 0.0, 0.7, 1.0),
+];
+
 const CARD_WIDTH: f32 = 90.0;
 const CARD_HEIGHT: f32 = 135.0;
 const LAKE_SPACING: f32 = 10.0;
@@ -237,15 +256,35 @@ async fn main() {
         );
     };
 
-    let draw_back = |x: f32, y: f32| {
+    let draw_back = |x: f32, y: f32, owner_id: u8| {
+        let bg_color = PLAYER_COLORS[(owner_id >> 4) as usize];
+        let fg_color = PLAYER_COLORS[(owner_id & 0xF) as usize];
+
         mq::draw_texture_ex(
             backs_texture,
             x,
             y,
-            mq::WHITE,
+            bg_color,
             mq::DrawTextureParams {
                 source: Some(mq::Rect {
                     x: 10.0,
+                    y: 10.0,
+                    w: 120.0,
+                    h: 180.0,
+                }),
+                dest_size: Some(card_size),
+                ..Default::default()
+            },
+        );
+
+        mq::draw_texture_ex(
+            backs_texture,
+            x,
+            y,
+            fg_color,
+            mq::DrawTextureParams {
+                source: Some(mq::Rect {
+                    x: 140.0,
                     y: 10.0,
                     w: 120.0,
                     h: 180.0,
@@ -1251,7 +1290,11 @@ async fn main() {
 
                             if player_state.nerts_stack().len() > 0 {
                                 for i in 0..(player_state.nerts_stack().len() - 1) {
-                                    draw_back(position.0 + (i as f32) * 10.0, position.1);
+                                    draw_back(
+                                        position.0 + (i as f32) * 10.0,
+                                        position.1,
+                                        player_state.player_id(),
+                                    );
                                 }
                                 let card = player_state.nerts_stack().last().unwrap();
 
@@ -1319,7 +1362,7 @@ async fn main() {
 
                             let stock_pos = (position.0, position.1 + CARD_HEIGHT + 10.0);
                             if player_state.stock_stack().len() > 0 {
-                                draw_back(stock_pos.0, stock_pos.1);
+                                draw_back(stock_pos.0, stock_pos.1, player_state.player_id());
                             } else {
                                 draw_placeholder(stock_pos.0, stock_pos.1);
                             }

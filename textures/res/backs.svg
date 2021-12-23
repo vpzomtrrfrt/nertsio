@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg version="1.1" width="140" height="200" xmlns="http://www.w3.org/2000/svg">
+<svg version="1.1" width="270" height="200" xmlns="http://www.w3.org/2000/svg">
 	<g transform="translate(10, 10)">
 		<rect x="0" y="0" width="120" height="180" rx="10" ry="10" stroke="black" fill="white" />
+	</g>
+	<g transform="translate(140, 10)">
+		<path d="M 40 122 v -54 v 32 c 0 -40 40 -40 40 0 v 22" stroke="black" fill="none" stroke-width="14" />
+		<path d="M 40 120 v -50 v 30 c 0 -40 40 -40 40 0 v 20" stroke="white" fill="none" stroke-width="10" />
 	</g>
 </svg>
