@@ -960,6 +960,7 @@ async fn main() {
                                             CARD_HEIGHT,
                                         )
                                         .contains(mouse_pos)
+                                            && player_state.waste_stack().len() > 0
                                         {
                                             Some((
                                                 ni_ty::StackLocation::Player(
