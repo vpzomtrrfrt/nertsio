@@ -7,7 +7,7 @@ use std::io::Read;
 use std::sync::Arc;
 
 const MAX_PLAYERS: usize = 6;
-const STALL_SEND_COUNT: u8 = 3;
+const STALL_SEND_COUNT: u8 = 6;
 const WIN_SCORE: i32 = 100;
 
 struct ServerGamePlayerState {
