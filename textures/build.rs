@@ -13,6 +13,7 @@ fn main() {
         ("cards", (1700, 770)),
         ("backs", (270, 200)),
         ("placeholder", (140, 200)),
+        ("cursors", (40, 80)),
     ] {
         let content = std::fs::read(format!("res/{}.svg", name)).unwrap();
         let tree = usvg::Tree::from_data(&content, &usvg::Options::default().to_ref()).unwrap();

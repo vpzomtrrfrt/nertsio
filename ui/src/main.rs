@@ -41,7 +41,6 @@ const HORIZONTAL_STACK_SPACING: f32 = 10.0;
 const VERTICAL_STACK_SPACING: f32 = 20.0;
 const PLAYER_SPACING: f32 = 20.0;
 const PLAYER_Y: f32 = 200.0;
-const OTHER_CURSOR_SIZE: f32 = 4.0;
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
@@ -245,6 +244,8 @@ async fn main() {
         nertsio_textures::PLACEHOLDER,
         Some(mq::ImageFormat::Png),
     );
+    let cursors_texture =
+        mq::Texture2D::from_file_with_format(nertsio_textures::CURSORS, Some(mq::ImageFormat::Png));
 
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
@@ -1473,12 +1474,22 @@ async fn main() {
                                     }
                                 }
 
-                                mq::draw_rectangle(
-                                    screen_center.0 + state.position.0 - OTHER_CURSOR_SIZE / 2.0,
-                                    screen_center.1 + state.position.1 - OTHER_CURSOR_SIZE / 2.0,
-                                    OTHER_CURSOR_SIZE,
-                                    OTHER_CURSOR_SIZE,
-                                    mq::BLACK,
+                                mq::draw_texture_ex(
+                                    cursors_texture,
+                                    screen_center.0 + state.position.0 - 1.0,
+                                    screen_center.1 + state.position.1 - 1.0,
+                                    PLAYER_COLORS[(pred_hand_state.players()[idx].player_id() >> 4)
+                                        as usize],
+                                    mq::DrawTextureParams {
+                                        source: Some(mq::Rect {
+                                            x: 0.0,
+                                            y: 0.0,
+                                            w: 40.0,
+                                            h: 80.0,
+                                        }),
+                                        dest_size: Some(mq::Vec2::new(20.0, 40.0)),
+                                        ..Default::default()
+                                    },
                                 );
                             }
                         }
