@@ -1245,6 +1245,14 @@ async fn main() {
 
                         mq::clear_background(BACKGROUND_COLOR);
 
+                        mqui::root_ui().label(
+                            mq::Vec2::new(200.0, 10.0),
+                            &format!(
+                                "Room Code: {}",
+                                to_full_game_id_str(shared.server_id, shared.game.id),
+                            ),
+                        );
+
                         for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
                             let location = get_player_location(idx);
                             let position =
