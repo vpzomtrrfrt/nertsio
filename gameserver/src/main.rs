@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 const MAX_PLAYERS: usize = 6;
 const STALL_SEND_COUNT: u8 = 3;
+const WIN_SCORE: i32 = 100;
 
 struct ServerGamePlayerState {
     name: String,
@@ -427,9 +428,15 @@ async fn handle_connection(
                                                                 }
                                                             }
 
+                                                            let mut now_won = false;
+
                                                             hand_state.hand.players().iter().zip(scores.iter()).for_each(|(player, score)| {
                                                                 if let Some(info) = server_game_state.players.get_mut(&player.player_id()) {
                                                                     info.score += score;
+
+                                                                    if info.score >= WIN_SCORE {
+                                                                        now_won = true;
+                                                                    }
                                                                 }
                                                             });
 
@@ -438,6 +445,14 @@ async fn handle_connection(
                                                             }
 
                                                             send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::HandEnd { scores });
+
+                                                            if now_won {
+                                                                for (_, player) in &mut server_game_state.players {
+                                                                    player.score = 0;
+                                                                }
+
+                                                                send_to_all(&server_game_state, ni_ty::protocol::GameMessageS2C::GameEnd);
+                                                            }
                                                         }
                                                     }
                                                 });

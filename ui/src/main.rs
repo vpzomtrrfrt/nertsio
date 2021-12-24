@@ -86,6 +86,7 @@ struct SharedInfo {
     my_player_id: u8,
     server_id: u8,
     hand_extra: Option<HandExtra>,
+    new_end_scores: Option<Vec<(u8, i32)>>,
 }
 
 struct HandExtra {
@@ -125,6 +126,9 @@ enum State {
     GameNeutral,
     GameHand {
         my_player_idx: Option<usize>,
+    },
+    GameEnd {
+        scores: Vec<(u8, i32)>,
     },
     LostConnection {
         was_connected: bool,
@@ -711,59 +715,64 @@ async fn main() {
                 if let Some(shared) = (*lock).as_info_mut() {
                     match &shared.game.hand {
                         None => {
-                            mqui::root_ui().label(
-                                mq::Vec2::new(60.0, 100.0),
-                                &format!(
-                                    "Room Code: {}",
-                                    to_full_game_id_str(shared.server_id, shared.game.id),
-                                ),
-                            );
+                            if let Some(scores) = shared.new_end_scores.take() {
+                                State::GameEnd { scores }
+                            } else {
+                                mqui::root_ui().label(
+                                    mq::Vec2::new(60.0, 100.0),
+                                    &format!(
+                                        "Room Code: {}",
+                                        to_full_game_id_str(shared.server_id, shared.game.id),
+                                    ),
+                                );
 
-                            for (i, (key, player)) in shared.game.players.iter_mut().enumerate() {
-                                let y = 160.0 + (i as f32) * 75.0;
+                                for (i, (key, player)) in shared.game.players.iter_mut().enumerate()
+                                {
+                                    let y = 160.0 + (i as f32) * 75.0;
 
-                                mqui::root_ui()
-                                    .label(mq::Vec2::new(30.0, y), &player.score.to_string());
+                                    mqui::root_ui()
+                                        .label(mq::Vec2::new(30.0, y), &player.score.to_string());
 
-                                if *key == shared.my_player_id {
-                                    if mqui::root_ui().button(
-                                        mq::Vec2::new(150.0, y),
-                                        if player.ready { "Unready" } else { "Ready" },
-                                    ) {
-                                        let new_value = !player.ready;
-                                        player.ready = new_value;
+                                    if *key == shared.my_player_id {
+                                        if mqui::root_ui().button(
+                                            mq::Vec2::new(150.0, y),
+                                            if player.ready { "Unready" } else { "Ready" },
+                                        ) {
+                                            let new_value = !player.ready;
+                                            player.ready = new_value;
 
-                                        game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .send(
-                                                ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
-                                                    value: new_value,
-                                                }
-                                                .into(),
-                                            )
-                                            .unwrap();
+                                            game_msg_send
+                                                .borrow()
+                                                .as_ref()
+                                                .unwrap()
+                                                .send(
+                                                    ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                                        value: new_value,
+                                                    }
+                                                    .into(),
+                                                )
+                                                .unwrap();
+                                        }
+                                    } else {
+                                        mqui::root_ui().label(
+                                            mq::Vec2::new(150.0, y),
+                                            if player.ready { "Ready" } else { "Not Ready" },
+                                        );
                                     }
-                                } else {
-                                    mqui::root_ui().label(
-                                        mq::Vec2::new(150.0, y),
-                                        if player.ready { "Ready" } else { "Not Ready" },
-                                    );
+
+                                    mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
                                 }
 
-                                mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
+                                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
+                                    game_msg_send
+                                        .borrow()
+                                        .as_ref()
+                                        .unwrap()
+                                        .send(ConnectionMessage::Leave)
+                                        .unwrap();
+                                }
+                                State::GameNeutral
                             }
-
-                            if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
-                                game_msg_send
-                                    .borrow()
-                                    .as_ref()
-                                    .unwrap()
-                                    .send(ConnectionMessage::Leave)
-                                    .unwrap();
-                            }
-                            State::GameNeutral
                         }
                         Some(hand) => State::GameHand {
                             my_player_idx: hand
@@ -1529,6 +1538,60 @@ async fn main() {
                         _ => State::LostConnection {
                             was_connected: true,
                         },
+                    }
+                }
+            }
+            State::GameEnd { scores } => {
+                mq::clear_background(BACKGROUND_COLOR);
+
+                let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
+
+                let mut lock = game_info_mutex.lock().unwrap();
+                if let Some(shared) = (*lock).as_info_mut() {
+                    match &shared.game.hand {
+                        None => {
+                            let row_height = 75.0;
+
+                            let box_width = 450.0;
+                            let box_height = row_height * (scores.len() as f32);
+
+                            let box_x = screen_center.0 - box_width / 2.0;
+                            let box_y = screen_center.1 - box_height / 2.0;
+
+                            for (i, (player_id, score)) in scores.iter().enumerate() {
+                                let y = box_y + (i as f32) * row_height;
+
+                                mqui::root_ui().label(mq::Vec2::new(box_x, y), &score.to_string());
+
+                                if let Some(player) = shared.game.players.get(&player_id) {
+                                    mqui::root_ui()
+                                        .label(mq::Vec2::new(box_x + 150.0, y), &player.name);
+                                }
+                            }
+
+                            if mqui::widgets::Button::new("Continue")
+                                .position(mq::Vec2::new(
+                                    screen_center.0 - 150.0,
+                                    box_y + box_height + 50.0,
+                                ))
+                                .size(mq::Vec2::new(300.0, 50.0))
+                                .ui(&mut mqui::root_ui())
+                            {
+                                State::GameNeutral
+                            } else {
+                                State::GameEnd { scores }
+                            }
+                        }
+                        Some(hand) => State::GameHand {
+                            my_player_idx: hand
+                                .players()
+                                .iter()
+                                .position(|player| player.player_id() == shared.my_player_id),
+                        },
+                    }
+                } else {
+                    State::LostConnection {
+                        was_connected: true,
                     }
                 }
             }

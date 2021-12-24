@@ -281,6 +281,7 @@ pub(crate) async fn handle_connection<
                                         game: info,
                                         my_player_id: your_player_id,
                                         server_id,
+                                        new_end_scores: None,
                                     });
                             }
                             GameMessageS2C::PlayerJoin { id, info } => {
@@ -399,6 +400,26 @@ pub(crate) async fn handle_connection<
                                 let hand_extra = shared.hand_extra.as_mut().unwrap();
 
                                 hand_extra.stalled = false;
+                            }
+                            GameMessageS2C::GameEnd => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                let mut scores: Vec<_> = shared
+                                    .game
+                                    .players
+                                    .iter_mut()
+                                    .map(|(key, player)| {
+                                        let score = player.score;
+                                        player.score = 0;
+
+                                        (*key, score)
+                                    })
+                                    .collect();
+
+                                scores.sort_by_key(|x| -x.1);
+
+                                shared.new_end_scores = Some(scores);
                             }
                         }
 
