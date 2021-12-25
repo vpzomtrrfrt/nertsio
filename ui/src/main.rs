@@ -1263,7 +1263,11 @@ async fn main() {
                             {
                                 draw_text_centered(
                                     &player.name,
-                                    position.0 + player_hand_width / 2.0,
+                                    if location.1 == self_inverted {
+                                        position.0 + player_hand_width / 2.0
+                                    } else {
+                                        screen_center.0 - location.0 - player_hand_width / 2.0
+                                    },
                                     if location.1 == self_inverted {
                                         position.1 - 20.0
                                     } else {
