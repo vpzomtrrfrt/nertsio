@@ -239,16 +239,16 @@ pub(crate) async fn handle_connection<
                                 state,
                             } => {
                                 let mut lock = info_mutex.lock().unwrap();
-                                let shared = (*lock).as_info_mut().unwrap();
-
-                                if let Some(hand_extra) = shared.hand_extra.as_mut() {
-                                    let mouse_state =
-                                        &mut hand_extra.mouse_states[player_idx as usize];
-                                    if match mouse_state {
-                                        Some(state) => state.0 < seq,
-                                        None => true,
-                                    } {
-                                        *mouse_state = Some((seq, state));
+                                if let Some(shared) = (*lock).as_info_mut() {
+                                    if let Some(hand_extra) = shared.hand_extra.as_mut() {
+                                        let mouse_state =
+                                            &mut hand_extra.mouse_states[player_idx as usize];
+                                        if match mouse_state {
+                                            Some(state) => state.0 < seq,
+                                            None => true,
+                                        } {
+                                            *mouse_state = Some((seq, state));
+                                        }
                                     }
                                 }
                             }
