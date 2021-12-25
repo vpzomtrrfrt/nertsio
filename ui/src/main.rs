@@ -14,6 +14,8 @@ mod connection;
 use connection::ConnectionMessage;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
+const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
+const NERTS_TEXT_COLOR: mq::Color = mq::Color::new(0.0, 0.0, 1.0, 1.0);
 
 const PLAYER_COLORS: [mq::Color; 16] = [
     mq::Color::new(1.0, 0.0, 0.0, 1.0),
@@ -1533,12 +1535,20 @@ async fn main() {
                         }
 
                         if pred_hand_state.nerts_called {
+                            mq::draw_rectangle(
+                                0.0,
+                                screen_center.1 - 70.0,
+                                screen_size.0,
+                                140.0,
+                                NERTS_OVERLAY_COLOR,
+                            );
+
                             draw_text_centered(
                                 "Nerts!",
                                 screen_center.0,
                                 screen_center.1,
                                 100,
-                                mq::BLACK,
+                                NERTS_TEXT_COLOR,
                             );
                         }
 
