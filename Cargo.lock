@@ -836,7 +836,7 @@ dependencies = [
 [[package]]
 name = "macroquad"
 version = "0.3.13"
-source = "git+https://github.com/not-fl3/macroquad?rev=cae8d5#cae8d5c0d2e79cf984938af786992f486e7852f4"
+source = "git+https://github.com/vpzomtrrfrt/macroquad?rev=f8d4039#f8d40397143628d15dd1cdd51ca9a70749fc5c1d"
 dependencies = [
  "bumpalo",
  "fontdue",
@@ -851,7 +851,7 @@ dependencies = [
 [[package]]
 name = "macroquad_macro"
 version = "0.1.7"
-source = "git+https://github.com/not-fl3/macroquad?rev=cae8d5#cae8d5c0d2e79cf984938af786992f486e7852f4"
+source = "git+https://github.com/vpzomtrrfrt/macroquad?rev=f8d4039#f8d40397143628d15dd1cdd51ca9a70749fc5c1d"
 
 [[package]]
 name = "matches"

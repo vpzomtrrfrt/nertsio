@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 nertsio_textures = { path = "../textures" }
 nertsio_types = { path = "../types" }
-macroquad = { git = "https://github.com/not-fl3/macroquad", rev = "cae8d5" }
+macroquad = { git = "https://github.com/vpzomtrrfrt/macroquad", rev = "f8d4039" }
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }
 async-bincode = "0.6.1"
 quinn = "0.8.0"
