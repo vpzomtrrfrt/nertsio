@@ -43,4 +43,38 @@ fn main() {
         )
         .unwrap();
     }
+
+    {
+        let content = std::fs::read("res/icon.svg").unwrap();
+        let tree = usvg::Tree::from_data(&content, &usvg::Options::default().to_ref()).unwrap();
+
+        for size in [16, 32, 64] {
+            let mut pixmap = tiny_skia::Pixmap::new(size, size).unwrap();
+            resvg::render(
+                &tree,
+                usvg::FitTo::Size(pixmap.width(), pixmap.height()),
+                pixmap.as_mut(),
+            )
+            .unwrap();
+
+            let bytes = pixmap.data();
+            std::fs::write(
+                format!(
+                    "{}{}icon-{}",
+                    std::env::var("OUT_DIR").unwrap(),
+                    std::path::MAIN_SEPARATOR,
+                    size,
+                ),
+                bytes,
+            )
+            .unwrap();
+
+            writeln!(
+                mod_output,
+                "pub const ICON_PIXELS_{0}: &[u8] = include_bytes!(\"icon-{0}\");",
+                size,
+            )
+            .unwrap();
+        }
+    }
 }

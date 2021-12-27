@@ -232,7 +232,19 @@ async fn run_settings_save_loop(
     }
 }
 
-#[macroquad::main("nertsio")]
+fn get_window_conf() -> mq::Conf {
+    mq::Conf {
+        window_title: "nertsio".to_owned(),
+        icon: Some(macroquad::miniquad::conf::Icon {
+            small: nertsio_textures::ICON_PIXELS_16.try_into().unwrap(),
+            medium: nertsio_textures::ICON_PIXELS_32.try_into().unwrap(),
+            big: nertsio_textures::ICON_PIXELS_64.try_into().unwrap(),
+        }),
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(get_window_conf)]
 async fn main() {
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
