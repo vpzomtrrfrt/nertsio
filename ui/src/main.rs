@@ -741,8 +741,16 @@ async fn main() {
                                     ),
                                 );
 
-                                for (i, (key, player)) in shared.game.players.iter_mut().enumerate()
-                                {
+                                let sorted = {
+                                    let mut result: Vec<u8> =
+                                        shared.game.players.keys().copied().collect();
+                                    result.sort_by_key(|key| -shared.game.players[key].score);
+                                    result
+                                };
+
+                                for (i, key) in sorted.iter().enumerate() {
+                                    let player = shared.game.players.get_mut(key).unwrap();
+
                                     let y = 160.0 + (i as f32) * 75.0;
 
                                     mqui::root_ui()
