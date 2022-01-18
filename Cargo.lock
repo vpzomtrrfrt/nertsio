@@ -1048,11 +1048,19 @@ dependencies = [
  "macroquad",
  "nertsio_textures",
  "nertsio_types",
+ "nertsio_ui_metrics",
  "quinn",
  "rustls",
  "serde",
  "serde_json",
  "tokio 1.14.0",
+]
+
+[[package]]
+name = "nertsio_ui_metrics"
+version = "0.1.0"
+dependencies = [
+ "nertsio_types",
 ]
 
 [[package]]

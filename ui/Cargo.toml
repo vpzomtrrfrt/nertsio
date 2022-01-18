@@ -21,3 +21,4 @@ hyper = { version = "0.14.15", features = ["client", "http1", "tcp"] }
 serde_json = "1.0.72"
 serde = "1.0.131"
 dirs = "4.0.0"
+nertsio_ui_metrics = { path = "../ui_metrics" }

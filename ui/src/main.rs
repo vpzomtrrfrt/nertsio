@@ -2,6 +2,7 @@ use futures_util::FutureExt;
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
+use nertsio_ui_metrics as metrics;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -35,14 +36,6 @@ const PLAYER_COLORS: [mq::Color; 16] = [
     mq::Color::new(0.9, 0.0, 1.0, 1.0),
     mq::Color::new(1.0, 0.0, 0.7, 1.0),
 ];
-
-const CARD_WIDTH: f32 = 90.0;
-const CARD_HEIGHT: f32 = 135.0;
-const LAKE_SPACING: f32 = 10.0;
-const HORIZONTAL_STACK_SPACING: f32 = 10.0;
-const VERTICAL_STACK_SPACING: f32 = 20.0;
-const PLAYER_SPACING: f32 = 20.0;
-const PLAYER_Y: f32 = 200.0;
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
@@ -248,7 +241,7 @@ fn get_window_conf() -> mq::Conf {
 async fn main() {
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
-    let card_size = mq::Vec2::new(CARD_WIDTH, CARD_HEIGHT);
+    let card_size = mq::Vec2::new(metrics::CARD_WIDTH, metrics::CARD_HEIGHT);
 
     let cards_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::CARDS, Some(mq::ImageFormat::Png));
@@ -338,7 +331,11 @@ async fn main() {
             draw_placeholder(x, y);
         } else {
             for (i, card) in cards.iter().enumerate() {
-                draw_card(card.card, x, y + (i as f32) * VERTICAL_STACK_SPACING);
+                draw_card(
+                    card.card,
+                    x,
+                    y + (i as f32) * metrics::VERTICAL_STACK_SPACING,
+                );
             }
         }
     };
@@ -363,7 +360,11 @@ async fn main() {
             );
         } else {
             for (i, card) in cards.iter().enumerate() {
-                draw_card(card.card, x + (i as f32) * HORIZONTAL_STACK_SPACING, y);
+                draw_card(
+                    card.card,
+                    x + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                    y,
+                );
             }
         }
     };
@@ -819,30 +820,14 @@ async fn main() {
                     if let Some(real_hand_state) = shared.game.hand.as_mut() {
                         let hand_extra = shared.hand_extra.as_mut().unwrap();
 
-                        let player_hand_width = 130.0
-                            + CARD_WIDTH
-                            + (real_hand_state.players()[0].tableau_stacks().len() as f32)
-                                * (CARD_WIDTH + 10.0);
+                        let metrics = metrics::HandMetrics::new(
+                            real_hand_state.players().len(),
+                            real_hand_state.players()[0].tableau_stacks().len(),
+                            real_hand_state.lake_stacks().len(),
+                        );
 
-                        let lake_width = ((real_hand_state.lake_stacks().len() as f32)
-                            * CARD_WIDTH)
-                            + ((real_hand_state.lake_stacks().len() - 1) as f32) * LAKE_SPACING;
-
-                        let player_count = real_hand_state.players().len();
-                        let min_side_player_count = player_count / 2;
-
-                        let max_side_player_count = if player_count % 2 == 0 {
-                            min_side_player_count
-                        } else {
-                            min_side_player_count + 1
-                        };
-
-                        let max_side_width = player_hand_width * (max_side_player_count as f32)
-                            + PLAYER_SPACING * ((max_side_player_count - 1) as f32);
-
-                        let needed_screen_width = lake_width.max(max_side_width);
-                        let needed_screen_height =
-                            (PLAYER_Y + CARD_HEIGHT + 10.0 + CARD_HEIGHT) * 2.0;
+                        let needed_screen_width = metrics.needed_screen_width();
+                        let needed_screen_height = metrics.needed_screen_height();
 
                         let real_screen_size = (mq::screen_width(), mq::screen_height());
                         let screen_size = if real_screen_size.0 > needed_screen_width * 2.0
@@ -873,30 +858,6 @@ async fn main() {
 
                         let screen_center = (screen_size.0 / 2.0, screen_size.1 / 2.0);
 
-                        let lake_start_x = screen_center.0 - lake_width / 2.0;
-
-                        let get_player_location = |player_idx: usize| {
-                            let inverted = player_idx >= min_side_player_count;
-                            let side_player_count = if inverted && (player_count % 2 != 0) {
-                                min_side_player_count + 1
-                            } else {
-                                min_side_player_count
-                            };
-                            let player_side_idx = if inverted {
-                                player_idx - min_side_player_count
-                            } else {
-                                player_idx
-                            };
-
-                            let side_width = (player_hand_width * (side_player_count as f32))
-                                + PLAYER_SPACING * (side_player_count - 1) as f32;
-
-                            let x = -(side_width / 2.0)
-                                + (player_hand_width + PLAYER_SPACING) * (player_side_idx as f32);
-
-                            (x, inverted)
-                        };
-
                         let mouse_pos = mq::mouse_position();
                         let mouse_pos = mq::Vec2::new(
                             mouse_pos.0 * screen_size.0 / real_screen_size.0,
@@ -908,7 +869,7 @@ async fn main() {
                         {
                             let my_player_idx_u8 = my_player_idx as u8;
 
-                            let my_location = get_player_location(my_player_idx);
+                            let my_location = metrics.player_loc(my_player_idx);
 
                             let mut pred_hand_state = (*real_hand_state).clone();
                             for action in hand_extra.pending_actions.iter() {
@@ -921,8 +882,6 @@ async fn main() {
 
                             {
                                 let player_state = &pred_hand_state.players()[my_player_idx];
-                                let my_position =
-                                    (screen_center.0 + my_location.0, screen_center.1 + PLAYER_Y);
 
                                 let mouse_pressed =
                                     mq::is_mouse_button_pressed(mq::MouseButton::Left);
@@ -930,11 +889,24 @@ async fn main() {
                                 if mouse_pressed
                                     || mq::is_mouse_button_released(mq::MouseButton::Left)
                                 {
+                                    let nerts_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
+                                        ni_ty::PlayerStackLocation::Nerts,
+                                        my_location,
+                                    )) + screen_center.into();
+                                    let stock_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
+                                        ni_ty::PlayerStackLocation::Stock,
+                                        my_location,
+                                    )) + screen_center.into();
+                                    let waste_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
+                                        ni_ty::PlayerStackLocation::Waste,
+                                        my_location,
+                                    )) + screen_center.into();
+
                                     if mq::Rect::new(
-                                        my_position.0,
-                                        my_position.1 + (CARD_HEIGHT + 10.0),
-                                        CARD_WIDTH,
-                                        CARD_HEIGHT,
+                                        stock_stack_pos[0],
+                                        stock_stack_pos[1],
+                                        metrics::CARD_WIDTH,
+                                        metrics::CARD_HEIGHT,
                                     )
                                     .contains(mouse_pos)
                                     {
@@ -967,13 +939,13 @@ async fn main() {
                                     } else {
                                         let found = if player_state.nerts_stack().len() > 0
                                             && mq::Rect::new(
-                                                my_position.0
+                                                nerts_stack_pos[0]
                                                     + ((player_state.nerts_stack().len() - 1)
                                                         as f32)
-                                                        * 10.0,
-                                                my_position.1,
-                                                CARD_WIDTH,
-                                                CARD_HEIGHT,
+                                                        * metrics::HORIZONTAL_STACK_SPACING,
+                                                nerts_stack_pos[1],
+                                                metrics::CARD_WIDTH,
+                                                metrics::CARD_HEIGHT,
                                             )
                                             .contains(mouse_pos)
                                         {
@@ -985,27 +957,28 @@ async fn main() {
                                                 1,
                                                 mouse_pos
                                                     - mq::Vec2::new(
-                                                        my_position.0
+                                                        nerts_stack_pos[0]
                                                             + ((player_state.nerts_stack().len()
                                                                 - 1)
                                                                 as f32)
-                                                                * 10.0,
-                                                        my_position.1,
+                                                                * metrics::HORIZONTAL_STACK_SPACING,
+                                                        nerts_stack_pos[1],
                                                     ),
                                             ))
                                         } else if mq::Rect::new(
-                                            lake_start_x,
-                                            screen_center.1 - CARD_HEIGHT / 2.0,
-                                            lake_width,
-                                            CARD_HEIGHT,
+                                            screen_center.0 + metrics.lake_start_x(),
+                                            screen_center.1 - metrics::CARD_HEIGHT / 2.0,
+                                            metrics.lake_width(),
+                                            metrics::CARD_HEIGHT,
                                         )
                                         .contains(mouse_pos)
                                         {
-                                            let stack_idx_for_me = ((mouse_pos[0] - lake_start_x)
-                                                / (CARD_WIDTH + LAKE_SPACING))
+                                            let stack_idx_for_me = ((mouse_pos[0]
+                                                - (screen_center.0 + metrics.lake_start_x()))
+                                                / (metrics::CARD_WIDTH + metrics::LAKE_SPACING))
                                                 as u16;
 
-                                            let stack_idx = if my_location.1 {
+                                            let stack_idx = if my_location.inverted {
                                                 (pred_hand_state.lake_stacks().len() as u16)
                                                     - stack_idx_for_me
                                                     - 1
@@ -1013,22 +986,17 @@ async fn main() {
                                                 stack_idx_for_me
                                             };
 
-                                            Some((
-                                                ni_ty::StackLocation::Lake(stack_idx),
-                                                1,
-                                                mouse_pos
-                                                    - mq::Vec2::new(
-                                                        lake_start_x
-                                                            + (CARD_WIDTH + LAKE_SPACING)
-                                                                * (stack_idx as f32),
-                                                        screen_center.1 - CARD_HEIGHT / 2.0,
-                                                    ),
-                                            ))
+                                            let loc = ni_ty::StackLocation::Lake(stack_idx);
+                                            let stack_pos = mq::Vec2::from(metrics.stack_pos(loc))
+                                                + screen_center.into();
+
+                                            Some((loc, 1, mouse_pos - stack_pos))
                                         } else if mq::Rect::new(
-                                            my_position.0 + CARD_WIDTH + 10.0,
-                                            my_position.1 + (CARD_HEIGHT + 10.0),
-                                            CARD_WIDTH + HORIZONTAL_STACK_SPACING * 2.0,
-                                            CARD_HEIGHT,
+                                            waste_stack_pos[0],
+                                            waste_stack_pos[1],
+                                            metrics::CARD_WIDTH
+                                                + metrics::HORIZONTAL_STACK_SPACING * 2.0,
+                                            metrics::CARD_HEIGHT,
                                         )
                                         .contains(mouse_pos)
                                             && player_state.waste_stack().len() > 0
@@ -1041,17 +1009,15 @@ async fn main() {
                                                 1,
                                                 mouse_pos
                                                     - mq::Vec2::new(
-                                                        my_position.0
-                                                            + CARD_WIDTH
-                                                            + 10.0
-                                                            + (HORIZONTAL_STACK_SPACING
+                                                        waste_stack_pos[0]
+                                                            + (metrics::HORIZONTAL_STACK_SPACING
                                                                 * ((player_state
                                                                     .waste_stack()
                                                                     .len()
                                                                     .min(3)
                                                                     - 1)
                                                                     as f32)),
-                                                        my_position.1 + CARD_HEIGHT + 10.0,
+                                                        waste_stack_pos[1],
                                                     ),
                                             ))
                                         } else {
@@ -1060,17 +1026,16 @@ async fn main() {
                                                 .iter()
                                                 .enumerate()
                                                 .filter_map(|(i, stack)| {
-                                                    let x = my_position.0
-                                                        + 130.0
-                                                        + CARD_WIDTH
-                                                        + (i as f32) * (CARD_WIDTH + 10.0);
+                                                    let loc = ni_ty::PlayerStackLocation::Tableau(i as u8);
+
+                                                    let stack_pos = mq::Vec2::from(metrics.player_stack_pos(loc, my_location)) + screen_center.into();
                                                     if mq::Rect::new(
-                                                        x,
-                                                        my_position.1,
-                                                        CARD_WIDTH,
-                                                        CARD_HEIGHT
+                                                        stack_pos[0],
+                                                        stack_pos[1],
+                                                        metrics::CARD_WIDTH,
+                                                        metrics::CARD_HEIGHT
                                                             + ((stack.len() as f32) - 1.0)
-                                                                * VERTICAL_STACK_SPACING,
+                                                                * metrics::VERTICAL_STACK_SPACING,
                                                     )
                                                     .contains(mouse_pos)
                                                     {
@@ -1080,8 +1045,8 @@ async fn main() {
                                                         );
                                                         if stack.len() > 0 {
                                                             let found_idx = (((mouse_pos[1]
-                                                                - my_position.1)
-                                                                / VERTICAL_STACK_SPACING)
+                                                                - stack_pos[1])
+                                                                / metrics::VERTICAL_STACK_SPACING)
                                                                 as usize)
                                                                 .min(stack.len() - 1);
 
@@ -1090,17 +1055,17 @@ async fn main() {
                                                                 stack.len() - found_idx,
                                                                 mouse_pos
                                                                     - mq::Vec2::new(
-                                                                        x,
-                                                                        my_position.1
+                                                                        stack_pos[0],
+                                                                        stack_pos[1]
                                                                             + ((found_idx as f32)
-                                                                                * VERTICAL_STACK_SPACING),
+                                                                                * metrics::VERTICAL_STACK_SPACING),
                                                                     ),
                                                             ))
                                                         } else {
                                                             Some((
                                                                 loc,
                                                                 0,
-                                                                mouse_pos - mq::Vec2::new(x, my_position.1),
+                                                                mouse_pos - mq::Vec2::from(stack_pos),
                                                             ))
                                                         }
                                                     } else {
@@ -1259,7 +1224,7 @@ async fn main() {
                                 mouse_pos[1] - screen_center.1,
                             ));
 
-                            (Cow::Owned(pred_hand_state), my_location.1)
+                            (Cow::Owned(pred_hand_state), my_location.inverted)
                         } else {
                             (Cow::Borrowed(shared.game.hand.as_ref().unwrap()), false)
                         };
@@ -1276,31 +1241,32 @@ async fn main() {
                         );
 
                         for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
-                            let location = get_player_location(idx);
-                            let position =
-                                (screen_center.0 + location.0, screen_center.1 + PLAYER_Y);
+                            let location = metrics.player_loc(idx);
+                            let position = mq::Vec2::from(location.pos()) + screen_center.into();
 
                             mq::set_camera(&normal_camera);
                             if let Some(player) = shared.game.players.get(&player_state.player_id())
                             {
                                 draw_text_centered(
                                     &player.name,
-                                    if location.1 == self_inverted {
-                                        position.0 + player_hand_width / 2.0
+                                    if location.inverted == self_inverted {
+                                        position[0] + metrics.player_hand_width() / 2.0
                                     } else {
-                                        screen_center.0 - location.0 - player_hand_width / 2.0
+                                        screen_center.0
+                                            - location.x
+                                            - metrics.player_hand_width() / 2.0
                                     },
-                                    if location.1 == self_inverted {
-                                        position.1 - 20.0
+                                    if location.inverted == self_inverted {
+                                        position[1] - 20.0
                                     } else {
-                                        screen_center.1 - PLAYER_Y + 20.0
+                                        screen_center.1 - metrics::PLAYER_Y + 20.0
                                     },
                                     40,
                                     mq::BLACK,
                                 );
                             }
 
-                            if location.1 != self_inverted {
+                            if location.inverted != self_inverted {
                                 mq::set_camera(&inverted_camera);
                             }
 
@@ -1333,10 +1299,17 @@ async fn main() {
                             };
 
                             if player_state.nerts_stack().len() > 0 {
+                                let nerts_stack_pos =
+                                    mq::Vec2::from(metrics.player_stack_pos(
+                                        ni_ty::PlayerStackLocation::Nerts,
+                                        location,
+                                    )) + screen_center.into();
+
                                 for i in 0..(player_state.nerts_stack().len() - 1) {
                                     draw_back(
-                                        position.0 + (i as f32) * 10.0,
-                                        position.1,
+                                        nerts_stack_pos[0]
+                                            + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                                        nerts_stack_pos[1],
                                         player_state.player_id(),
                                     );
                                 }
@@ -1351,18 +1324,18 @@ async fn main() {
                                 ) {
                                     draw_card(
                                         card.card,
-                                        position.0
+                                        nerts_stack_pos[0]
                                             + ((player_state.nerts_stack().len() - 1) as f32)
-                                                * 10.0,
-                                        position.1,
+                                                * metrics::HORIZONTAL_STACK_SPACING,
+                                        nerts_stack_pos[1],
                                     );
                                 }
                             } else {
                                 if Some(idx) == my_player_idx {
                                     if mqui::root_ui().button(
                                         mq::Vec2::new(
-                                            (position.0 + CARD_WIDTH / 2.0) * scale,
-                                            (position.1 + CARD_HEIGHT / 2.0) * scale,
+                                            (position[0] + metrics::CARD_WIDTH / 2.0) * scale,
+                                            (position[1] + metrics::CARD_HEIGHT / 2.0) * scale,
                                         ),
                                         "Nerts!",
                                     ) {
@@ -1398,21 +1371,21 @@ async fn main() {
                                     cards
                                 };
 
-                                draw_vertical_stack_cards(
-                                    cards,
-                                    position.0
-                                        + 130.0
-                                        + CARD_WIDTH
-                                        + (i as f32) * (CARD_WIDTH + 10.0),
-                                    position.1,
-                                );
+                                let loc = ni_ty::PlayerStackLocation::Tableau(i as u8);
+                                let pos = mq::Vec2::from(metrics.player_stack_pos(loc, location))
+                                    + mq::Vec2::from(screen_center);
+
+                                draw_vertical_stack_cards(cards, pos[0], pos[1]);
                             }
 
-                            let stock_pos = (position.0, position.1 + CARD_HEIGHT + 10.0);
+                            let stock_pos = mq::Vec2::from(
+                                metrics
+                                    .player_stack_pos(ni_ty::PlayerStackLocation::Stock, location),
+                            ) + screen_center.into();
                             if player_state.stock_stack().len() > 0 {
-                                draw_back(stock_pos.0, stock_pos.1, player_state.player_id());
+                                draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
                             } else {
-                                draw_placeholder(stock_pos.0, stock_pos.1);
+                                draw_placeholder(stock_pos[0], stock_pos[1]);
                             }
 
                             let waste_cards = player_state.waste_stack().cards();
@@ -1437,18 +1410,24 @@ async fn main() {
                             };
 
                             if waste_cards.len() > 0 {
+                                let waste_pos =
+                                    mq::Vec2::from(metrics.player_stack_pos(
+                                        ni_ty::PlayerStackLocation::Waste,
+                                        location,
+                                    )) + screen_center.into();
+
                                 draw_horizontal_stack_cards(
                                     waste_cards,
-                                    stock_pos.0 + CARD_WIDTH + 10.0,
-                                    stock_pos.1,
+                                    waste_pos[0],
+                                    waste_pos[1],
                                 );
                             }
 
                             if hand_extra.stalled {
                                 mq::draw_text(
                                     "Shuffling soon if game remains stalled...",
-                                    stock_pos.0,
-                                    stock_pos.1 + CARD_HEIGHT + 30.0,
+                                    stock_pos[0],
+                                    stock_pos[1] + metrics::CARD_HEIGHT + 30.0,
                                     30.0,
                                     mq::BLACK,
                                 );
@@ -1462,24 +1441,24 @@ async fn main() {
                         }
 
                         for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
-                            let x = lake_start_x + (i as f32) * (CARD_WIDTH + LAKE_SPACING);
-                            let y = screen_center.1 - CARD_HEIGHT / 2.0;
+                            let loc = ni_ty::StackLocation::Lake(i as u16);
+                            let pos = mq::Vec2::from(metrics.stack_pos(loc)) + screen_center.into();
 
                             match stack.cards().last() {
                                 None => {
-                                    draw_placeholder(x, y);
+                                    draw_placeholder(pos[0], pos[1]);
                                 }
                                 Some(card) => {
-                                    draw_card(card.card, x, y);
+                                    draw_card(card.card, pos[0], pos[1]);
                                 }
                             }
                         }
 
                         for (idx, value) in hand_extra.mouse_states.iter().enumerate() {
                             if let Some((_, state)) = value {
-                                let location = get_player_location(idx);
+                                let location = metrics.player_loc(idx);
 
-                                if location.1 != self_inverted {
+                                if location.inverted != self_inverted {
                                     mq::set_camera(&inverted_camera);
                                 } else {
                                     mq::set_camera(&normal_camera);
