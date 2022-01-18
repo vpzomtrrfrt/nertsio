@@ -39,6 +39,7 @@ struct ServerGameState {
     players: HashMap<u8, ServerGamePlayerState>,
     hand: Option<ServerHandState>,
     public: bool,
+    master_player: Option<u8>,
 }
 
 impl ServerGameState {
@@ -47,6 +48,7 @@ impl ServerGameState {
             players: Default::default(),
             hand: None,
             public,
+            master_player: None,
         }
     }
 }
@@ -184,6 +186,16 @@ async fn handle_connection(
             }
         };
 
+        let master_player = match server_game_state.master_player {
+            Some(master) => master,
+            None => {
+                assert_eq!(server_game_state.players.len(), 1);
+
+                server_game_state.master_player = Some(player_id);
+                player_id
+            }
+        };
+
         let game_state = ni_ty::GameState {
             id: game_id,
             players: server_game_state
@@ -195,6 +207,7 @@ async fn handle_connection(
                 .hand
                 .as_ref()
                 .map(|hand| hand.hand.clone()),
+            master_player,
         };
 
         (player_id, game_state, game_id)
@@ -488,6 +501,20 @@ async fn handle_connection(
         &server_game_state,
         ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player_id },
     );
+
+    if Some(player_id) == server_game_state.master_player {
+        // master left, need to assign a new one
+
+        let new_master = server_game_state.players.keys().next().copied();
+        server_game_state.master_player = new_master;
+        if let Some(new_master) = new_master {
+            send_to_others(
+                &server_game_state,
+                ni_ty::protocol::GameMessageS2C::NewMasterPlayer { player: new_master },
+            );
+        }
+    }
+
     maybe_start_hand(&mut server_game_state);
 
     res

@@ -39,8 +39,8 @@ const PLAYER_COLORS: [mq::Color; 16] = [
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
-const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
-// const COORDINATOR_URL: &str = "http://localhost:6462/";
+// const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
+const COORDINATOR_URL: &str = "http://localhost:6462/";
 
 fn default_name() -> String {
     "Nerter".to_owned()
@@ -784,6 +784,9 @@ async fn main() {
                                         );
                                     }
 
+                                    if shared.game.master_player == *key {
+                                        mq::draw_poly(430.0, y + 35.0, 4, 15.0, 0.0, mq::YELLOW);
+                                    }
                                     mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
                                 }
 
@@ -1247,20 +1250,38 @@ async fn main() {
                             mq::set_camera(&normal_camera);
                             if let Some(player) = shared.game.players.get(&player_state.player_id())
                             {
-                                draw_text_centered(
-                                    &player.name,
-                                    if location.inverted == self_inverted {
-                                        position[0] + metrics.player_hand_width() / 2.0
-                                    } else {
+                                let name_pos = if location.inverted == self_inverted {
+                                    (
+                                        position[0] + metrics.player_hand_width() / 2.0,
+                                        position[1] - 20.0,
+                                    )
+                                } else {
+                                    (
                                         screen_center.0
                                             - location.x
-                                            - metrics.player_hand_width() / 2.0
-                                    },
-                                    if location.inverted == self_inverted {
-                                        position[1] - 20.0
-                                    } else {
-                                        screen_center.1 - metrics::PLAYER_Y + 20.0
-                                    },
+                                            - metrics.player_hand_width() / 2.0,
+                                        screen_center.1 - metrics::PLAYER_Y + 20.0,
+                                    )
+                                };
+
+                                if shared.game.master_player == player_state.player_id() {
+                                    mq::draw_poly(
+                                        name_pos.0,
+                                        if location.inverted == self_inverted {
+                                            name_pos.1 - 20.0
+                                        } else {
+                                            name_pos.1 + 20.0
+                                        },
+                                        4,
+                                        10.0,
+                                        0.0,
+                                        mq::YELLOW,
+                                    );
+                                }
+                                draw_text_centered(
+                                    &player.name,
+                                    name_pos.0,
+                                    name_pos.1,
                                     40,
                                     mq::BLACK,
                                 );

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 3;
+pub const PROTOCOL_VERSION: u16 = 4;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum HandshakeMessageC2S {
@@ -62,6 +62,9 @@ pub enum GameMessageS2C {
         action: crate::HandAction,
     },
     GameEnd,
+    NewMasterPlayer {
+        player: u8,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -421,6 +421,12 @@ pub(crate) async fn handle_connection<
 
                                 shared.new_end_scores = Some(scores);
                             }
+                            GameMessageS2C::NewMasterPlayer { player } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+
+                                shared.game.master_player = player;
+                            }
                         }
 
                         Ok(())

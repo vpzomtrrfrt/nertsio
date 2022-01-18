@@ -527,6 +527,7 @@ pub struct GameState {
     pub id: u32,
     pub players: BTreeMap<u8, GamePlayerState>,
     pub hand: Option<HandState>,
+    pub master_player: u8,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
