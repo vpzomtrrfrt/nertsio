@@ -9,13 +9,27 @@ use std::sync::Arc;
 const MAX_PLAYERS: usize = 6;
 const STALL_SEND_COUNT: u8 = 6;
 const WIN_SCORE: i32 = 100;
+const BOT_CURSOR_SPEED: f32 = 2.0;
+
+enum PlayerController {
+    Network {
+        game_stream_send_channel:
+            tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
+        connection: quinn::Connection,
+    },
+    Bot {
+        mouse_state: ni_ty::MouseState,
+        plan: Option<ni_ty::HandAction>,
+        target: (f32, f32),
+        seq: u32,
+    },
+}
 
 struct ServerGamePlayerState {
     name: String,
-    game_stream_send_channel: tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
     ready: bool,
     score: i32,
-    connection: quinn::Connection,
+    controller: PlayerController,
 }
 
 struct ServerHandState {
@@ -59,12 +73,15 @@ struct GlobalState {
 
 fn send_to_all(server_game_state: &ServerGameState, msg: ni_ty::protocol::GameMessageS2C) {
     for (id, server_player_state) in &server_game_state.players {
-        println!("sending {:?} to {}", msg, id);
-        if let Err(err) = server_player_state
-            .game_stream_send_channel
-            .send(msg.clone())
+        if let PlayerController::Network {
+            ref game_stream_send_channel,
+            ..
+        } = server_player_state.controller
         {
-            eprintln!("Failed to queue update to player: {:?}", err);
+            println!("sending {:?} to {}", msg, id);
+            if let Err(err) = game_stream_send_channel.send(msg.clone()) {
+                eprintln!("Failed to queue update to player: {:?}", err);
+            }
         }
     }
 }
@@ -175,10 +192,12 @@ async fn handle_connection(
                     player_id,
                     ServerGamePlayerState {
                         name,
-                        game_stream_send_channel: game_stream_send_channel_send,
                         ready: false,
                         score: 0,
-                        connection: connection.connection.clone(),
+                        controller: PlayerController::Network {
+                            game_stream_send_channel: game_stream_send_channel_send,
+                            connection: connection.connection.clone(),
+                        },
                     },
                 );
 
@@ -217,12 +236,15 @@ async fn handle_connection(
                                msg: ni_ty::protocol::GameMessageS2C| {
         for (id, server_player_state) in &server_game_state.players {
             if *id != player_id {
-                println!("sending {:?} to {}", msg, id);
-                if let Err(err) = server_player_state
-                    .game_stream_send_channel
-                    .send(msg.clone())
+                if let PlayerController::Network {
+                    ref game_stream_send_channel,
+                    ..
+                } = server_player_state.controller
                 {
-                    eprintln!("Failed to queue update to player: {:?}", err);
+                    println!("sending {:?} to {}", msg, id);
+                    if let Err(err) = game_stream_send_channel.send(msg.clone()) {
+                        eprintln!("Failed to queue update to player: {:?}", err);
+                    }
                 }
             }
         }
@@ -334,9 +356,11 @@ async fn handle_connection(
 
                                             for (id, server_player_state) in &server_game_state.players {
                                                 if *id != player_id {
-                                                    if let Err(err) = server_player_state.connection.send_datagram(out_msg.clone())
-                                                    {
-                                                        eprintln!("Failed to queue update to player: {:?}", err);
+                                                    if let PlayerController::Network { ref connection, .. } = server_player_state.controller {
+                                                        if let Err(err) = connection.send_datagram(out_msg.clone())
+                                                        {
+                                                            eprintln!("Failed to queue update to player: {:?}", err);
+                                                        }
                                                     }
                                                 }
                                             }
@@ -471,6 +495,53 @@ async fn handle_connection(
                                                 });
                                             }
                                         }
+                                    }
+                                }
+                                GameMessageC2S::AddBot => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if server_game_state.master_player == Some(player_id) {
+                                        let bot_id = loop {
+                                            let bot_id = rand::thread_rng().gen();
+                                            if !server_game_state.players.contains_key(&bot_id) {
+                                                let bot_name = format!("Bot {}", bot_id);
+
+                                                server_game_state.players.insert(
+                                                    bot_id,
+                                                    ServerGamePlayerState {
+                                                        name: bot_name,
+                                                        ready: true,
+                                                        score: 0,
+                                                        controller: PlayerController::Bot {
+                                                            mouse_state: ni_ty::MouseState {
+                                                                held: None,
+                                                                position: Default::default(),
+                                                            },
+                                                            plan: None,
+                                                            target: Default::default(),
+                                                            seq: 0,
+                                                        },
+                                                    },
+                                                );
+
+                                                break bot_id;
+                                            }
+                                        };
+
+                                        send_to_all(
+                                            &server_game_state,
+                                            ni_ty::protocol::GameMessageS2C::PlayerJoin {
+                                                id: bot_id,
+                                                info: server_game_state
+                                                    .players
+                                                    .get(&bot_id)
+                                                    .unwrap()
+                                                    .to_common_state(),
+                                            },
+                                        );
                                     }
                                 }
                             }
@@ -676,6 +747,237 @@ async fn main() {
                         }
                         value
                     });
+                }
+            }
+        },
+        {
+            let global_state = global_state.clone();
+
+            async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+
+                loop {
+                    use nertsio_ui_metrics::{CARD_HEIGHT, CARD_WIDTH};
+
+                    interval.tick().await;
+
+                    for mut game in global_state.games.iter_mut() {
+                        if let Some(hand) = &game.hand {
+                            let hand = hand.hand.clone();
+
+                            let metrics = nertsio_ui_metrics::HandMetrics::new(
+                                hand.players().len(),
+                                hand.players()[0].tableau_stacks().len(),
+                                hand.lake_stacks().len(),
+                            );
+
+                            for idx in 0..hand.players().len() {
+                                let player_id = hand.players()[idx].player_id();
+                                let player = game.players.get_mut(&player_id).unwrap();
+
+                                let get_dest_for_stack = |loc| {
+                                    let stack_pos = metrics.stack_pos(loc);
+                                    (
+                                        stack_pos.0 + CARD_WIDTH / 2.0,
+                                        stack_pos.1 + CARD_HEIGHT / 2.0,
+                                    )
+                                };
+
+                                let reached = |a: (f32, f32), b: (f32, f32)| {
+                                    a.0 > b.0 - CARD_WIDTH / 2.0
+                                        && a.0 < b.0 + CARD_WIDTH / 2.0
+                                        && a.1 > b.1 - CARD_HEIGHT / 2.0
+                                        && a.1 < b.1 + CARD_HEIGHT / 2.0
+                                };
+
+                                if let PlayerController::Bot {
+                                    ref mut plan,
+                                    ref mut mouse_state,
+                                    ref mut target,
+                                    ..
+                                } = &mut player.controller
+                                {
+                                    let action = match plan {
+                                        None => {
+                                            // make a new plan
+
+                                            *plan = Some(ni_ty::HandAction::FlipStock);
+
+                                            None
+                                        }
+                                        Some(current_plan) => {
+                                            let current_plan = current_plan.clone();
+                                            match current_plan {
+                                                ni_ty::HandAction::ShuffleStock { .. } => {
+                                                    unreachable!()
+                                                }
+                                                ni_ty::HandAction::Move { from, to, count } => {
+                                                    if mouse_state.held.is_some() {
+                                                        let dest = get_dest_for_stack(to);
+                                                        if reached(mouse_state.position, dest) {
+                                                            *plan = None;
+
+                                                            Some(current_plan)
+                                                        } else {
+                                                            *target = dest;
+                                                            None
+                                                        }
+                                                    } else {
+                                                        let dest = get_dest_for_stack(from);
+                                                        if reached(mouse_state.position, dest) {
+                                                            let from_stack =
+                                                                hand.stack_at(from).unwrap();
+                                                            if from_stack.len() >= count.into() {
+                                                                mouse_state.held = Some(ni_ty::HeldInfo {
+                                                                src: if let ni_ty::StackLocation::Player(_, loc) = from {
+                                                                    loc
+                                                                } else {
+                                                                    panic!("somehow picked up a non-player stack")
+                                                                },
+                                                                count,
+                                                                offset: (
+                                                                    dest.0 - mouse_state.position.0,
+                                                                    dest.1 - mouse_state.position.1,
+                                                                ),
+                                                                top_card: from_stack.cards()[from_stack.len() - usize::from(count)].card,
+                                                            });
+
+                                                                *target = get_dest_for_stack(to);
+                                                            } else {
+                                                                *plan = None;
+                                                            }
+                                                        } else {
+                                                            *target = dest;
+                                                        }
+
+                                                        None
+                                                    }
+                                                }
+                                                ni_ty::HandAction::FlipStock
+                                                | ni_ty::HandAction::ReturnStock => {
+                                                    let dest = get_dest_for_stack(
+                                                        ni_ty::StackLocation::Player(
+                                                            idx as u8,
+                                                            ni_ty::PlayerStackLocation::Stock,
+                                                        ),
+                                                    );
+
+                                                    if reached(mouse_state.position, dest) {
+                                                        *plan = None;
+
+                                                        Some(current_plan)
+                                                    } else {
+                                                        *target = dest;
+
+                                                        None
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    };
+
+                                    if let Some(action) = action {
+                                        if game
+                                            .hand
+                                            .as_mut()
+                                            .unwrap()
+                                            .hand
+                                            .apply(Some(idx as u8), action)
+                                            .is_ok()
+                                        {
+                                            send_to_all(
+                                                &game,
+                                                ni_ty::protocol::GameMessageS2C::PlayerHandAction {
+                                                    player: idx as u8,
+                                                    action,
+                                                },
+                                            );
+                                            if action.should_reset_stall() {
+                                                let hand_state = game.hand.as_mut().unwrap();
+                                                hand_state.stalled_count = 0;
+                                                if hand_state.sent_stall {
+                                                    hand_state.sent_stall = false;
+                                                    send_to_all(&game, ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        {
+            let global_state = global_state.clone();
+
+            async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+
+                loop {
+                    interval.tick().await;
+
+                    for mut game in global_state.games.iter_mut() {
+                        if let Some(hand) = &game.hand {
+                            let player_count = hand.hand.players().len();
+
+                            for idx in 0..player_count {
+                                let player_id =
+                                    game.hand.as_ref().unwrap().hand.players()[idx].player_id();
+                                let player = game.players.get_mut(&player_id).unwrap();
+
+                                if let PlayerController::Bot {
+                                    ref mut mouse_state,
+                                    ref mut target,
+                                    ref mut seq,
+                                    ref plan,
+                                } = &mut player.controller
+                                {
+                                    if plan.is_some() {
+                                        let dist = ((mouse_state.position.0 - target.0).powf(2.0)
+                                            + (mouse_state.position.1 - target.1).powf(2.0))
+                                        .sqrt();
+
+                                        if dist > BOT_CURSOR_SPEED {
+                                            mouse_state.position = (
+                                                mouse_state.position.0
+                                                    + (target.0 - mouse_state.position.0) / dist
+                                                        * BOT_CURSOR_SPEED,
+                                                mouse_state.position.1
+                                                    + (target.1 - mouse_state.position.1) / dist
+                                                        * BOT_CURSOR_SPEED,
+                                            );
+
+                                            *seq += 1;
+
+                                            let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
+                                                player_idx: idx as u8,
+                                                seq: *seq,
+                                                state: mouse_state.clone(),
+                                            }).unwrap().into();
+
+                                            for (id, server_player_state) in &game.players {
+                                                if *id != player_id {
+                                                    if let PlayerController::Network {
+                                                        ref connection,
+                                                        ..
+                                                    } = server_player_state.controller
+                                                    {
+                                                        if let Err(err) = connection
+                                                            .send_datagram(out_msg.clone())
+                                                        {
+                                                            eprintln!("Failed to queue update to player: {:?}", err);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },

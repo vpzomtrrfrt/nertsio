@@ -1002,6 +1002,7 @@ dependencies = [
  "dashmap",
  "futures-util",
  "nertsio_types",
+ "nertsio_ui_metrics",
  "openssl",
  "quinn",
  "rand",
