@@ -9,7 +9,7 @@ use std::sync::Arc;
 const MAX_PLAYERS: usize = 6;
 const STALL_SEND_COUNT: u8 = 6;
 const WIN_SCORE: i32 = 100;
-const BOT_CURSOR_SPEED: f32 = 2.0;
+const BOT_CURSOR_SPEED: f32 = 5.0;
 
 enum PlayerController {
     Network {
@@ -772,132 +772,254 @@ async fn main() {
                             );
 
                             for idx in 0..hand.players().len() {
-                                let player_id = hand.players()[idx].player_id();
-                                let player = game.players.get_mut(&player_id).unwrap();
-
-                                let get_dest_for_stack = |loc| {
-                                    let stack_pos = metrics.stack_pos(loc);
-                                    (
-                                        stack_pos.0 + CARD_WIDTH / 2.0,
-                                        stack_pos.1 + CARD_HEIGHT / 2.0,
-                                    )
-                                };
-
-                                let reached = |a: (f32, f32), b: (f32, f32)| {
-                                    a.0 > b.0 - CARD_WIDTH / 2.0
-                                        && a.0 < b.0 + CARD_WIDTH / 2.0
-                                        && a.1 > b.1 - CARD_HEIGHT / 2.0
-                                        && a.1 < b.1 + CARD_HEIGHT / 2.0
-                                };
-
-                                if let PlayerController::Bot {
-                                    ref mut plan,
-                                    ref mut mouse_state,
-                                    ref mut target,
-                                    ..
-                                } = &mut player.controller
+                                let hand_player = &hand.players()[idx];
+                                if let Some(player) = game.players.get_mut(&hand_player.player_id())
                                 {
-                                    let action = match plan {
-                                        None => {
-                                            // make a new plan
+                                    let player_loc = metrics.player_loc(idx);
 
-                                            *plan = Some(ni_ty::HandAction::FlipStock);
+                                    let get_dest_for_stack = |loc| {
+                                        let stack_pos = metrics.stack_pos(loc);
 
-                                            None
-                                        }
-                                        Some(current_plan) => {
-                                            let current_plan = current_plan.clone();
-                                            match current_plan {
-                                                ni_ty::HandAction::ShuffleStock { .. } => {
-                                                    unreachable!()
+                                        let stack_pos = if let ni_ty::StackLocation::Lake(_) = loc {
+                                            if player_loc.inverted {
+                                                (-stack_pos.0 - CARD_WIDTH, stack_pos.1)
+                                            } else {
+                                                stack_pos
+                                            }
+                                        } else {
+                                            stack_pos
+                                        };
+
+                                        (
+                                            stack_pos.0 + CARD_WIDTH / 2.0,
+                                            stack_pos.1 + CARD_HEIGHT / 2.0,
+                                        )
+                                    };
+
+                                    let reached = |a: (f32, f32), b: (f32, f32)| {
+                                        a.0 > b.0 - CARD_WIDTH / 2.0
+                                            && a.0 < b.0 + CARD_WIDTH / 2.0
+                                            && a.1 > b.1 - CARD_HEIGHT / 2.0
+                                            && a.1 < b.1 + CARD_HEIGHT / 2.0
+                                    };
+
+                                    if let PlayerController::Bot {
+                                        ref mut plan,
+                                        ref mut mouse_state,
+                                        ref mut target,
+                                        ..
+                                    } = &mut player.controller
+                                    {
+                                        let action = match plan {
+                                            None => {
+                                                // make a new plan
+
+                                                let mut new_plan = None;
+                                                for src in std::iter::once(
+                                                    ni_ty::PlayerStackLocation::Nerts,
+                                                )
+                                                .chain((0..hand_player.tableau_stacks().len()).map(
+                                                    |i| {
+                                                        ni_ty::PlayerStackLocation::Tableau(i as u8)
+                                                    },
+                                                ))
+                                                .chain(std::iter::once(
+                                                    ni_ty::PlayerStackLocation::Waste,
+                                                )) {
+                                                    let stack = hand_player.stack_at(src).unwrap();
+                                                    if let Some(card) = stack.last() {
+                                                        for (i, stack) in
+                                                            hand.lake_stacks().iter().enumerate()
+                                                        {
+                                                            if stack.can_add(*card) {
+                                                                new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: ni_ty::StackLocation::Lake(i as u16), count: 1});
+                                                                break;
+                                                            }
+                                                        }
+
+                                                        match src {
+                                                            ni_ty::PlayerStackLocation::Tableau(
+                                                                _,
+                                                            )
+                                                            | ni_ty::PlayerStackLocation::Nerts => {
+                                                                let src_is_tableau = matches!(src, ni_ty::PlayerStackLocation::Tableau(_));
+                                                                let count = if src_is_tableau {
+                                                                    stack.len()
+                                                                } else {
+                                                                    1
+                                                                };
+                                                                let back = stack.cards()
+                                                                    [stack.len() - count];
+
+                                                                for (i, dest_stack) in hand_player
+                                                                    .tableau_stacks()
+                                                                    .iter()
+                                                                    .enumerate()
+                                                                {
+                                                                    let dest = ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8));
+                                                                    if dest_stack.can_add(back)
+                                                                        && (!src_is_tableau
+                                                                            || dest_stack.len() > 0)
+                                                                    {
+                                                                        new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: dest, count: count as u8 });
+                                                                        break;
+                                                                    }
+                                                                }
+                                                            }
+                                                            _ => {}
+                                                        }
+                                                    }
                                                 }
-                                                ni_ty::HandAction::Move { from, to, count } => {
-                                                    if mouse_state.held.is_some() {
-                                                        let dest = get_dest_for_stack(to);
+
+                                                if new_plan.is_none() {
+                                                    if hand_player.stock_stack().len() > 0 {
+                                                        new_plan =
+                                                            Some(ni_ty::HandAction::FlipStock);
+                                                    } else if hand_player.waste_stack().len() > 0 {
+                                                        new_plan =
+                                                            Some(ni_ty::HandAction::ReturnStock);
+                                                    }
+                                                }
+
+                                                if let Some(new_plan) = new_plan {
+                                                    if let Some(held) = mouse_state.held {
+                                                        if match new_plan {
+                                                            ni_ty::HandAction::ShuffleStock {
+                                                                ..
+                                                            } => unreachable!(),
+                                                            ni_ty::HandAction::FlipStock
+                                                            | ni_ty::HandAction::ReturnStock => {
+                                                                true
+                                                            }
+                                                            ni_ty::HandAction::Move {
+                                                                from,
+                                                                count,
+                                                                ..
+                                                            } => {
+                                                                ni_ty::StackLocation::Player(
+                                                                    idx as u8, held.src,
+                                                                ) != from
+                                                                    || held.count != count
+                                                            }
+                                                        } {
+                                                            mouse_state.held = None;
+                                                        }
+                                                    }
+
+                                                    *plan = Some(new_plan);
+                                                }
+
+                                                None
+                                            }
+                                            Some(current_plan) => {
+                                                let current_plan = current_plan.clone();
+                                                match current_plan {
+                                                    ni_ty::HandAction::ShuffleStock { .. } => {
+                                                        unreachable!()
+                                                    }
+                                                    ni_ty::HandAction::Move { from, to, count } => {
+                                                        if mouse_state.held.is_some() {
+                                                            let dest = get_dest_for_stack(to);
+                                                            if reached(mouse_state.position, dest) {
+                                                                *plan = None;
+
+                                                                Some(current_plan)
+                                                            } else {
+                                                                *target = dest;
+                                                                None
+                                                            }
+                                                        } else {
+                                                            let dest = get_dest_for_stack(from);
+                                                            if reached(mouse_state.position, dest) {
+                                                                let from_stack =
+                                                                    hand.stack_at(from).unwrap();
+                                                                if from_stack.len() >= count.into()
+                                                                {
+                                                                    mouse_state.held = Some(ni_ty::HeldInfo {
+                                                                    src: if let ni_ty::StackLocation::Player(_, loc) = from {
+                                                                        loc
+                                                                    } else {
+                                                                        panic!("somehow picked up a non-player stack")
+                                                                    },
+                                                                    count,
+                                                                    offset: (
+                                                                        dest.0 - mouse_state.position.0 + CARD_WIDTH / 2.0,
+                                                                        dest.1 - mouse_state.position.1 + CARD_HEIGHT / 2.0,
+                                                                    ),
+                                                                    top_card: from_stack.cards()[from_stack.len() - usize::from(count)].card,
+                                                                });
+
+                                                                    *target =
+                                                                        get_dest_for_stack(to);
+                                                                } else {
+                                                                    *plan = None;
+                                                                }
+                                                            } else {
+                                                                *target = dest;
+                                                            }
+
+                                                            None
+                                                        }
+                                                    }
+                                                    ni_ty::HandAction::FlipStock
+                                                    | ni_ty::HandAction::ReturnStock => {
+                                                        let dest = get_dest_for_stack(
+                                                            ni_ty::StackLocation::Player(
+                                                                idx as u8,
+                                                                ni_ty::PlayerStackLocation::Stock,
+                                                            ),
+                                                        );
+
                                                         if reached(mouse_state.position, dest) {
                                                             *plan = None;
 
                                                             Some(current_plan)
                                                         } else {
                                                             *target = dest;
+
                                                             None
                                                         }
-                                                    } else {
-                                                        let dest = get_dest_for_stack(from);
-                                                        if reached(mouse_state.position, dest) {
-                                                            let from_stack =
-                                                                hand.stack_at(from).unwrap();
-                                                            if from_stack.len() >= count.into() {
-                                                                mouse_state.held = Some(ni_ty::HeldInfo {
-                                                                src: if let ni_ty::StackLocation::Player(_, loc) = from {
-                                                                    loc
-                                                                } else {
-                                                                    panic!("somehow picked up a non-player stack")
-                                                                },
-                                                                count,
-                                                                offset: (
-                                                                    dest.0 - mouse_state.position.0,
-                                                                    dest.1 - mouse_state.position.1,
-                                                                ),
-                                                                top_card: from_stack.cards()[from_stack.len() - usize::from(count)].card,
-                                                            });
-
-                                                                *target = get_dest_for_stack(to);
-                                                            } else {
-                                                                *plan = None;
-                                                            }
-                                                        } else {
-                                                            *target = dest;
-                                                        }
-
-                                                        None
-                                                    }
-                                                }
-                                                ni_ty::HandAction::FlipStock
-                                                | ni_ty::HandAction::ReturnStock => {
-                                                    let dest = get_dest_for_stack(
-                                                        ni_ty::StackLocation::Player(
-                                                            idx as u8,
-                                                            ni_ty::PlayerStackLocation::Stock,
-                                                        ),
-                                                    );
-
-                                                    if reached(mouse_state.position, dest) {
-                                                        *plan = None;
-
-                                                        Some(current_plan)
-                                                    } else {
-                                                        *target = dest;
-
-                                                        None
                                                     }
                                                 }
                                             }
-                                        }
-                                    };
+                                        };
 
-                                    if let Some(action) = action {
-                                        if game
-                                            .hand
-                                            .as_mut()
-                                            .unwrap()
-                                            .hand
-                                            .apply(Some(idx as u8), action)
-                                            .is_ok()
-                                        {
-                                            send_to_all(
-                                                &game,
-                                                ni_ty::protocol::GameMessageS2C::PlayerHandAction {
-                                                    player: idx as u8,
-                                                    action,
-                                                },
-                                            );
-                                            if action.should_reset_stall() {
-                                                let hand_state = game.hand.as_mut().unwrap();
-                                                hand_state.stalled_count = 0;
-                                                if hand_state.sent_stall {
-                                                    hand_state.sent_stall = false;
-                                                    send_to_all(&game, ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                        if let Some(action) = action {
+                                            if game
+                                                .hand
+                                                .as_mut()
+                                                .unwrap()
+                                                .hand
+                                                .apply(Some(idx as u8), action)
+                                                .is_ok()
+                                            {
+                                                send_to_all(
+                                                    &game,
+                                                    ni_ty::protocol::GameMessageS2C::PlayerHandAction {
+                                                        player: idx as u8,
+                                                        action,
+                                                    },
+                                                );
+                                                if action.should_reset_stall() {
+                                                    let hand_state = game.hand.as_mut().unwrap();
+                                                    hand_state.stalled_count = 0;
+                                                    if hand_state.sent_stall {
+                                                        hand_state.sent_stall = false;
+                                                        send_to_all(&game, ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                                    }
+                                                }
+
+                                                let hand_player = &hand.players()[idx];
+                                                if let Some(player) =
+                                                    game.players.get_mut(&hand_player.player_id())
+                                                {
+                                                    if let PlayerController::Bot {
+                                                        ref mut mouse_state,
+                                                        ..
+                                                    } = &mut player.controller
+                                                    {
+                                                        mouse_state.held = None;
+                                                    }
                                                 }
                                             }
                                         }
@@ -925,49 +1047,52 @@ async fn main() {
                             for idx in 0..player_count {
                                 let player_id =
                                     game.hand.as_ref().unwrap().hand.players()[idx].player_id();
-                                let player = game.players.get_mut(&player_id).unwrap();
+                                if let Some(player) = game.players.get_mut(&player_id) {
+                                    if let PlayerController::Bot {
+                                        ref mut mouse_state,
+                                        ref mut target,
+                                        ref mut seq,
+                                        ref plan,
+                                    } = &mut player.controller
+                                    {
+                                        if plan.is_some() {
+                                            let dist = ((mouse_state.position.0 - target.0)
+                                                .powf(2.0)
+                                                + (mouse_state.position.1 - target.1).powf(2.0))
+                                            .sqrt();
 
-                                if let PlayerController::Bot {
-                                    ref mut mouse_state,
-                                    ref mut target,
-                                    ref mut seq,
-                                    ref plan,
-                                } = &mut player.controller
-                                {
-                                    if plan.is_some() {
-                                        let dist = ((mouse_state.position.0 - target.0).powf(2.0)
-                                            + (mouse_state.position.1 - target.1).powf(2.0))
-                                        .sqrt();
+                                            if dist > BOT_CURSOR_SPEED {
+                                                mouse_state.position = (
+                                                    mouse_state.position.0
+                                                        + (target.0 - mouse_state.position.0)
+                                                            / dist
+                                                            * BOT_CURSOR_SPEED,
+                                                    mouse_state.position.1
+                                                        + (target.1 - mouse_state.position.1)
+                                                            / dist
+                                                            * BOT_CURSOR_SPEED,
+                                                );
 
-                                        if dist > BOT_CURSOR_SPEED {
-                                            mouse_state.position = (
-                                                mouse_state.position.0
-                                                    + (target.0 - mouse_state.position.0) / dist
-                                                        * BOT_CURSOR_SPEED,
-                                                mouse_state.position.1
-                                                    + (target.1 - mouse_state.position.1) / dist
-                                                        * BOT_CURSOR_SPEED,
-                                            );
+                                                *seq += 1;
 
-                                            *seq += 1;
+                                                let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
+                                                    player_idx: idx as u8,
+                                                    seq: *seq,
+                                                    state: mouse_state.clone(),
+                                                }).unwrap().into();
 
-                                            let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
-                                                player_idx: idx as u8,
-                                                seq: *seq,
-                                                state: mouse_state.clone(),
-                                            }).unwrap().into();
-
-                                            for (id, server_player_state) in &game.players {
-                                                if *id != player_id {
-                                                    if let PlayerController::Network {
-                                                        ref connection,
-                                                        ..
-                                                    } = server_player_state.controller
-                                                    {
-                                                        if let Err(err) = connection
-                                                            .send_datagram(out_msg.clone())
+                                                for (id, server_player_state) in &game.players {
+                                                    if *id != player_id {
+                                                        if let PlayerController::Network {
+                                                            ref connection,
+                                                            ..
+                                                        } = server_player_state.controller
                                                         {
-                                                            eprintln!("Failed to queue update to player: {:?}", err);
+                                                            if let Err(err) = connection
+                                                                .send_datagram(out_msg.clone())
+                                                            {
+                                                                eprintln!("Failed to queue update to player: {:?}", err);
+                                                            }
                                                         }
                                                     }
                                                 }
