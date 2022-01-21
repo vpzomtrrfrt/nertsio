@@ -200,6 +200,24 @@ fn handle_nerts_call(
                                     ni_ty::protocol::GameMessageS2C::GameEnd,
                                 );
                             }
+
+                            let mut bots_ready = Vec::new();
+                            for (key, player) in server_game_state.players.iter_mut() {
+                                if let PlayerController::Bot { .. } = player.controller {
+                                    player.ready = true;
+                                    bots_ready.push(*key);
+                                }
+                            }
+
+                            for id in bots_ready {
+                                send_to_all(
+                                    &server_game_state,
+                                    ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
+                                        id,
+                                        value: true,
+                                    },
+                                );
+                            }
                         }
                     }
                 });
