@@ -203,9 +203,12 @@ fn handle_nerts_call(
 
                             let mut bots_ready = Vec::new();
                             for (key, player) in server_game_state.players.iter_mut() {
-                                if let PlayerController::Bot { .. } = player.controller {
+                                if let PlayerController::Bot { ref mut plan, .. } =
+                                    player.controller
+                                {
                                     player.ready = true;
                                     bots_ready.push(*key);
+                                    *plan = None;
                                 }
                             }
 
