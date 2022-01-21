@@ -24,6 +24,7 @@ pub enum GameMessageC2S {
     UpdateSelfReady { value: bool },
     ApplyHandAction { action: crate::HandAction },
     CallNerts,
+    AddBot,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

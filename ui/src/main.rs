@@ -790,6 +790,20 @@ async fn main() {
                                     mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
                                 }
 
+                                if shared.game.master_player == shared.my_player_id {
+                                    if mqui::root_ui().button(
+                                        mq::Vec2::new(10.0, 160.0 + (sorted.len() as f32) * 75.0),
+                                        "Add Bot",
+                                    ) {
+                                        game_msg_send
+                                            .borrow()
+                                            .as_ref()
+                                            .unwrap()
+                                            .send(ni_ty::protocol::GameMessageC2S::AddBot.into())
+                                            .unwrap();
+                                    }
+                                }
+
                                 if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
                                     game_msg_send
                                         .borrow()
