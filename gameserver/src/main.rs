@@ -791,9 +791,15 @@ async fn main() {
                 loop {
                     interval.tick().await;
 
-                    global_state
-                        .games
-                        .retain(|_key, value| !value.players.is_empty());
+                    global_state.games.retain(|_key, value| {
+                        !value
+                            .players
+                            .values()
+                            .all(|player| match player.controller {
+                                PlayerController::Network { .. } => false,
+                                PlayerController::Bot { .. } => true,
+                            })
+                    });
 
                     global_state.games.alter_all(|_key, mut value| {
                         if let Some(hand) = value.hand.as_mut() {
