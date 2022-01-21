@@ -757,7 +757,9 @@ async fn main() {
                 let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
 
                 loop {
-                    use nertsio_ui_metrics::{CARD_HEIGHT, CARD_WIDTH};
+                    use nertsio_ui_metrics::{
+                        CARD_HEIGHT, CARD_WIDTH, HORIZONTAL_STACK_SPACING, VERTICAL_STACK_SPACING,
+                    };
 
                     interval.tick().await;
 
@@ -777,8 +779,40 @@ async fn main() {
                                 {
                                     let player_loc = metrics.player_loc(idx);
 
-                                    let get_dest_for_stack = |loc| {
+                                    let get_dest_for_stack = |loc, take_count| {
+                                        let stack = hand.stack_at(loc).unwrap();
+                                        let remaining_count = stack.len() - take_count;
+
                                         let stack_pos = metrics.stack_pos(loc);
+
+                                        let stack_pos = match loc {
+                                            ni_ty::StackLocation::Lake(_) => stack_pos,
+                                            ni_ty::StackLocation::Player(_, loc) => match loc {
+                                                ni_ty::PlayerStackLocation::Nerts => (
+                                                    stack_pos.0
+                                                        + (remaining_count as f32)
+                                                            * HORIZONTAL_STACK_SPACING,
+                                                    stack_pos.1,
+                                                ),
+                                                ni_ty::PlayerStackLocation::Tableau(_) => (
+                                                    stack_pos.0,
+                                                    stack_pos.1
+                                                        + (remaining_count as f32)
+                                                            * VERTICAL_STACK_SPACING,
+                                                ),
+                                                ni_ty::PlayerStackLocation::Stock => stack_pos,
+                                                ni_ty::PlayerStackLocation::Waste => {
+                                                    let remaining_visible =
+                                                        stack.len().min(3) - take_count;
+                                                    (
+                                                        stack_pos.0
+                                                            + (remaining_visible as f32)
+                                                                * HORIZONTAL_STACK_SPACING,
+                                                        stack_pos.1,
+                                                    )
+                                                }
+                                            },
+                                        };
 
                                         let stack_pos = if let ni_ty::StackLocation::Lake(_) = loc {
                                             if player_loc.inverted {
@@ -919,7 +953,7 @@ async fn main() {
                                                     }
                                                     ni_ty::HandAction::Move { from, to, count } => {
                                                         if mouse_state.held.is_some() {
-                                                            let dest = get_dest_for_stack(to);
+                                                            let dest = get_dest_for_stack(to, 0);
                                                             if reached(mouse_state.position, dest) {
                                                                 *plan = None;
 
@@ -929,7 +963,10 @@ async fn main() {
                                                                 None
                                                             }
                                                         } else {
-                                                            let dest = get_dest_for_stack(from);
+                                                            let dest = get_dest_for_stack(
+                                                                from,
+                                                                count.into(),
+                                                            );
                                                             if reached(mouse_state.position, dest) {
                                                                 let from_stack =
                                                                     hand.stack_at(from).unwrap();
@@ -943,14 +980,14 @@ async fn main() {
                                                                     },
                                                                     count,
                                                                     offset: (
-                                                                        dest.0 - mouse_state.position.0 + CARD_WIDTH / 2.0,
-                                                                        dest.1 - mouse_state.position.1 + CARD_HEIGHT / 2.0,
+                                                                        mouse_state.position.0 - (dest.0 - CARD_WIDTH / 2.0),
+                                                                        mouse_state.position.1 - (dest.1 - CARD_HEIGHT / 2.0),
                                                                     ),
                                                                     top_card: from_stack.cards()[from_stack.len() - usize::from(count)].card,
                                                                 });
 
                                                                     *target =
-                                                                        get_dest_for_stack(to);
+                                                                        get_dest_for_stack(to, 0);
                                                                 } else {
                                                                     *plan = None;
                                                                 }
@@ -968,6 +1005,7 @@ async fn main() {
                                                                 idx as u8,
                                                                 ni_ty::PlayerStackLocation::Stock,
                                                             ),
+                                                            0,
                                                         );
 
                                                         if reached(mouse_state.position, dest) {
