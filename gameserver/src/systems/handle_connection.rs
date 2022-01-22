@@ -6,7 +6,9 @@ use nertsio_types as ni_ty;
 use rand::Rng;
 use std::sync::Arc;
 
-fn maybe_start_hand(server_game_state: &mut ServerGameState) {
+const HAND_START_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
+fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<GlobalState>) {
     if server_game_state.hand.is_none()
         && !server_game_state.players.is_empty()
         && server_game_state
@@ -23,8 +25,29 @@ fn maybe_start_hand(server_game_state: &mut ServerGameState) {
             stalled_count: 0,
             sent_stall: false,
         });
-        server_game_state
-            .send_to_all(ni_ty::protocol::GameMessageS2C::HandStart { info: new_hand });
+
+        let delay = HAND_START_DELAY;
+
+        server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandInit {
+            info: new_hand,
+            delay,
+        });
+
+        let game_id = server_game_state.game_id;
+        let global_state = global_state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+
+            if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
+                if let Some(hand_state) = server_game_state.hand.as_mut() {
+                    if !hand_state.hand.started {
+                        hand_state.hand.started = true;
+
+                        server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandStart);
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -330,7 +353,7 @@ async fn handle_connection(
                                             );
                                         }
 
-                                        maybe_start_hand(&mut server_game_state);
+                                        maybe_start_hand(&mut server_game_state, &global_state);
                                     }
                                 }
                                 GameMessageC2S::ApplyHandAction { action } => {
@@ -340,20 +363,22 @@ async fn handle_connection(
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
                                     if let Some(ref mut hand_state) = server_game_state.hand {
-                                        if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
-                                            match hand_state.hand.apply(Some(player_idx as u8), action) {
-                                                Err(_) => {
-                                                    println!("cannot apply action {:?}", action);
-                                                }
-                                                Ok(_) => {
-                                                    server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::PlayerHandAction { player: player_idx as u8, action });
+                                        if hand_state.hand.started {
+                                            if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
+                                                match hand_state.hand.apply(Some(player_idx as u8), action) {
+                                                    Err(_) => {
+                                                        println!("cannot apply action {:?}", action);
+                                                    }
+                                                    Ok(_) => {
+                                                        server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::PlayerHandAction { player: player_idx as u8, action });
 
-                                                    if action.should_reset_stall() {
-                                                        let hand_state = server_game_state.hand.as_mut().unwrap();
-                                                        hand_state.stalled_count = 0;
-                                                        if hand_state.sent_stall {
-                                                            hand_state.sent_stall = false;
-                                                            server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                                        if action.should_reset_stall() {
+                                                            let hand_state = server_game_state.hand.as_mut().unwrap();
+                                                            hand_state.stalled_count = 0;
+                                                            if hand_state.sent_stall {
+                                                                hand_state.sent_stall = false;
+                                                                server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandStallCancel);
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -479,7 +504,7 @@ async fn handle_connection(
         }
     }
 
-    maybe_start_hand(&mut server_game_state);
+    maybe_start_hand(&mut server_game_state, &global_state);
 
     res
 }

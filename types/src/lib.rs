@@ -355,6 +355,7 @@ pub struct CannotApplyAction;
 pub struct HandState {
     players: Vec<HandPlayerState>,
     lake_stacks: Vec<Stack>,
+    pub started: bool,
     pub nerts_called: bool,
 }
 
@@ -371,6 +372,7 @@ impl HandState {
         Self {
             players,
             lake_stacks,
+            started: false,
             nerts_called: false,
         }
     }

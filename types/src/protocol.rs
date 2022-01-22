@@ -45,8 +45,9 @@ pub enum GameMessageS2C {
         id: u8,
         value: bool,
     },
-    HandStart {
+    HandInit {
         info: crate::HandState,
+        delay: std::time::Duration,
     },
     PlayerHandAction {
         player: u8,
@@ -67,6 +68,7 @@ pub enum GameMessageS2C {
     NewMasterPlayer {
         player: u8,
     },
+    HandStart,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

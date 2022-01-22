@@ -84,6 +84,7 @@ struct SharedInfo {
 }
 
 struct HandExtra {
+    expected_start_time: Option<std::time::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
     mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
@@ -95,6 +96,7 @@ struct HandExtra {
 impl HandExtra {
     pub fn new(player_count: usize) -> Self {
         Self {
+            expected_start_time: None,
             pending_actions: Default::default(),
             self_called_nerts: false,
             mouse_states: vec![None; player_count],
@@ -849,6 +851,7 @@ async fn main() {
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Some(shared) = (*lock).as_info_mut() {
                     if let Some(real_hand_state) = shared.game.hand.as_mut() {
+                        let started = real_hand_state.started;
                         let hand_extra = shared.hand_extra.as_mut().unwrap();
 
                         let metrics = metrics::HandMetrics::new(
@@ -911,7 +914,7 @@ async fn main() {
                                 pred_hand_state.nerts_called = true;
                             }
 
-                            {
+                            if started {
                                 let player_state = &pred_hand_state.players()[my_player_idx];
 
                                 let mouse_pressed =
@@ -1364,19 +1367,29 @@ async fn main() {
                                 }
                                 let card = player_state.nerts_stack().last().unwrap();
 
-                                if !matches!(
-                                    held_state,
-                                    Some(ni_ty::HeldInfo {
-                                        src: ni_ty::PlayerStackLocation::Nerts,
-                                        ..
-                                    })
-                                ) {
-                                    draw_card(
-                                        card.card,
+                                if started {
+                                    if !matches!(
+                                        held_state,
+                                        Some(ni_ty::HeldInfo {
+                                            src: ni_ty::PlayerStackLocation::Nerts,
+                                            ..
+                                        })
+                                    ) {
+                                        draw_card(
+                                            card.card,
+                                            nerts_stack_pos[0]
+                                                + ((player_state.nerts_stack().len() - 1) as f32)
+                                                    * metrics::HORIZONTAL_STACK_SPACING,
+                                            nerts_stack_pos[1],
+                                        );
+                                    }
+                                } else {
+                                    draw_back(
                                         nerts_stack_pos[0]
                                             + ((player_state.nerts_stack().len() - 1) as f32)
                                                 * metrics::HORIZONTAL_STACK_SPACING,
                                         nerts_stack_pos[1],
+                                        player_state.player_id(),
                                     );
                                 }
                             } else {
@@ -1424,7 +1437,11 @@ async fn main() {
                                 let pos = mq::Vec2::from(metrics.player_stack_pos(loc, location))
                                     + mq::Vec2::from(screen_center);
 
-                                draw_vertical_stack_cards(cards, pos[0], pos[1]);
+                                if started {
+                                    draw_vertical_stack_cards(cards, pos[0], pos[1]);
+                                } else {
+                                    draw_back(pos[0], pos[1], player_state.player_id());
+                                }
                             }
 
                             let stock_pos = mq::Vec2::from(
@@ -1598,6 +1615,30 @@ async fn main() {
                                 100,
                                 NERTS_TEXT_COLOR,
                             );
+                        }
+
+                        if !started {
+                            mq::draw_rectangle(
+                                0.0,
+                                screen_center.1 - 70.0,
+                                screen_size.0,
+                                140.0,
+                                NERTS_OVERLAY_COLOR,
+                            );
+
+                            if let Some(expected_start_time) = hand_extra.expected_start_time {
+                                if let Some(time_until) = expected_start_time
+                                    .checked_duration_since(std::time::Instant::now())
+                                {
+                                    draw_text_centered(
+                                        &(time_until.as_secs() + 1).to_string(),
+                                        screen_center.0,
+                                        screen_center.1,
+                                        100,
+                                        NERTS_TEXT_COLOR,
+                                    );
+                                }
+                            }
                         }
 
                         if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {

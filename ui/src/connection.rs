@@ -310,12 +310,15 @@ pub(crate) async fn handle_connection<
                                     .unwrap()
                                     .ready = value;
                             }
-                            GameMessageS2C::HandStart { info } => {
+                            GameMessageS2C::HandInit { info, delay } => {
                                 let mut lock = info_mutex.lock().unwrap();
                                 let shared = (*lock).as_info_mut().unwrap();
 
-                                shared.hand_extra =
-                                    Some(crate::HandExtra::new(info.players().len()));
+                                let mut hand_extra = crate::HandExtra::new(info.players().len());
+                                hand_extra.expected_start_time =
+                                    Some(std::time::Instant::now() + delay);
+                                shared.hand_extra = Some(hand_extra);
+
                                 shared.game.hand = Some(info);
                             }
                             GameMessageS2C::PlayerHandAction { player, action } => {
@@ -426,6 +429,13 @@ pub(crate) async fn handle_connection<
                                 let shared = lock.as_info_mut().unwrap();
 
                                 shared.game.master_player = player;
+                            }
+                            GameMessageS2C::HandStart => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                let shared = lock.as_info_mut().unwrap();
+                                let hand = shared.game.hand.as_mut().unwrap();
+
+                                hand.started = true;
                             }
                         }
 

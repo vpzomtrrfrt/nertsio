@@ -21,6 +21,10 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                     for mut game in global_state.games.iter_mut() {
                         if let Some(hand) = &game.hand {
+                            if !hand.hand.started {
+                                continue;
+                            }
+
                             let hand = hand.hand.clone();
 
                             let metrics = nertsio_ui_metrics::HandMetrics::new(
