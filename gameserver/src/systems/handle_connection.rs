@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 fn maybe_start_hand(server_game_state: &mut ServerGameState) {
     if server_game_state.hand.is_none()
+        && !server_game_state.players.is_empty()
         && server_game_state
             .players
             .values()
