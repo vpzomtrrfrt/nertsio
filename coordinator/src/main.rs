@@ -1,5 +1,6 @@
 use futures_util::{TryFutureExt, TryStreamExt};
 use nertsio_types as ni_ty;
+use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -88,16 +89,35 @@ async fn handler_public_games_list(
     json_response(&info)
 }
 
+fn default_protocol_version() -> u16 {
+    3 // version before we started sending this
+}
+
 async fn handler_servers_pick_for_new_game(
     _: (),
     ctx: Arc<GlobalState>,
-    _req: hyper::Request<hyper::Body>,
+    req: hyper::Request<hyper::Body>,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     use rand::seq::IteratorRandom;
+
+    #[derive(Deserialize, Debug)]
+    struct Query {
+        #[serde(default = "default_protocol_version")]
+        protocol_version: u16,
+
+        #[serde(default = "default_protocol_version")]
+        min_protocol_version: u16,
+    }
+
+    let query: Query = serde_urlencoded::from_str(req.uri().query().unwrap_or(""))?;
 
     let lock = ctx.gameservers.read().unwrap();
     let value = lock
         .iter()
+        .filter(|(_, (_, info))| {
+            info.min_protocol_version <= query.protocol_version
+                && info.protocol_version >= query.min_protocol_version
+        })
         .choose(&mut rand::thread_rng())
         .ok_or(Error::InternalStrStatic("no available servers"))?;
     let value = &value.1 .1;

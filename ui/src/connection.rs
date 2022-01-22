@@ -45,8 +45,10 @@ pub(crate) async fn handle_connection<
                 http_client
                     .request(
                         hyper::Request::post(format!(
-                            "{}servers:pick_for_new_game",
-                            crate::COORDINATOR_URL
+                            "{}servers:pick_for_new_game?protocol_version={}&min_protocol_version={}",
+                            crate::COORDINATOR_URL,
+                            ni_ty::protocol::PROTOCOL_VERSION,
+                            ni_ty::protocol::PROTOCOL_VERSION,
                         ))
                         .body(Default::default())
                         .unwrap(),
