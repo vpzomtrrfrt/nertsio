@@ -25,6 +25,7 @@ pub enum GameMessageC2S {
     ApplyHandAction { action: crate::HandAction },
     CallNerts,
     AddBot,
+    KickPlayer { player: u8 },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

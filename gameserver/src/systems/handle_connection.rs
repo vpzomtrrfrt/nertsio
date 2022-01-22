@@ -414,6 +414,28 @@ async fn handle_connection(
                                         );
                                     }
                                 }
+                                GameMessageC2S::KickPlayer { player } => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if server_game_state.master_player == Some(player_id) {
+                                        if let Some(target) = server_game_state.players.get(&player) {
+                                            match &target.controller {
+                                                PlayerController::Network { connection, .. } => {
+                                                    connection.close(1u8.into(), b"kicked");
+                                                }
+                                                PlayerController::Bot { .. } => {
+                                                    server_game_state.players.remove(&player);
+                                                    server_game_state.send_to_all(
+                                                        ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player },
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             Result::<_, anyhow::Error>::Ok(())
                         }

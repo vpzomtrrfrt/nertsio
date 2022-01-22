@@ -786,6 +786,20 @@ async fn main() {
 
                                     if shared.game.master_player == *key {
                                         mq::draw_poly(430.0, y + 35.0, 4, 15.0, 0.0, mq::YELLOW);
+                                    } else if shared.game.master_player == shared.my_player_id {
+                                        if mqui::root_ui().button(mq::Vec2::new(410.0, y), "x") {
+                                            game_msg_send
+                                                .borrow()
+                                                .as_ref()
+                                                .unwrap()
+                                                .send(
+                                                    ni_ty::protocol::GameMessageC2S::KickPlayer {
+                                                        player: *key,
+                                                    }
+                                                    .into(),
+                                                )
+                                                .unwrap();
+                                        }
                                     }
                                     mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
                                 }
