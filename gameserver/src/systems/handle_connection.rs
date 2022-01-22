@@ -92,9 +92,16 @@ async fn handle_connection(
         min_protocol_version,
     } = first_message
     {
-        if ni_ty::protocol::PROTOCOL_VERSION < min_protocol_version
-            || protocol_version < ni_ty::protocol::PROTOCOL_VERSION
-        {
+        if ni_ty::protocol::PROTOCOL_VERSION < min_protocol_version {
+            connection
+                .connection
+                .close(ni_ty::protocol::CLOSE_TOO_NEW.into(), b"too new");
+            anyhow::bail!("Mismatched protocol");
+        }
+        if protocol_version < ni_ty::protocol::PROTOCOL_VERSION {
+            connection
+                .connection
+                .close(ni_ty::protocol::CLOSE_TOO_OLD.into(), b"too old");
             anyhow::bail!("Mismatched protocol");
         }
         (name, game_id, new_game_public == Some(true))
@@ -450,7 +457,7 @@ async fn handle_connection(
                                         if let Some(target) = server_game_state.players.get(&player) {
                                             match &target.controller {
                                                 PlayerController::Network { connection, .. } => {
-                                                    connection.close(1u8.into(), b"kicked");
+                                                    connection.close(ni_ty::protocol::CLOSE_KICK.into(), b"kicked");
                                                 }
                                                 PlayerController::Bot { .. } => {
                                                     server_game_state.players.remove(&player);

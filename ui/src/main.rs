@@ -61,7 +61,7 @@ impl Default for Settings {
 }
 
 enum ConnectionState {
-    NotConnected { expected: bool },
+    NotConnected { expected: bool, code: Option<u8> },
     Connecting,
     Connected(SharedInfo),
 }
@@ -69,7 +69,7 @@ enum ConnectionState {
 impl ConnectionState {
     pub fn as_info_mut(&mut self) -> Option<&mut SharedInfo> {
         match self {
-            ConnectionState::NotConnected { expected: _ } | ConnectionState::Connecting => None,
+            ConnectionState::NotConnected { .. } | ConnectionState::Connecting => None,
             ConnectionState::Connected(info) => Some(info),
         }
     }
@@ -128,7 +128,30 @@ enum State {
     },
     LostConnection {
         was_connected: bool,
+        code: Option<u8>,
     },
+}
+
+impl State {
+    pub fn from_connection_state(src: &ConnectionState) -> Self {
+        match src {
+            ConnectionState::NotConnected {
+                expected: true,
+                code: _,
+            } => State::MainMenu,
+            ConnectionState::NotConnected {
+                expected: false,
+                code,
+            } => State::LostConnection {
+                was_connected: true,
+                code: *code,
+            },
+            _ => State::LostConnection {
+                was_connected: true,
+                code: None,
+            },
+        }
+    }
 }
 
 fn parse_full_game_id_str(src: &str) -> Result<(u8, u32), lexical::Error> {
@@ -373,6 +396,7 @@ async fn main() {
 
     let game_info_mutex = Arc::new(std::sync::Mutex::new(ConnectionState::NotConnected {
         expected: true,
+        code: None,
     }));
     let game_msg_send = RefCell::new(None);
 
@@ -439,10 +463,23 @@ async fn main() {
 
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Err(err) = res {
-                    (*lock) = ConnectionState::NotConnected { expected: false };
+                    let code = match err.downcast_ref::<quinn::ConnectionError>() {
+                        Some(quinn::ConnectionError::ApplicationClosed(close)) => {
+                            close.error_code.into_inner().try_into().ok()
+                        }
+                        _ => None,
+                    };
+
+                    (*lock) = ConnectionState::NotConnected {
+                        expected: false,
+                        code,
+                    };
                     eprintln!("Failed to handle connection: {:?}", err);
                 } else {
-                    (*lock) = ConnectionState::NotConnected { expected: true };
+                    (*lock) = ConnectionState::NotConnected {
+                        expected: true,
+                        code: None,
+                    };
                 }
             }
         });
@@ -715,12 +752,13 @@ async fn main() {
                 match *game_info_mutex.lock().unwrap() {
                     ConnectionState::Connecting => State::Connecting,
                     ConnectionState::Connected(_) => State::GameNeutral,
-                    ConnectionState::NotConnected { expected } => {
+                    ConnectionState::NotConnected { expected, code } => {
                         if expected {
                             State::MainMenu
                         } else {
                             State::LostConnection {
                                 was_connected: false,
+                                code,
                             }
                         }
                     }
@@ -839,12 +877,7 @@ async fn main() {
                         },
                     }
                 } else {
-                    match *lock {
-                        ConnectionState::NotConnected { expected: true } => State::MainMenu,
-                        _ => State::LostConnection {
-                            was_connected: true,
-                        },
-                    }
+                    State::from_connection_state(&*lock)
                 }
             }
             State::GameHand { my_player_idx } => {
@@ -1655,12 +1688,7 @@ async fn main() {
                         State::GameNeutral
                     }
                 } else {
-                    match *lock {
-                        ConnectionState::NotConnected { expected: true } => State::MainMenu,
-                        _ => State::LostConnection {
-                            was_connected: true,
-                        },
-                    }
+                    State::from_connection_state(&*lock)
                 }
             }
             State::GameEnd { scores } => {
@@ -1712,17 +1740,18 @@ async fn main() {
                         },
                     }
                 } else {
-                    State::LostConnection {
-                        was_connected: true,
-                    }
+                    State::from_connection_state(&*lock)
                 }
             }
-            State::LostConnection { was_connected } => {
+            State::LostConnection {
+                was_connected,
+                code,
+            } => {
                 mq::clear_background(BACKGROUND_COLOR);
 
                 let back_button_width = 300.0;
                 let back_button_height = 50.0;
-                let spacing = 50.0;
+                let spacing = 120.0;
 
                 let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
 
@@ -1738,6 +1767,23 @@ async fn main() {
                     mq::BLACK,
                 );
 
+                if let Some(details) = match code {
+                    Some(ni_ty::protocol::CLOSE_KICK) => Some("Kicked by master"),
+                    Some(ni_ty::protocol::CLOSE_TOO_NEW) => Some("Server is too old"),
+                    Some(ni_ty::protocol::CLOSE_TOO_OLD) => {
+                        Some("Your client is too old to connect to this server")
+                    }
+                    _ => None,
+                } {
+                    draw_text_centered(
+                        details,
+                        screen_center.0,
+                        screen_center.1 + 60.0,
+                        50,
+                        mq::BLACK,
+                    );
+                }
+
                 if mqui::widgets::Button::new("Main Menu")
                     .position(mq::Vec2::new(
                         screen_center.0 - back_button_width / 2.0,
@@ -1748,7 +1794,10 @@ async fn main() {
                 {
                     State::MainMenu
                 } else {
-                    State::LostConnection { was_connected }
+                    State::LostConnection {
+                        was_connected,
+                        code,
+                    }
                 }
             }
         };
