@@ -690,29 +690,39 @@ async fn main() {
                 let spacing = 25.0;
                 let row_width = 1000.0;
 
-                let list_height =
-                    (row_height * list.len() as f32) + (spacing * (list.len() - 1) as f32);
-                let list_x = screen_center.0 - row_width / 2.0;
-                let list_y = screen_center.1 - list_height / 2.0;
-
                 let mut joining = None;
-                for (idx, game) in list.iter().enumerate() {
-                    let y = list_y + (idx as f32) * (row_height + spacing);
+                if list.is_empty() {
+                    draw_text_centered(
+                        "No games found.",
+                        screen_center.0,
+                        screen_center.1,
+                        50,
+                        mq::BLACK,
+                    );
+                } else {
+                    let list_height =
+                        (row_height * list.len() as f32) + (spacing * (list.len() - 1) as f32);
+                    let list_x = screen_center.0 - row_width / 2.0;
+                    let list_y = screen_center.1 - list_height / 2.0;
 
-                    mqui::root_ui().label(
-                        mq::Vec2::new(list_x, y),
-                        &to_full_game_id_str(game.server.server_id, game.game_id),
-                    );
-                    mqui::root_ui().label(
-                        mq::Vec2::new(list_x + 270.0, y),
-                        &format!("{} players", game.players),
-                    );
-                    mqui::root_ui().label(
-                        mq::Vec2::new(list_x + 570.0, y),
-                        if game.waiting { "waiting" } else { "playing" },
-                    );
-                    if mqui::root_ui().button(mq::Vec2::new(list_x + 820.0, y), "Join") {
-                        joining = Some(game);
+                    for (idx, game) in list.iter().enumerate() {
+                        let y = list_y + (idx as f32) * (row_height + spacing);
+
+                        mqui::root_ui().label(
+                            mq::Vec2::new(list_x, y),
+                            &to_full_game_id_str(game.server.server_id, game.game_id),
+                        );
+                        mqui::root_ui().label(
+                            mq::Vec2::new(list_x + 270.0, y),
+                            &format!("{} players", game.players),
+                        );
+                        mqui::root_ui().label(
+                            mq::Vec2::new(list_x + 570.0, y),
+                            if game.waiting { "waiting" } else { "playing" },
+                        );
+                        if mqui::root_ui().button(mq::Vec2::new(list_x + 820.0, y), "Join") {
+                            joining = Some(game);
+                        }
                     }
                 }
 
