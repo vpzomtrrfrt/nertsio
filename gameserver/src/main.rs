@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
 
+mod connection;
 mod systems;
 
 const MAX_PLAYERS: usize = 6;
@@ -25,7 +26,8 @@ enum PlayerController {
     Network {
         game_stream_send_channel:
             tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
-        connection: quinn::Connection,
+        connection:
+            Box<dyn connection::ConnectionHandle<SendDatagramError = anyhow::Error> + Send + Sync>,
     },
     Bot {
         mouse_state: ni_ty::MouseState,
