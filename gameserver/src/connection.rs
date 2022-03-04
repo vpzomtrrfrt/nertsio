@@ -33,9 +33,9 @@ pub trait Connection {
     type Error: std::error::Error + Sync + Send + 'static;
     type SendDatagramError: std::error::Error + Sync + Send + 'static;
 
-    type BiOut: tokio::io::AsyncWrite + Unpin;
-    type BiIn: tokio::io::AsyncRead + Unpin;
-    type DatagramsIn: Stream<Item = Result<bytes::Bytes, Self::Error>>;
+    type BiOut: tokio::io::AsyncWrite + Unpin + Send;
+    type BiIn: tokio::io::AsyncRead + Unpin + Send;
+    type DatagramsIn: Stream<Item = Result<bytes::Bytes, Self::Error>> + Send;
     type Handle: ConnectionHandle<SendDatagramError = Self::SendDatagramError>
         + Sync
         + Send

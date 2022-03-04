@@ -1,7 +1,7 @@
 use crate::{
     GlobalState, PlayerController, ServerGamePlayerState, ServerGameState, ServerHandState,
 };
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, Stream, StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::future::Future;
@@ -522,7 +522,14 @@ async fn handle_connection<
     res
 }
 
-pub(crate) async fn run(global_state: Arc<GlobalState>, incoming: quinn::Incoming) {
+pub(crate) async fn run<
+    C: crate::connection::Connection + Send,
+    E: std::error::Error + Sync + Send + 'static,
+    F: Future<Output = Result<C, E>> + Send + 'static,
+>(
+    global_state: Arc<GlobalState>,
+    incoming: impl Stream<Item = F>,
+) {
     incoming
         .for_each(move |connecting| {
             let global_state = global_state.clone();
