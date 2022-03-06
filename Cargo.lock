@@ -1083,7 +1083,6 @@ name = "nertsio_gameserver"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-bincode",
  "async-trait",
  "bincode",
  "bytes 1.1.0",

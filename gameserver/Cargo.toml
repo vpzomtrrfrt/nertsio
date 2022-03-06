@@ -13,7 +13,6 @@ rustls = "0.20.2"
 openssl = "0.10.38"
 anyhow = "1.0.51"
 futures-util = { version = "0.3.18", features = ["sink"] }
-async-bincode = "0.6.1"
 dashmap = "4.0.2"
 rand = "0.8.4"
 tempfile = "3.2.0"

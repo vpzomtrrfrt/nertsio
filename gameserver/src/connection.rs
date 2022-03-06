@@ -271,7 +271,7 @@ impl ConnectionHandle for WSConnectionHandle {
         if let Ok(mut lock) = self.inner.try_lock() {
             let inner = &mut *lock;
 
-            inner.out_send.send(msg);
+            let _ = inner.out_send.send(msg); // drop if full
         }
 
         Ok(())
@@ -311,7 +311,7 @@ impl WSConnection {
     ) -> Self {
         let (datagrams_recv_send, datagrams_recv_recv) =
             tokio::sync::mpsc::channel::<bytes::Bytes>(2);
-        let (out_send, out_recv) = tokio::sync::mpsc::unbounded_channel();
+        let (out_send, mut out_recv) = tokio::sync::mpsc::unbounded_channel();
 
         let inner = Arc::new(tokio::sync::Mutex::new(WSConnectionInner {
             bi_streams: HashMap::new(),
@@ -323,7 +323,7 @@ impl WSConnection {
         tokio::spawn({
             let inner = inner.clone();
             async move {
-                let (stream_send, stream_recv) = stream.split();
+                let (mut stream_send, stream_recv) = stream.split();
 
                 if let Err(err) = futures_util::try_join!(
                     async move {
@@ -335,7 +335,8 @@ impl WSConnection {
                     stream_recv
                         .map_err(anyhow::Error::from)
                         .try_for_each(|msg| {
-                            let inner = &inner;
+                            let inner = inner.clone();
+                            let datagrams_recv_send = datagrams_recv_send.clone();
                             async move {
                                 if let tokio_tungstenite::tungstenite::protocol::Message::Binary(
                                     mut data,
@@ -344,18 +345,19 @@ impl WSConnection {
                                     let id = data.pop();
                                     match id {
                                         Some(0) => {
-                                            datagrams_recv_send.send(data.into());
+                                            let _ = datagrams_recv_send.try_send(data.into());
+                                            //drop if full
                                         }
                                         Some(id) => {
                                             let id = i8::from_ne_bytes([id]);
-                                            let out = bytes::BytesMut::new();
+                                            let mut out = bytes::BytesMut::new();
                                             out.extend_from_slice(&data);
 
                                             let mut lock = inner.lock().await;
                                             let inner = &mut *lock;
 
                                             if let Some((_, send)) = inner.bi_streams.get_mut(&id) {
-                                                // TODO
+                                                send.send(out).await?;
                                             }
                                         }
                                         None => {
