@@ -23,3 +23,7 @@ redis-async = "0.12.0"
 nertsio_ui_metrics = { path = "../ui_metrics" }
 async-trait = "0.1.52"
 tokio-tungstenite = "0.17.1"
+tokio-rustls = "0.23.2"
+tokio-stream = { version = "0.1.8", features = ["net"] }
+tokio-util = { version = "0.7.0", features = ["codec"] }
+pin-project-lite = "0.2.8"
