@@ -1,4 +1,6 @@
 use futures_util::FutureExt;
+#[cfg(target_family = "wasm")]
+use futures_util::StreamExt;
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
@@ -193,6 +195,9 @@ fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     }
 }
 
+#[cfg(target_family = "wasm")]
+const SETTINGS_KEY: &str = "nertsioSettings";
+
 #[cfg(not(target_family = "wasm"))]
 async fn run_settings_save_loop(
     file: std::fs::File,
@@ -229,6 +234,45 @@ async fn run_settings_save_loop(
                 file.write_all(&buf).await?;
 
                 Result::<_, anyhow::Error>::Ok(())
+            }
+            .await
+            {
+                eprintln!("failed to save settings: {:?}", err);
+            }
+        }
+    }
+}
+
+#[cfg(target_family = "wasm")]
+async fn run_settings_save_loop(
+    storage: web_sys::Storage,
+    init_value: Settings,
+    mutex: Arc<Mutex<Settings>>,
+) {
+    let mut saved_value = init_value;
+
+    let mut interval = wasm_timer::Interval::new(std::time::Duration::from_secs(5));
+
+    loop {
+        interval.next().await;
+
+        if {
+            let lock = mutex.lock().unwrap();
+            if saved_value != *lock {
+                saved_value = (*lock).clone();
+                true
+            } else {
+                false
+            }
+        } {
+            // value changed, need to save it
+
+            if let Err(err) = async {
+                let buf = serde_json::to_string(&saved_value)?;
+
+                storage
+                    .set_item(SETTINGS_KEY, &buf)
+                    .map_err(|err| anyhow::anyhow!("Failed to set item: {:?}", err))
             }
             .await
             {
@@ -446,7 +490,48 @@ async fn main() {
     }
     #[cfg(target_family = "wasm")]
     {
-        settings_mutex = Arc::new(Mutex::new(Default::default()));
+        match web_sys::window()
+            .ok_or_else(|| anyhow::anyhow!("Can't access window"))
+            .and_then(|window| {
+                window
+                    .local_storage()
+                    .map_err(|err| anyhow::anyhow!("Can't access localStorage: {:?}", err))
+                    .and_then(|x| x.ok_or_else(|| anyhow::anyhow!("Can't access localStorage")))
+            }) {
+            Ok(storage) => {
+                let init_value: Settings = match storage.get_item(SETTINGS_KEY) {
+                    Ok(None) => Default::default(),
+                    Ok(Some(buf)) => match serde_json::from_str(&buf) {
+                        Ok(value) => value,
+                        Err(err) => {
+                            println!("Failed to parse config file: {:?}", err);
+                            println!("Will reset config to defaults.");
+
+                            Default::default()
+                        }
+                    },
+                    Err(err) => {
+                        println!("Failed to fetch config file: {:?}", err);
+                        println!("Will reset config to defaults.");
+
+                        Default::default()
+                    }
+                };
+
+                settings_mutex = Arc::new(Mutex::new(init_value.clone()));
+                async_rt.spawn(run_settings_save_loop(
+                    storage,
+                    init_value,
+                    settings_mutex.clone(),
+                ));
+            }
+            Err(err) => {
+                eprintln!("Failed to init settings: {:?}", err);
+                eprintln!("Settings will not be saved.");
+
+                settings_mutex = Arc::new(Mutex::new(Default::default()));
+            }
+        }
     }
 
     let do_connection = |connection_type| {

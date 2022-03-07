@@ -32,3 +32,4 @@ getrandom = { version = "0.2.3", features = ["js"] }
 wasm-sockets = { git = "https://github.com/vpzomtrrfrt/wasm-sockets", rev = "d4ac143" }
 wasm-bindgen-futures = "0.4.29"
 console_error_panic_hook = "0.1.7"
+web-sys = { version = "0.3.56", features = ["Window", "Storage"] }
