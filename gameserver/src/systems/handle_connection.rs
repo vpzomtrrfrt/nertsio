@@ -127,7 +127,7 @@ where
             handle.close(ni_ty::protocol::CLOSE_TOO_NEW);
             anyhow::bail!("Mismatched protocol");
         }
-        if protocol_version < ni_ty::protocol::PROTOCOL_VERSION {
+        if protocol_version < crate::MIN_PROTOCOL_VERSION {
             handle.close(ni_ty::protocol::CLOSE_TOO_OLD);
             anyhow::bail!("Mismatched protocol");
         }

@@ -21,7 +21,7 @@ pub(crate) async fn run(
                     let status = ni_ty::protocol::ServerStatusMessage {
                         server_id,
                         address_ipv4: my_address_ipv4,
-                        min_protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
+                        min_protocol_version: crate::MIN_PROTOCOL_VERSION,
                         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
                         open_public_games: global_state
                             .games

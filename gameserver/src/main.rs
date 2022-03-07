@@ -10,6 +10,7 @@ mod systems;
 
 const MAX_PLAYERS: usize = 6;
 const WIN_SCORE: i32 = 100;
+const MIN_PROTOCOL_VERSION: u16 = 4;
 
 #[derive(Clone)]
 enum BotPlan {
