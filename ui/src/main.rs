@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
+#[cfg(target_family = "wasm")]
+use std::future::Future;
 use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 
 mod connection;
 
@@ -113,7 +114,7 @@ enum State {
         input: String,
     },
     PublicGameListLoading {
-        channel: tokio::sync::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded>>,
+        channel: futures_channel::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded>>,
     },
     PublicGameList {
         list: Vec<ni_ty::protocol::PublicGameInfoExpanded>,
@@ -192,22 +193,7 @@ fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     }
 }
 
-async fn res_to_error(
-    res: hyper::Response<hyper::Body>,
-) -> Result<hyper::Response<hyper::Body>, anyhow::Error> {
-    let status = res.status();
-    if status.is_success() {
-        Ok(res)
-    } else {
-        let bytes = hyper::body::to_bytes(res.into_body()).await?;
-        Err(anyhow::anyhow!(
-            "Remote error {}: {}",
-            status,
-            String::from_utf8_lossy(&bytes)
-        ))
-    }
-}
-
+#[cfg(not(target_family = "wasm"))]
 async fn run_settings_save_loop(
     file: std::fs::File,
     init_value: Settings,
@@ -235,6 +221,8 @@ async fn run_settings_save_loop(
             // value changed, need to save it
 
             if let Err(err) = async {
+                use tokio::io::{AsyncSeekExt, AsyncWriteExt};
+
                 let buf = serde_json::to_vec(&saved_value)?;
 
                 file.rewind().await?;
@@ -262,9 +250,22 @@ fn get_window_conf() -> mq::Conf {
     }
 }
 
+#[cfg(target_family = "wasm")]
+struct WasmAsyncRt;
+#[cfg(target_family = "wasm")]
+impl WasmAsyncRt {
+    pub fn spawn<F: Future<Output = ()> + 'static>(&self, fut: F) {
+        wasm_bindgen_futures::spawn_local(fut);
+    }
+}
+
 #[macroquad::main(get_window_conf)]
 async fn main() {
+    #[cfg(not(target_family = "wasm"))]
     let async_rt = tokio::runtime::Runtime::new().unwrap();
+
+    #[cfg(target_family = "wasm")]
+    let async_rt = WasmAsyncRt;
 
     let card_size = mq::Vec2::new(metrics::CARD_WIDTH, metrics::CARD_HEIGHT);
 
@@ -400,9 +401,10 @@ async fn main() {
     }));
     let game_msg_send = RefCell::new(None);
 
-    let http_client = hyper::Client::new();
+    let http_client = reqwest::Client::new();
 
     let settings_mutex;
+    #[cfg(not(target_family = "wasm"))]
     {
         let config_dir = dirs::config_dir()
             .map(Cow::Owned)
@@ -439,9 +441,13 @@ async fn main() {
             }
         }
     }
+    #[cfg(target_family = "wasm")]
+    {
+        settings_mutex = Arc::new(Mutex::new(Default::default()));
+    }
 
     let do_connection = |connection_type| {
-        let (new_game_msg_send, game_msg_recv) = tokio::sync::mpsc::unbounded_channel();
+        let (new_game_msg_send, game_msg_recv) = futures_channel::mpsc::unbounded();
         *game_msg_send.borrow_mut() = Some(new_game_msg_send);
 
         async_rt.spawn({
@@ -463,11 +469,25 @@ async fn main() {
 
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Err(err) = res {
+                    #[cfg(not(target_family = "wasm"))]
                     let code = match err.downcast_ref::<quinn::ConnectionError>() {
                         Some(quinn::ConnectionError::ApplicationClosed(close)) => {
                             close.error_code.into_inner().try_into().ok()
                         }
                         _ => None,
+                    };
+
+                    #[cfg(target_family = "wasm")]
+                    let code = match err.downcast_ref::<connection::CloseError>() {
+                        Some(err) => {
+                            let code = err.code();
+                            if code >= 4000 && code < 4256 {
+                                Some((code - 4000) as u8)
+                            } else {
+                                None
+                            }
+                        }
+                        None => None,
                     };
 
                     (*lock) = ConnectionState::NotConnected {
@@ -486,20 +506,17 @@ async fn main() {
     };
 
     let start_loading_public_games = || {
-        let (send, recv) = tokio::sync::oneshot::channel();
+        let (send, recv) = futures_channel::oneshot::channel();
 
-        let req_fut = http_client.request(
-            hyper::Request::get(format!("{}public_games", COORDINATOR_URL))
-                .body(Default::default())
-                .unwrap(),
-        );
+        let req_fut = http_client
+            .get(format!("{}public_games", COORDINATOR_URL))
+            .send();
         async_rt.spawn(
             (async move {
-                let resp = res_to_error(req_fut.await?).await?;
+                let resp = req_fut.await?.error_for_status()?;
 
-                let resp = hyper::body::to_bytes(resp.into_body()).await?;
                 let resp: ni_ty::protocol::RespList<ni_ty::protocol::PublicGameInfoExpanded> =
-                    serde_json::from_slice(&resp)?;
+                    resp.json().await?;
 
                 let _ = send.send(resp.items); // if this fails, then we didn't need it anyway
 
@@ -673,11 +690,9 @@ async fn main() {
                     State::MainMenu
                 } else {
                     match channel.try_recv() {
-                        Ok(list) => State::PublicGameList { list },
-                        Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
-                            State::PublicGameListLoading { channel }
-                        }
-                        Err(tokio::sync::oneshot::error::TryRecvError::Closed) => State::MainMenu,
+                        Ok(Some(list)) => State::PublicGameList { list },
+                        Ok(None) => State::PublicGameListLoading { channel },
+                        Err(futures_channel::oneshot::Canceled) => State::MainMenu,
                     }
                 }
             }
@@ -755,7 +770,7 @@ async fn main() {
                         .borrow()
                         .as_ref()
                         .unwrap()
-                        .send(ConnectionMessage::Leave)
+                        .unbounded_send(ConnectionMessage::Leave)
                         .unwrap();
                 }
 
@@ -819,7 +834,7 @@ async fn main() {
                                                 .borrow()
                                                 .as_ref()
                                                 .unwrap()
-                                                .send(
+                                                .unbounded_send(
                                                     ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
                                                         value: new_value,
                                                     }
@@ -842,7 +857,7 @@ async fn main() {
                                                 .borrow()
                                                 .as_ref()
                                                 .unwrap()
-                                                .send(
+                                                .unbounded_send(
                                                     ni_ty::protocol::GameMessageC2S::KickPlayer {
                                                         player: *key,
                                                     }
@@ -863,7 +878,9 @@ async fn main() {
                                             .borrow()
                                             .as_ref()
                                             .unwrap()
-                                            .send(ni_ty::protocol::GameMessageC2S::AddBot.into())
+                                            .unbounded_send(
+                                                ni_ty::protocol::GameMessageC2S::AddBot.into(),
+                                            )
                                             .unwrap();
                                     }
                                 }
@@ -873,7 +890,7 @@ async fn main() {
                                         .borrow()
                                         .as_ref()
                                         .unwrap()
-                                        .send(ConnectionMessage::Leave)
+                                        .unbounded_send(ConnectionMessage::Leave)
                                         .unwrap();
                                 }
                                 State::GameNeutral
@@ -1003,7 +1020,7 @@ async fn main() {
                                                     .borrow()
                                                     .as_ref()
                                                     .unwrap()
-                                                    .send(
+                                                    .unbounded_send(
                                                         ni_ty::protocol::GameMessageC2S::ApplyHandAction {
                                                             action,
                                                         }.into(),
@@ -1244,7 +1261,7 @@ async fn main() {
                                                                             hand_extra
                                                                                 .pending_actions
                                                                                 .push_back(action);
-                                                                            game_msg_send.borrow().as_ref().unwrap().send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
+                                                                            game_msg_send.borrow().as_ref().unwrap().unbounded_send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
                                                                         }
 
                                                                         hand_extra.my_held_state =
@@ -1283,7 +1300,7 @@ async fn main() {
                                             .borrow()
                                             .as_ref()
                                             .unwrap()
-                                            .send(
+                                            .unbounded_send(
                                                 ni_ty::protocol::GameMessageC2S::ApplyHandAction {
                                                     action,
                                                 }
@@ -1449,7 +1466,9 @@ async fn main() {
                                             .borrow()
                                             .as_ref()
                                             .unwrap()
-                                            .send(ni_ty::protocol::GameMessageC2S::CallNerts.into())
+                                            .unbounded_send(
+                                                ni_ty::protocol::GameMessageC2S::CallNerts.into(),
+                                            )
                                             .unwrap();
                                     }
                                 }
@@ -1689,7 +1708,7 @@ async fn main() {
                                 .borrow()
                                 .as_ref()
                                 .unwrap()
-                                .send(ConnectionMessage::Leave)
+                                .unbounded_send(ConnectionMessage::Leave)
                                 .unwrap();
                         }
 
