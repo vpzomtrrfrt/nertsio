@@ -85,7 +85,7 @@ struct SharedInfo {
 }
 
 struct HandExtra {
-    expected_start_time: Option<std::time::Instant>,
+    expected_start_time: Option<wasm_timer::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
     mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
@@ -261,6 +261,9 @@ impl WasmAsyncRt {
 
 #[macroquad::main(get_window_conf)]
 async fn main() {
+    #[cfg(target_family = "wasm")]
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     #[cfg(not(target_family = "wasm"))]
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -1689,17 +1692,15 @@ async fn main() {
                             );
 
                             if let Some(expected_start_time) = hand_extra.expected_start_time {
-                                if let Some(time_until) = expected_start_time
-                                    .checked_duration_since(std::time::Instant::now())
-                                {
-                                    draw_text_centered(
-                                        &(time_until.as_secs() + 1).to_string(),
-                                        screen_center.0,
-                                        screen_center.1,
-                                        100,
-                                        NERTS_TEXT_COLOR,
-                                    );
-                                }
+                                let time_until =
+                                    expected_start_time.duration_since(wasm_timer::Instant::now());
+                                draw_text_centered(
+                                    &(time_until.as_secs() + 1).to_string(),
+                                    screen_center.0,
+                                    screen_center.1,
+                                    100,
+                                    NERTS_TEXT_COLOR,
+                                );
                             }
                         }
 

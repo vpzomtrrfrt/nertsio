@@ -31,3 +31,4 @@ async-bincode = "0.6.1"
 getrandom = { version = "0.2.3", features = ["js"] }
 wasm-sockets = { git = "https://github.com/vpzomtrrfrt/wasm-sockets", rev = "d4ac143" }
 wasm-bindgen-futures = "0.4.29"
+console_error_panic_hook = "0.1.7"

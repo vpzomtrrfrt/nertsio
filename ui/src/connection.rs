@@ -132,7 +132,7 @@ pub(crate) async fn handle_connection(
 
     #[cfg(target_family = "wasm")]
     let mut conn = {
-        let mut conn = wasm_sockets::EventClient::new(&format!("wss://{}", host))?;
+        let mut conn = wasm_sockets::EventClient::new(&format!("ws://{}", host))?;
 
         let (connect_send, mut connect_recv) = futures_channel::mpsc::channel(1);
         let connect_send = std::cell::RefCell::new(connect_send);
@@ -471,7 +471,7 @@ pub(crate) async fn handle_connection(
 
                                 let mut hand_extra = crate::HandExtra::new(info.players().len());
                                 hand_extra.expected_start_time =
-                                    Some(std::time::Instant::now() + delay);
+                                    Some(wasm_timer::Instant::now() + delay);
                                 shared.hand_extra = Some(hand_extra);
 
                                 shared.game.hand = Some(info);
