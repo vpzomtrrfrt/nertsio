@@ -357,18 +357,22 @@ async fn main() {
     let (_, quic_incoming) =
         quinn::Endpoint::server(quic_server_config, ([0, 0, 0, 0], port).into()).unwrap();
 
+    let tls_acceptor = tokio_rustls::TlsAcceptor::from(server_config);
     let websocket_incoming = tokio_stream::wrappers::TcpListenerStream::new(
         tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port))
             .await
             .expect("Failed to bind TCP port"),
     )
     .map_err(anyhow::Error::from)
-    .map(|res| async move {
-        match res {
-            Ok(stream) => Ok(connection::WSConnection::init(
-                tokio_tungstenite::accept_async(stream).await?,
-            )),
-            Err(err) => Err(err),
+    .map(|res| {
+        let tls_acceptor = tls_acceptor.clone();
+        async move {
+            match res {
+                Ok(stream) => Ok(connection::WSConnection::init(
+                    tokio_tungstenite::accept_async(tls_acceptor.accept(stream).await?).await?,
+                )),
+                Err(err) => Err(err),
+            }
         }
     });
 

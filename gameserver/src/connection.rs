@@ -304,7 +304,11 @@ pub struct WSConnection {
 }
 
 impl WSConnection {
-    pub fn init(stream: tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>) -> Self {
+    pub fn init(
+        stream: tokio_tungstenite::WebSocketStream<
+            tokio_rustls::server::TlsStream<tokio::net::TcpStream>,
+        >,
+    ) -> Self {
         let (datagrams_recv_send, datagrams_recv_recv) =
             tokio::sync::mpsc::channel::<bytes::Bytes>(2);
         let (out_send, mut out_recv) = tokio::sync::mpsc::unbounded_channel();

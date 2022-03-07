@@ -1228,6 +1228,7 @@ dependencies = [
  "rustls",
  "tempfile",
  "tokio 1.14.0",
+ "tokio-rustls",
  "tokio-stream",
  "tokio-tungstenite",
  "tokio-util 0.7.0",
@@ -2274,6 +2275,17 @@ checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
  "native-tls",
  "tokio 1.14.0",
+]
+
+[[package]]
+name = "tokio-rustls"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a27d5f2b839802bd8267fa19b0530f5a08b9c08cd417976be2a65d130fe1c11b"
+dependencies = [
+ "rustls",
+ "tokio 1.14.0",
+ "webpki",
 ]
 
 [[package]]
