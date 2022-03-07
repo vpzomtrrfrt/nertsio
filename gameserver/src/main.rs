@@ -1,13 +1,16 @@
+use futures_util::{StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
 
+mod connection;
 mod systems;
 
 const MAX_PLAYERS: usize = 6;
 const WIN_SCORE: i32 = 100;
+const MIN_PROTOCOL_VERSION: u16 = 4;
 
 #[derive(Clone)]
 enum BotPlan {
@@ -25,7 +28,7 @@ enum PlayerController {
     Network {
         game_stream_send_channel:
             tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
-        connection: quinn::Connection,
+        connection: Box<dyn connection::ConnectionHandle + Send + Sync>,
     },
     Bot {
         mouse_state: ni_ty::MouseState,
@@ -264,11 +267,22 @@ async fn main() {
         games: Default::default(),
     });
 
+    let server_config = Arc::new(
+        rustls::ServerConfig::builder()
+            .with_safe_default_cipher_suites()
+            .with_safe_default_kx_groups()
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert], privkey)
+            .expect("Failed to initialize TLS config"),
+    );
+
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
 
-    let mut server_config = quinn::ServerConfig::with_single_cert(vec![cert], privkey).unwrap();
-    server_config.transport = Arc::new(transport_config);
+    let mut quic_server_config = quinn::ServerConfig::with_crypto(server_config.clone());
+    quic_server_config.transport = Arc::new(transport_config);
 
     let redis_conn_details = match std::env::var("REDIS_URI") {
         Ok(value) => Some((
@@ -317,11 +331,27 @@ async fn main() {
         Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
     };
 
-    let (_, incoming) =
-        quinn::Endpoint::server(server_config, ([0, 0, 0, 0], port).into()).unwrap();
+    let (_, quic_incoming) =
+        quinn::Endpoint::server(quic_server_config, ([0, 0, 0, 0], port).into()).unwrap();
+
+    let websocket_incoming = tokio_stream::wrappers::TcpListenerStream::new(
+        tokio::net::TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port))
+            .await
+            .expect("Failed to bind TCP port"),
+    )
+    .map_err(anyhow::Error::from)
+    .map(|res| async move {
+        match res {
+            Ok(stream) => Ok(connection::WSConnection::init(
+                tokio_tungstenite::accept_async(stream).await?,
+            )),
+            Err(err) => Err(err),
+        }
+    });
 
     futures_util::join!(
-        systems::handle_connection::run(global_state.clone(), incoming),
+        systems::handle_connection::run(global_state.clone(), quic_incoming),
+        systems::handle_connection::run(global_state.clone(), websocket_incoming),
         systems::cleanup::run(global_state.clone()),
         {
             let global_state = global_state.clone();

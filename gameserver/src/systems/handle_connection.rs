@@ -1,9 +1,10 @@
 use crate::{
     GlobalState, PlayerController, ServerGamePlayerState, ServerGameState, ServerHandState,
 };
-use futures_util::{SinkExt, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, Stream, StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use rand::Rng;
+use std::future::Future;
 use std::sync::Arc;
 
 const HAND_START_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
@@ -51,25 +52,53 @@ fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<
     }
 }
 
-async fn handle_connection(
+async fn handle_connection<
+    C: crate::connection::Connection,
+    E: Into<anyhow::Error> + Sync + Send + 'static,
+>(
     global_state: Arc<GlobalState>,
-    connecting: quinn::Connecting,
-) -> Result<(), anyhow::Error> {
-    let connection = connecting.await?;
+    connecting: impl Future<Output = Result<C, E>>,
+) -> Result<(), anyhow::Error>
+where
+    C::Handle: Clone,
+{
+    let mut connection = connecting.await.map_err(Into::into)?;
 
-    let (handshake_stream_res, _bi_streams) = connection.bi_streams.into_future().await;
+    let handle = connection.create_handle();
+
+    let handshake_stream_res = connection.accept_bi_stream().await;
     let handshake_stream =
         handshake_stream_res.ok_or(anyhow::anyhow!("Stream closed without handshake"))??;
 
-    let mut handshake_stream_send =
-        async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::HandshakeMessageS2C, _>::from(
-            handshake_stream.0,
-        )
-        .for_async();
-    let handshake_stream_recv = async_bincode::AsyncBincodeReader::<
-        _,
-        ni_ty::protocol::HandshakeMessageC2S,
-    >::from(handshake_stream.1);
+    let mut handshake_stream_send = Box::pin(
+        handshake_stream
+            .0
+            .sink_map_err(anyhow::Error::from)
+            .with(|msg| async move {
+                use bincode::Options;
+                use bytes::BufMut;
+
+                let mut dest = bytes::BytesMut::new().writer();
+
+                bincode::options()
+                    .with_limit(u32::max_value() as u64)
+                    .allow_trailing_bytes()
+                    .serialize_into(&mut dest, &msg)?;
+
+                Result::<_, anyhow::Error>::Ok(dest.into_inner().freeze())
+            }),
+    );
+    let handshake_stream_recv = Box::pin(handshake_stream.1.map_err(Into::into).and_then(
+        |data| async move {
+            use bincode::Options;
+
+            bincode::options()
+                .with_limit(u32::max_value() as u64)
+                .allow_trailing_bytes()
+                .deserialize(&data)
+                .map_err(anyhow::Error::from)
+        },
+    ));
 
     println!("init");
 
@@ -92,16 +121,14 @@ async fn handle_connection(
         min_protocol_version,
     } = first_message
     {
+        use crate::connection::ConnectionHandle;
+
         if ni_ty::protocol::PROTOCOL_VERSION < min_protocol_version {
-            connection
-                .connection
-                .close(ni_ty::protocol::CLOSE_TOO_NEW.into(), b"too new");
+            handle.close(ni_ty::protocol::CLOSE_TOO_NEW);
             anyhow::bail!("Mismatched protocol");
         }
-        if protocol_version < ni_ty::protocol::PROTOCOL_VERSION {
-            connection
-                .connection
-                .close(ni_ty::protocol::CLOSE_TOO_OLD.into(), b"too old");
+        if protocol_version < crate::MIN_PROTOCOL_VERSION {
+            handle.close(ni_ty::protocol::CLOSE_TOO_OLD);
             anyhow::bail!("Mismatched protocol");
         }
         (name, game_id, new_game_public == Some(true))
@@ -148,7 +175,7 @@ async fn handle_connection(
                         score: 0,
                         controller: PlayerController::Network {
                             game_stream_send_channel: game_stream_send_channel_send,
-                            connection: connection.connection.clone(),
+                            connection: Box::new(handle.clone()),
                         },
                     },
                 );
@@ -226,17 +253,29 @@ async fn handle_connection(
             .send(ni_ty::protocol::HandshakeMessageS2C::Hello)
             .await?;
 
-        let game_stream = connection.connection.open_bi().await?;
+        let game_stream = connection.start_bi_stream().await?;
 
-        let mut game_stream_send =
-            async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageS2C, _>::from(
-                game_stream.0,
-            )
-            .for_async();
-        let game_stream_recv = async_bincode::AsyncBincodeReader::<
-            _,
-            ni_ty::protocol::GameMessageC2S,
-        >::from(game_stream.1);
+        let mut game_stream_send = Box::pin(game_stream.0.sink_map_err(anyhow::Error::from).with(|msg| async move {
+            use bincode::Options;
+            use bytes::BufMut;
+
+            let mut dest = bytes::BytesMut::new().writer();
+
+            bincode::options()
+                .with_limit(u32::max_value() as u64)
+                .allow_trailing_bytes()
+                .serialize_into(&mut dest, &msg)?;
+
+            Result::<_, anyhow::Error>::Ok(dest.into_inner().freeze())
+        }));
+        let game_stream_recv = game_stream.1.map_err(Into::into).and_then(|data| async move {
+            use bincode::Options;
+
+            Ok(bincode::options()
+                .with_limit(u32::max_value() as u64)
+                .allow_trailing_bytes()
+                .deserialize(&data)?)
+        });
 
         game_stream_send
             .send(ni_ty::protocol::GameMessageS2C::Joined {
@@ -279,7 +318,7 @@ async fn handle_connection(
             },
             async {
                 let global_state = global_state.clone();
-                connection.datagrams.map_err(Into::into).try_for_each(|bytes| {
+                connection.into_datagrams().map_err(Into::into).try_for_each(|bytes| {
                     let global_state = global_state.clone();
                     async move {
                         use ni_ty::protocol::DatagramMessageC2S;
@@ -331,7 +370,6 @@ async fn handle_connection(
             async {
                 let global_state = global_state.clone();
                 game_stream_recv
-                    .map_err(Into::into)
                     .try_for_each(move |msg| {
                         println!("received {:?}", msg);
                         let global_state = global_state.clone();
@@ -457,7 +495,7 @@ async fn handle_connection(
                                         if let Some(target) = server_game_state.players.get(&player) {
                                             match &target.controller {
                                                 PlayerController::Network { connection, .. } => {
-                                                    connection.close(ni_ty::protocol::CLOSE_KICK.into(), b"kicked");
+                                                    connection.close(ni_ty::protocol::CLOSE_KICK);
                                                 }
                                                 PlayerController::Bot { .. } => {
                                                     server_game_state.players.remove(&player);
@@ -516,7 +554,16 @@ async fn handle_connection(
     res
 }
 
-pub(crate) async fn run(global_state: Arc<GlobalState>, incoming: quinn::Incoming) {
+pub(crate) async fn run<
+    C: crate::connection::Connection + Send,
+    E: Into<anyhow::Error> + Sync + Send + 'static,
+    F: Future<Output = Result<C, E>> + Send + 'static,
+>(
+    global_state: Arc<GlobalState>,
+    incoming: impl Stream<Item = F>,
+) where
+    C::Handle: Clone,
+{
     incoming
         .for_each(move |connecting| {
             let global_state = global_state.clone();
