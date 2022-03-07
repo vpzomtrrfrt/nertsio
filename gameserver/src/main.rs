@@ -230,35 +230,57 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let (cert, pkey) = {
-        let mut keyfile = tempfile::NamedTempFile::new().unwrap();
-        let mut certfile = tempfile::NamedTempFile::new().unwrap();
+    let (cert, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
+        Some(certfile) => {
+            let keyfile =
+                std::env::var_os("CERTIFICATE_KEY_FILE").expect("Missing CERTIFICATE_KEY_FILE");
 
-        let status = std::process::Command::new("openssl")
-            .args(&[
-                "req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout",
-            ])
-            .arg(keyfile.path())
-            .arg("-out")
-            .arg(certfile.path())
-            .args(&["-nodes", "-batch"])
-            .status()
-            .unwrap();
+            let mut certfile =
+                std::fs::File::open(certfile).expect("Failed to open CERTIFICATE_FILE");
+            let mut keyfile =
+                std::fs::File::open(keyfile).expect("Failed to open CERTIFICATE_KEY_FILE");
 
-        if !status.success() {
-            panic!("Failed to generate certificate");
+            let mut key = Vec::new();
+            keyfile.read_to_end(&mut key).unwrap();
+            let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
+            let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
+
+            let mut cert = Vec::new();
+            certfile.read_to_end(&mut cert).unwrap();
+            let cert = rustls::Certificate(cert);
+
+            (cert, pkey)
         }
+        None => {
+            let mut keyfile = tempfile::NamedTempFile::new().unwrap();
+            let mut certfile = tempfile::NamedTempFile::new().unwrap();
 
-        let mut key = Vec::new();
-        keyfile.read_to_end(&mut key).unwrap();
-        let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
-        let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
+            let status = std::process::Command::new("openssl")
+                .args(&[
+                    "req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout",
+                ])
+                .arg(keyfile.path())
+                .arg("-out")
+                .arg(certfile.path())
+                .args(&["-nodes", "-batch"])
+                .status()
+                .unwrap();
 
-        let mut cert = Vec::new();
-        certfile.read_to_end(&mut cert).unwrap();
-        let cert = rustls::Certificate(cert);
+            if !status.success() {
+                panic!("Failed to generate certificate");
+            }
 
-        (cert, pkey)
+            let mut key = Vec::new();
+            keyfile.read_to_end(&mut key).unwrap();
+            let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
+            let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
+
+            let mut cert = Vec::new();
+            certfile.read_to_end(&mut cert).unwrap();
+            let cert = rustls::Certificate(cert);
+
+            (cert, pkey)
+        }
     };
 
     let privkey = rustls::PrivateKey(pkey.private_key_to_der().unwrap());
