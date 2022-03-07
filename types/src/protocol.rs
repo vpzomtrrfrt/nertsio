@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 4;
+pub const PROTOCOL_VERSION: u16 = 5;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
