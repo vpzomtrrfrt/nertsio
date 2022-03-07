@@ -1,10 +1,12 @@
 use crate::{GlobalState, MAX_PLAYERS};
 use nertsio_types as ni_ty;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 pub(crate) async fn run(
     global_state: Arc<GlobalState>,
     my_address_ipv4: std::net::SocketAddrV4,
+    my_hostname: Option<String>,
     server_id: u8,
     redis_conn: redis_async::client::PairedConnection,
 ) {
@@ -21,6 +23,7 @@ pub(crate) async fn run(
                     let status = ni_ty::protocol::ServerStatusMessage {
                         server_id,
                         address_ipv4: my_address_ipv4,
+                        hostname: my_hostname.as_deref().map(Cow::Borrowed),
                         min_protocol_version: crate::MIN_PROTOCOL_VERSION,
                         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
                         open_public_games: global_state

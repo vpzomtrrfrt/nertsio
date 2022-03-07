@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
 pub const PROTOCOL_VERSION: u16 = 5;
@@ -106,19 +107,21 @@ pub struct PublicGameInfo {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ServerStatusMessage {
+pub struct ServerStatusMessage<'a> {
     pub server_id: u8,
     pub protocol_version: u16,
     pub min_protocol_version: u16,
     pub address_ipv4: std::net::SocketAddrV4,
     pub open_public_games: Vec<PublicGameInfo>,
     pub stats: ServerStats,
+    pub hostname: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct ServerConnectionInfo {
+pub struct ServerConnectionInfo<'a> {
     pub server_id: u8,
     pub address_ipv4: std::net::SocketAddrV4,
+    pub hostname: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -127,11 +130,11 @@ pub struct RespList<T> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct PublicGameInfoExpanded {
+pub struct PublicGameInfoExpanded<'a> {
     pub game_id: u32,
     pub players: u8,
     pub waiting: bool,
-    pub server: ServerConnectionInfo,
+    pub server: ServerConnectionInfo<'a>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

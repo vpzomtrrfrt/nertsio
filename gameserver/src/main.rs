@@ -312,6 +312,7 @@ async fn main() {
                 .expect("Missing MY_HOST_ADDRESS")
                 .parse()
                 .expect("Invalid value for MY_HOST_ADDRESS"),
+            std::env::var("MY_HOSTNAME").ok(),
             {
                 let conn = redis_async::client::paired_connect(value)
                     .await
@@ -379,9 +380,17 @@ async fn main() {
             let global_state = global_state.clone();
             let redis_conn_details = redis_conn_details.clone();
             async move {
-                if let Some((my_address_ipv4, (server_id, redis_conn))) = redis_conn_details {
-                    systems::publish::run(global_state, my_address_ipv4, server_id, redis_conn)
-                        .await;
+                if let Some((my_address_ipv4, my_hostname, (server_id, redis_conn))) =
+                    redis_conn_details
+                {
+                    systems::publish::run(
+                        global_state,
+                        my_address_ipv4,
+                        my_hostname,
+                        server_id,
+                        redis_conn,
+                    )
+                    .await;
                 }
             }
         },

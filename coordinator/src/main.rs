@@ -1,6 +1,7 @@
 use futures_util::{TryFutureExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -23,7 +24,15 @@ impl<T: 'static + std::error::Error + Send> From<T> for Error {
 }
 
 struct GlobalState {
-    gameservers: RwLock<HashMap<u8, (std::time::Instant, ni_ty::protocol::ServerStatusMessage)>>,
+    gameservers: RwLock<
+        HashMap<
+            u8,
+            (
+                std::time::Instant,
+                ni_ty::protocol::ServerStatusMessage<'static>,
+            ),
+        >,
+    >,
 }
 
 type RouteNode<P> = trout::Node<
@@ -63,13 +72,13 @@ async fn handler_public_games_list(
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     use rand::seq::IteratorRandom;
 
-    let list_games = ctx
-        .gameservers
-        .read()
-        .unwrap()
+    let gameservers = ctx.gameservers.read().unwrap();
+
+    let list_games = gameservers
         .iter()
         .flat_map(|(server_id, (_, info))| {
             let server_address_ipv4 = info.address_ipv4;
+            let server_hostname = info.hostname.as_deref();
             info.open_public_games
                 .iter()
                 .map(move |game| ni_ty::protocol::PublicGameInfoExpanded {
@@ -79,6 +88,7 @@ async fn handler_public_games_list(
                     server: ni_ty::protocol::ServerConnectionInfo {
                         server_id: *server_id,
                         address_ipv4: server_address_ipv4,
+                        hostname: server_hostname.map(Cow::Borrowed),
                     },
                 })
         })
@@ -125,6 +135,7 @@ async fn handler_servers_pick_for_new_game(
     let info = ni_ty::protocol::ServerConnectionInfo {
         server_id: value.server_id,
         address_ipv4: value.address_ipv4,
+        hostname: value.hostname.as_deref().map(Cow::Borrowed),
     };
 
     json_response(&info)
@@ -143,6 +154,7 @@ async fn handler_servers_get(
         let info = ni_ty::protocol::ServerConnectionInfo {
             server_id: value.server_id,
             address_ipv4: value.address_ipv4,
+            hostname: value.hostname.as_deref().map(Cow::Borrowed),
         };
 
         json_response(&info)

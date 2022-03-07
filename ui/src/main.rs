@@ -116,10 +116,12 @@ enum State {
         input: String,
     },
     PublicGameListLoading {
-        channel: futures_channel::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded>>,
+        channel: futures_channel::oneshot::Receiver<
+            Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>,
+        >,
     },
     PublicGameList {
-        list: Vec<ni_ty::protocol::PublicGameInfoExpanded>,
+        list: Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>,
     },
     Connecting,
     GameNeutral,

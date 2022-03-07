@@ -8,12 +8,12 @@ use std::sync::{Arc, Mutex};
 
 use crate::{ConnectionState, SharedInfo};
 
-pub enum ConnectionType {
+pub enum ConnectionType<'a> {
     CreateGame {
         public: bool,
     },
     JoinPublicGame {
-        server: ni_ty::protocol::ServerConnectionInfo,
+        server: ni_ty::protocol::ServerConnectionInfo<'a>,
         game_id: u32,
     },
     JoinPrivateGame {
@@ -62,7 +62,7 @@ fn bi_bincode_options() -> impl bincode::Options {
 
 pub(crate) async fn handle_connection(
     http_client: &reqwest::Client,
-    connection_type: ConnectionType,
+    connection_type: ConnectionType<'_>,
     info_mutex: &std::sync::Mutex<ConnectionState>,
     mut game_msg_recv: futures_channel::mpsc::UnboundedReceiver<ConnectionMessage>,
     settings_mutex: Arc<Mutex<crate::Settings>>,
