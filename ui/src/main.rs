@@ -42,7 +42,7 @@ const PLAYER_COLORS: [mq::Color; 16] = [
 
 const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 
-const COORDINATOR_URL: &str = "http://coordinator.nerts.io/";
+const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
 // const COORDINATOR_URL: &str = "http://localhost:6462/";
 
 fn default_name() -> String {
