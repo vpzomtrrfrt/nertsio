@@ -98,11 +98,12 @@ pub(crate) async fn handle_connection(
         }
     };
 
-    let host: std::net::SocketAddr = server.address_ipv4.into();
     let server_id = server.server_id;
 
     #[cfg(not(target_family = "wasm"))]
     let conn = {
+        let host: std::net::SocketAddr = server.address_ipv4.into();
+
         let mut endpoint = quinn::Endpoint::client(
             (
                 match host {
@@ -132,7 +133,10 @@ pub(crate) async fn handle_connection(
 
     #[cfg(target_family = "wasm")]
     let mut conn = {
-        let mut conn = wasm_sockets::EventClient::new(&format!("ws://{}", host))?;
+        let mut conn = wasm_sockets::EventClient::new(&match server.hostname {
+            Some(hostname) => format!("wss://{}:{}", hostname, server.address_ipv4.port()),
+            None => format!("ws://{}", server.address_ipv4),
+        })?;
 
         let (connect_send, mut connect_recv) = futures_channel::mpsc::channel(1);
         let connect_send = std::cell::RefCell::new(connect_send);
