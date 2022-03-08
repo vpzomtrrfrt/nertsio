@@ -353,26 +353,27 @@ pub(crate) async fn handle_connection(
                     .map::<anyhow::Result<()>, _>(Ok)
                     .try_fold(0u32, move |mut seq, _| async move {
                         let mut lock = info_mutex.lock().unwrap();
-                        let shared = lock.as_info_mut().unwrap();
 
-                        if shared.game.hand.is_some() {
-                            let hand_extra = shared.hand_extra.as_ref().unwrap();
-                            if let Some(mouse_pos) = hand_extra.last_mouse_position {
-                                send_datagram(
-                                    bincode::serialize(
-                                        &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
-                                            seq,
-                                            state: ni_ty::MouseState {
-                                                position: mouse_pos,
-                                                held: hand_extra.my_held_state,
+                        if let Some(shared) = lock.as_info_mut() {
+                            if shared.game.hand.is_some() {
+                                let hand_extra = shared.hand_extra.as_ref().unwrap();
+                                if let Some(mouse_pos) = hand_extra.last_mouse_position {
+                                    send_datagram(
+                                        bincode::serialize(
+                                            &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
+                                                seq,
+                                                state: ni_ty::MouseState {
+                                                    position: mouse_pos,
+                                                    held: hand_extra.my_held_state,
+                                                },
                                             },
-                                        },
-                                    )
-                                    .unwrap()
-                                    .into(),
-                                )?;
+                                        )
+                                        .unwrap()
+                                        .into(),
+                                    )?;
 
-                                seq += 1;
+                                    seq += 1;
+                                }
                             }
                         }
 
