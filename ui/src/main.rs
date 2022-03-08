@@ -239,7 +239,7 @@ async fn run_settings_save_loop(
             }
             .await
             {
-                eprintln!("failed to save settings: {:?}", err);
+                log::error!("failed to save settings: {:?}", err);
             }
         }
     }
@@ -278,7 +278,7 @@ async fn run_settings_save_loop(
             }
             .await
             {
-                eprintln!("failed to save settings: {:?}", err);
+                log::error!("failed to save settings: {:?}", err);
             }
         }
     }
@@ -307,8 +307,19 @@ impl WasmAsyncRt {
 
 #[macroquad::main(get_window_conf)]
 async fn main() {
+    #[cfg(not(target_family = "wasm"))]
+    {
+        env_logger::init_from_env(
+            env_logger::Env::default()
+                .filter_or(env_logger::DEFAULT_FILTER_ENV, "nertsio_ui=debug"),
+        );
+    }
+
     #[cfg(target_family = "wasm")]
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+    {
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        wasm_logger::init(wasm_logger::Config::default());
+    }
 
     #[cfg(not(target_family = "wasm"))]
     let async_rt = tokio::runtime::Runtime::new().unwrap();
@@ -468,8 +479,8 @@ async fn main() {
                 let init_value: Settings = match serde_json::from_reader(&mut file) {
                     Ok(value) => value,
                     Err(err) => {
-                        println!("Failed to parse config file: {:?}", err);
-                        println!("Will reset config to defaults.");
+                        log::debug!("Failed to parse config file: {:?}", err);
+                        log::debug!("Will reset config to defaults.");
 
                         Default::default()
                     }
@@ -483,8 +494,8 @@ async fn main() {
                 ));
             }
             Err(err) => {
-                eprintln!("Failed to open settings file: {:?}", err);
-                eprintln!("Settings will not be saved.");
+                log::error!("Failed to open settings file: {:?}", err);
+                log::error!("Settings will not be saved.");
 
                 settings_mutex = Arc::new(Mutex::new(Default::default()));
             }
@@ -506,15 +517,15 @@ async fn main() {
                     Ok(Some(buf)) => match serde_json::from_str(&buf) {
                         Ok(value) => value,
                         Err(err) => {
-                            println!("Failed to parse config file: {:?}", err);
-                            println!("Will reset config to defaults.");
+                            log::debug!("Failed to parse config file: {:?}", err);
+                            log::debug!("Will reset config to defaults.");
 
                             Default::default()
                         }
                     },
                     Err(err) => {
-                        println!("Failed to fetch config file: {:?}", err);
-                        println!("Will reset config to defaults.");
+                        log::debug!("Failed to fetch config file: {:?}", err);
+                        log::debug!("Will reset config to defaults.");
 
                         Default::default()
                     }
@@ -528,8 +539,8 @@ async fn main() {
                 ));
             }
             Err(err) => {
-                eprintln!("Failed to init settings: {:?}", err);
-                eprintln!("Settings will not be saved.");
+                log::error!("Failed to init settings: {:?}", err);
+                log::error!("Settings will not be saved.");
 
                 settings_mutex = Arc::new(Mutex::new(Default::default()));
             }
@@ -584,7 +595,7 @@ async fn main() {
                         expected: false,
                         code,
                     };
-                    eprintln!("Failed to handle connection: {:?}", err);
+                    log::error!("Failed to handle connection: {:?}", err);
                 } else {
                     (*lock) = ConnectionState::NotConnected {
                         expected: true,
@@ -614,7 +625,7 @@ async fn main() {
             })
             .then(|res| {
                 if let Err(err) = res {
-                    eprintln!("Failed to list public games: {:?}", err);
+                    log::error!("Failed to list public games: {:?}", err);
                 }
 
                 futures_util::future::ready(())
@@ -1261,7 +1272,7 @@ async fn main() {
 
                                         let _ = player_state;
 
-                                        println!("click found {:?}", found);
+                                        log::debug!("click found {:?}", found);
 
                                         if let Some(found) = found {
                                             match hand_extra.my_held_state {
@@ -1338,7 +1349,7 @@ async fn main() {
                                                                                 to: target_loc,
                                                                             };
 
-                                                                        println!(
+                                                                        log::debug!(
                                                                             "applying for check"
                                                                         );
                                                                         if pred_hand_state
@@ -1357,7 +1368,7 @@ async fn main() {
                                                                         hand_extra.my_held_state =
                                                                             None;
                                                                     } else {
-                                                                        println!(
+                                                                        log::debug!(
                                                                             "can't add {:?} to {:?}",
                                                                             back_card, target_stack
                                                                         );
@@ -1683,7 +1694,7 @@ async fn main() {
                                 }
 
                                 if let Some(held) = state.held {
-                                    println!("player held {:?}", held);
+                                    log::debug!("player held {:?}", held);
 
                                     let stack = pred_hand_state.players()[idx].stack_at(held.src);
                                     if let Some(stack) = stack {

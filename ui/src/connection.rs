@@ -157,7 +157,7 @@ pub(crate) async fn handle_connection(
     let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {
         let handshake_stream = conn.connection.open_bi().await?;
 
-        println!("opened stream");
+        log::debug!("opened stream");
 
         let handshake_stream_send =
             async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::HandshakeMessageC2S, _>::from(
@@ -279,7 +279,7 @@ pub(crate) async fn handle_connection(
         )
     };
 
-    println!("connected");
+    log::debug!("connected");
 
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
         name: (*settings_mutex.lock().unwrap()).name.clone(),
@@ -290,7 +290,7 @@ pub(crate) async fn handle_connection(
     };
     handshake_stream_send.send(hello_msg).await?;
 
-    println!("sent hello");
+    log::debug!("sent hello");
 
     let (first_message, handshake_stream_recv) = handshake_stream_recv.into_future().await;
     let first_message = first_message.ok_or(anyhow::anyhow!("Failed to complete handshake"))??;
@@ -303,14 +303,14 @@ pub(crate) async fn handle_connection(
         anyhow::bail!("Unknown handshake response");
     }
 
-    println!("aaa");
+    log::debug!("aaa");
 
     #[cfg(not(target_family = "wasm"))]
     let (mut game_stream_send, game_stream_recv) = {
         let (game_stream_res, _bi_streams) = conn.bi_streams.into_future().await;
         let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
 
-        println!("bbb");
+        log::debug!("bbb");
 
         let game_stream_send =
             async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageC2S, _>::from(
@@ -325,7 +325,7 @@ pub(crate) async fn handle_connection(
         (game_stream_send, game_stream_recv)
     };
 
-    println!("wat");
+    log::debug!("wat");
 
     let (send_leave, recv_leave) = futures_channel::oneshot::channel();
 
@@ -335,7 +335,7 @@ pub(crate) async fn handle_connection(
                 while let Some(msg) = game_msg_recv.next().await {
                     match msg {
                         ConnectionMessage::Game(msg) => {
-                            println!("sending {:?}", msg);
+                            log::debug!("sending {:?}", msg);
                             game_stream_send.send(msg).await?;
                         }
                         ConnectionMessage::Leave => {
@@ -425,7 +425,7 @@ pub(crate) async fn handle_connection(
                     .try_for_each(|msg| async move {
                         use ni_ty::protocol::GameMessageS2C;
 
-                        println!("received {:?}", msg);
+                        log::debug!("received {:?}", msg);
 
                         match msg {
                             GameMessageS2C::Joined {
