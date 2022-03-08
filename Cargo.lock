@@ -2743,7 +2743,7 @@ dependencies = [
 [[package]]
 name = "wasm-sockets"
 version = "0.2.2"
-source = "git+https://github.com/vpzomtrrfrt/wasm-sockets?rev=d4ac143#d4ac143058d2f5a33afce36320e5d6a9a611325d"
+source = "git+https://github.com/vpzomtrrfrt/wasm-sockets?rev=4d1cad9d#4d1cad9d60f35a9e9eb8289a7f000c2fa2051fe9"
 dependencies = [
  "js-sys",
  "log",

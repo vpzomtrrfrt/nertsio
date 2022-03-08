@@ -133,10 +133,35 @@ pub(crate) async fn handle_connection(
 
     #[cfg(target_family = "wasm")]
     let mut conn = {
-        let mut conn = wasm_sockets::EventClient::new(&match server.hostname {
+        struct WSDropper(wasm_sockets::EventClient);
+
+        impl std::ops::Deref for WSDropper {
+            type Target = wasm_sockets::EventClient;
+
+            fn deref(&self) -> &Self::Target {
+                &self.0
+            }
+        }
+
+        impl std::ops::DerefMut for WSDropper {
+            fn deref_mut(&mut self) -> &mut <Self as std::ops::Deref>::Target {
+                &mut self.0
+            }
+        }
+
+        impl Drop for WSDropper {
+            fn drop(&mut self) {
+                log::debug!("closing WS");
+                if let Err(err) = self.0.close() {
+                    log::error!("Failed to close socket: {:?}", err);
+                }
+            }
+        }
+
+        let mut conn = WSDropper(wasm_sockets::EventClient::new(&match server.hostname {
             Some(hostname) => format!("wss://{}:{}", hostname, server.address_ipv4.port()),
             None => format!("ws://{}", server.address_ipv4),
-        })?;
+        })?);
 
         let (connect_send, mut connect_recv) = futures_channel::mpsc::channel(1);
         let connect_send = std::cell::RefCell::new(connect_send);
