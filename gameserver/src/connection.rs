@@ -325,53 +325,87 @@ impl WSConnection {
             async move {
                 let (mut stream_send, stream_recv) = stream.split();
 
+                let (end_send, mut end_recv) = tokio::sync::oneshot::channel();
+
                 if let Err(err) = futures_util::try_join!(
                     async move {
-                        while let Some(msg) = out_recv.recv().await {
-                            stream_send.send(msg).await?;
+                        loop {
+                            end_recv = match futures_util::future::select(
+                                Box::pin(out_recv.recv()),
+                                end_recv,
+                            )
+                            .await
+                            {
+                                futures_util::future::Either::Left((Some(msg), end_recv)) => {
+                                    stream_send.send(msg).await?;
+
+                                    end_recv
+                                }
+                                futures_util::future::Either::Left((None, _))
+                                | futures_util::future::Either::Right((_, _)) => {
+                                    break;
+                                }
+                            };
                         }
                         anyhow::Result::Ok(())
                     },
-                    stream_recv
-                        .map_err(anyhow::Error::from)
-                        .try_for_each(|msg| {
-                            let inner = inner.clone();
-                            let datagrams_recv_send = datagrams_recv_send.clone();
-                            async move {
-                                if let tokio_tungstenite::tungstenite::protocol::Message::Binary(
-                                    mut data,
-                                ) = msg
-                                {
-                                    let id = data.pop();
-                                    match id {
-                                        Some(0) => {
-                                            let _ = datagrams_recv_send.try_send(data.into());
-                                            //drop if full
-                                        }
-                                        Some(id) => {
-                                            let id = i8::from_ne_bytes([id]);
-                                            let mut out = bytes::BytesMut::new();
-                                            out.extend_from_slice(&data);
+                    {
+                        let inner = inner.clone();
+                        async move {
+                            stream_recv
+                                .map_err(anyhow::Error::from)
+                                .try_for_each(|msg| {
+                                    let inner = inner.clone();
+                                    let datagrams_recv_send = datagrams_recv_send.clone();
+                                    async move {
+                                        if let tokio_tungstenite::tungstenite::protocol::Message::Binary(
+                                            mut data,
+                                        ) = msg
+                                        {
+                                            let id = data.pop();
+                                            match id {
+                                                Some(0) => {
+                                                    let _ = datagrams_recv_send.try_send(data.into());
+                                                    //drop if full
+                                                }
+                                                Some(id) => {
+                                                    let id = i8::from_ne_bytes([id]);
+                                                    let mut out = bytes::BytesMut::new();
+                                                    out.extend_from_slice(&data);
 
-                                            let mut lock = inner.lock().await;
-                                            let inner = &mut *lock;
+                                                    let mut lock = inner.lock().await;
+                                                    let inner = &mut *lock;
 
-                                            if let Some((_, send)) = inner.bi_streams.get_mut(&id) {
-                                                send.send(out).await?;
+                                                    if let Some((_, send)) = inner.bi_streams.get_mut(&id) {
+                                                        send.send(out).await?;
+                                                    }
+                                                }
+                                                None => {
+                                                    eprintln!("received empty message");
+                                                }
                                             }
                                         }
-                                        None => {
-                                            eprintln!("received empty message");
-                                        }
-                                    }
-                                }
 
-                                Ok(())
-                            }
-                        }),
+                                        Ok(())
+                                    }
+                                }).await?;
+
+                            println!("ws stream ended");
+
+                            let _ = end_send.send(());
+
+                            Result::<_, anyhow::Error>::Ok(())
+                        }
+                    }
                 ) {
                     eprintln!("Error in connection handling: {:?}", err);
                 }
+                println!("ws connection handling ended");
+
+                let mut lock = inner.lock().await;
+                let inner = &mut *lock;
+
+                inner.bi_streams.clear();
             }
         });
 
