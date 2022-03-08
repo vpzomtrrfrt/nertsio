@@ -230,13 +230,12 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let (cert, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
+    let (certs, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
         Some(certfile) => {
             let keyfile =
                 std::env::var_os("CERTIFICATE_KEY_FILE").expect("Missing CERTIFICATE_KEY_FILE");
 
-            let mut certfile =
-                std::fs::File::open(certfile).expect("Failed to open CERTIFICATE_FILE");
+            let certfile = std::fs::File::open(certfile).expect("Failed to open CERTIFICATE_FILE");
             let mut keyfile =
                 std::fs::File::open(keyfile).expect("Failed to open CERTIFICATE_KEY_FILE");
 
@@ -245,11 +244,15 @@ async fn main() {
             let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
             let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
 
-            let mut cert = Vec::new();
-            certfile.read_to_end(&mut cert).unwrap();
-            let cert = rustls::Certificate(cert);
+            let mut certfile = std::io::BufReader::new(certfile);
 
-            (cert, pkey)
+            let certs = rustls_pemfile::certs(&mut certfile)
+                .expect("Failed to parse certificate")
+                .into_iter()
+                .map(rustls::Certificate)
+                .collect();
+
+            (certs, pkey)
         }
         None => {
             let mut keyfile = tempfile::NamedTempFile::new().unwrap();
@@ -279,7 +282,7 @@ async fn main() {
             certfile.read_to_end(&mut cert).unwrap();
             let cert = rustls::Certificate(cert);
 
-            (cert, pkey)
+            (vec![cert], pkey)
         }
     };
 
@@ -296,7 +299,7 @@ async fn main() {
             .with_protocol_versions(&[&rustls::version::TLS13])
             .unwrap()
             .with_no_client_auth()
-            .with_single_cert(vec![cert], privkey)
+            .with_single_cert(certs, privkey)
             .expect("Failed to initialize TLS config"),
     );
 
