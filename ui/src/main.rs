@@ -126,7 +126,7 @@ impl MouseState {
 
     pub fn receive(&mut self, seq: u32, inner: ni_ty::MouseState) {
         if self.seq < seq {
-            let duration = (self.time_since_update * 0.8).min(MAX_INTERPOLATION_TIME);
+            let duration = (self.time_since_update * 0.9).min(MAX_INTERPOLATION_TIME);
             match &mut self.current_animation {
                 Some((ref mut spline, time)) => {
                     let t = spline.keys().last().unwrap().t + duration;
