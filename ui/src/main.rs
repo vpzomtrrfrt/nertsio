@@ -87,7 +87,7 @@ struct SharedInfo {
 }
 
 struct HandExtra {
-    expected_start_time: Option<wasm_timer::Instant>,
+    expected_start_time: Option<instant::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
     mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
@@ -253,7 +253,7 @@ async fn run_settings_save_loop(
 ) {
     let mut saved_value = init_value;
 
-    let mut interval = wasm_timer::Interval::new(std::time::Duration::from_secs(5));
+    let mut interval = futures_ticker::Ticker::new(std::time::Duration::from_secs(5));
 
     loop {
         interval.next().await;
@@ -1790,15 +1790,17 @@ async fn main() {
                             );
 
                             if let Some(expected_start_time) = hand_extra.expected_start_time {
-                                let time_until =
-                                    expected_start_time.duration_since(wasm_timer::Instant::now());
-                                draw_text_centered(
-                                    &(time_until.as_secs() + 1).to_string(),
-                                    screen_center.0,
-                                    screen_center.1,
-                                    100,
-                                    NERTS_TEXT_COLOR,
-                                );
+                                if let Some(time_until) = expected_start_time
+                                    .checked_duration_since(instant::Instant::now())
+                                {
+                                    draw_text_centered(
+                                        &(time_until.as_secs() + 1).to_string(),
+                                        screen_center.0,
+                                        screen_center.1,
+                                        100,
+                                        NERTS_TEXT_COLOR,
+                                    );
+                                }
                             }
                         }
 

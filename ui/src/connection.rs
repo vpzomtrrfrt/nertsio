@@ -372,10 +372,10 @@ pub(crate) async fn handle_connection(
                 Result::<_, anyhow::Error>::Ok(())
             },
             async move {
-                let interval = wasm_timer::Interval::new(std::time::Duration::from_millis(50));
+                let interval = futures_ticker::Ticker::new(std::time::Duration::from_millis(50));
 
                 interval
-                    .map::<anyhow::Result<()>, _>(Ok)
+                    .map::<anyhow::Result<_>, _>(Ok)
                     .try_fold(0u32, move |mut seq, _| async move {
                         let mut lock = info_mutex.lock().unwrap();
 
@@ -501,7 +501,7 @@ pub(crate) async fn handle_connection(
 
                                 let mut hand_extra = crate::HandExtra::new(info.players().len());
                                 hand_extra.expected_start_time =
-                                    Some(wasm_timer::Instant::now() + delay);
+                                    Some(instant::Instant::now() + delay);
                                 shared.hand_extra = Some(hand_extra);
 
                                 shared.game.hand = Some(info);

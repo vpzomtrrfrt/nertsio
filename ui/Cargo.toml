@@ -20,8 +20,10 @@ dirs = "4.0.0"
 nertsio_ui_metrics = { path = "../ui_metrics" }
 futures-channel = "0.3.21"
 reqwest = { version = "0.11.9", features = ["json"] }
-wasm-timer = "0.2.5"
 log = "0.4.14"
+instant = { version = "0.1.12", features = ["wasm-bindgen"] }
+futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
+futures-ticker = { git = "https://github.com/vpzomtrrfrt/futures-ticker", rev = "7ab689" }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 quinn = "0.8.0"
