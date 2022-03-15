@@ -45,6 +45,8 @@ const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
 const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
 // const COORDINATOR_URL: &str = "http://localhost:6462/";
 
+const MAX_INTERPOLATION_TIME: f32 = 0.3;
+
 fn default_name() -> String {
     "Nerter".to_owned()
 }
@@ -86,11 +88,86 @@ struct SharedInfo {
     new_end_scores: Option<Vec<(u8, i32)>>,
 }
 
+#[derive(Clone)]
+struct MouseState {
+    seq: u32,
+    inner: ni_ty::MouseState,
+    current_animation: Option<(splines::Spline<f32, mq::Vec2>, f32)>,
+    time_since_update: f32,
+}
+
+impl MouseState {
+    pub fn new(seq: u32, inner: ni_ty::MouseState) -> Self {
+        Self {
+            seq,
+            inner,
+            current_animation: None,
+            time_since_update: 0.0,
+        }
+    }
+
+    pub fn get_pos(&self) -> mq::Vec2 {
+        self.current_animation
+            .as_ref()
+            .and_then(|(spline, time)| spline.sample(*time))
+            .unwrap_or_else(|| self.inner.position.into())
+    }
+
+    pub fn step(&mut self, delta: f32) {
+        if let Some((spline, ref mut time)) = &mut self.current_animation {
+            *time += delta;
+            if *time >= spline.keys().last().unwrap().t {
+                self.current_animation = None;
+            }
+        }
+
+        self.time_since_update += delta;
+    }
+
+    pub fn receive(&mut self, seq: u32, inner: ni_ty::MouseState) {
+        if self.seq < seq {
+            let duration = (self.time_since_update * 0.8).min(MAX_INTERPOLATION_TIME);
+            match &mut self.current_animation {
+                Some((ref mut spline, time)) => {
+                    let t = spline.keys().last().unwrap().t + duration;
+                    log::debug!("adding new point at {} (current {})", t, time);
+                    spline.add(splines::Key::new(
+                        t,
+                        inner.position.into(),
+                        splines::Interpolation::Cosine,
+                    ));
+                }
+                None => {
+                    self.current_animation = Some((
+                        splines::Spline::from_vec(vec![
+                            splines::Key::new(
+                                0.0,
+                                self.inner.position.into(),
+                                splines::Interpolation::Cosine,
+                            ),
+                            splines::Key::new(
+                                duration,
+                                inner.position.into(),
+                                splines::Interpolation::Cosine,
+                            ),
+                        ]),
+                        0.0,
+                    ));
+                }
+            }
+
+            self.time_since_update = 0.0;
+            self.inner = inner;
+            self.seq = seq;
+        }
+    }
+}
+
 struct HandExtra {
     expected_start_time: Option<instant::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
-    mouse_states: Vec<Option<(u32, ni_ty::MouseState)>>,
+    mouse_states: Vec<Option<MouseState>>,
     my_held_state: Option<ni_ty::HeldInfo>,
     last_mouse_position: Option<(f32, f32)>,
     stalled: bool,
@@ -1488,7 +1565,7 @@ async fn main() {
                             } else {
                                 hand_extra.mouse_states[idx]
                                     .as_ref()
-                                    .and_then(|(_, state)| state.held)
+                                    .and_then(|state| state.inner.held)
                                     .and_then(|held| {
                                         let stack = player_state.stack_at(held.src);
                                         if let Some(stack) = stack {
@@ -1683,8 +1760,8 @@ async fn main() {
                             }
                         }
 
-                        for (idx, value) in hand_extra.mouse_states.iter().enumerate() {
-                            if let Some((_, state)) = value {
+                        for (idx, value) in hand_extra.mouse_states.iter_mut().enumerate() {
+                            if let Some(state) = value {
                                 let location = metrics.player_loc(idx);
 
                                 if location.inverted != self_inverted {
@@ -1693,9 +1770,10 @@ async fn main() {
                                     mq::set_camera(&normal_camera);
                                 }
 
-                                if let Some(held) = state.held {
-                                    log::debug!("player held {:?}", held);
+                                state.step(mq::get_frame_time());
+                                let mouse_pos = state.get_pos();
 
+                                if let Some(held) = state.inner.held {
                                     let stack = pred_hand_state.players()[idx].stack_at(held.src);
                                     if let Some(stack) = stack {
                                         let cards = stack.cards();
@@ -1706,10 +1784,8 @@ async fn main() {
                                             if cards[0].card == held.top_card {
                                                 draw_vertical_stack_cards(
                                                     cards,
-                                                    screen_center.0 + state.position.0
-                                                        - held.offset.0,
-                                                    screen_center.1 + state.position.1
-                                                        - held.offset.1,
+                                                    screen_center.0 + mouse_pos[0] - held.offset.0,
+                                                    screen_center.1 + mouse_pos[1] - held.offset.1,
                                                 );
                                             }
                                         }
@@ -1718,8 +1794,8 @@ async fn main() {
 
                                 mq::draw_texture_ex(
                                     cursors_texture,
-                                    screen_center.0 + state.position.0 - 1.0,
-                                    screen_center.1 + state.position.1 - 1.0,
+                                    screen_center.0 + mouse_pos[0] - 1.0,
+                                    screen_center.1 + mouse_pos[1] - 1.0,
                                     PLAYER_COLORS[(pred_hand_state.players()[idx].player_id() >> 4)
                                         as usize],
                                     mq::DrawTextureParams {

@@ -1350,6 +1350,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "splines",
  "tokio 1.14.0",
  "wasm-bindgen-futures",
  "wasm-logger",
@@ -2175,6 +2176,15 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+
+[[package]]
+name = "splines"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c94307351d02448532cdf65ea95bfdd529183d360a60fb8c8bdca6c90af55542"
+dependencies = [
+ "glam",
+]
 
 [[package]]
 name = "static_assertions"

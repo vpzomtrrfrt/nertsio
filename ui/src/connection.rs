@@ -428,11 +428,14 @@ pub(crate) async fn handle_connection(
                                     if let Some(hand_extra) = shared.hand_extra.as_mut() {
                                         let mouse_state =
                                             &mut hand_extra.mouse_states[player_idx as usize];
-                                        if match mouse_state {
-                                            Some(state) => state.0 < seq,
-                                            None => true,
-                                        } {
-                                            *mouse_state = Some((seq, state));
+                                        match mouse_state {
+                                            Some(current_state) => {
+                                                current_state.receive(seq, state)
+                                            }
+                                            None => {
+                                                *mouse_state =
+                                                    Some(crate::MouseState::new(seq, state));
+                                            }
                                         }
                                     }
                                 }

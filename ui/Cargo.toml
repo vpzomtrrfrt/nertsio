@@ -24,6 +24,7 @@ log = "0.4.14"
 instant = { version = "0.1.12", features = ["wasm-bindgen"] }
 futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
 futures-ticker = { git = "https://github.com/vpzomtrrfrt/futures-ticker", rev = "7ab689" }
+splines = { version = "4.0.3", features = ["glam"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 quinn = "0.8.0"
