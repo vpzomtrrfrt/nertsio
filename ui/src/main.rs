@@ -279,13 +279,16 @@ const SETTINGS_KEY: &str = "nertsioSettings";
 
 #[cfg(not(target_family = "wasm"))]
 async fn run_settings_save_loop(
-    file: std::fs::File,
+    config_path: std::path::PathBuf,
     init_value: Settings,
     mutex: Arc<Mutex<Settings>>,
 ) {
     let mut saved_value = init_value;
 
-    let mut file = tokio::fs::File::from_std(file);
+    let file = Arc::new(atomicwrites::AtomicFile::new(
+        config_path,
+        atomicwrites::OverwriteBehavior::AllowOverwrite,
+    ));
 
     let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -305,14 +308,18 @@ async fn run_settings_save_loop(
             // value changed, need to save it
 
             if let Err(err) = async {
-                use tokio::io::{AsyncSeekExt, AsyncWriteExt};
-
                 let buf = serde_json::to_vec(&saved_value)?;
+                let file = file.clone();
+                tokio::task::spawn_blocking(move || {
+                    file.write(|f| {
+                        use std::io::Write;
 
-                file.rewind().await?;
-                file.write_all(&buf).await?;
+                        f.write_all(&buf)
+                    })?;
 
-                Result::<_, anyhow::Error>::Ok(())
+                    Result::<_, anyhow::Error>::Ok(())
+                })
+                .await?
             }
             .await
             {
@@ -546,12 +553,10 @@ async fn main() {
         let config_dir = dirs::config_dir()
             .map(Cow::Owned)
             .unwrap_or_else(|| std::path::Path::new(".").into());
-        match std::fs::OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(config_dir.join("nertsio.json"))
-        {
+
+        let config_path = config_dir.join("nertsio.json");
+
+        match std::fs::File::open(&config_path) {
             Ok(mut file) => {
                 let init_value: Settings = match serde_json::from_reader(&mut file) {
                     Ok(value) => value,
@@ -565,16 +570,27 @@ async fn main() {
 
                 settings_mutex = Arc::new(Mutex::new(init_value.clone()));
                 async_rt.spawn(run_settings_save_loop(
-                    file,
+                    config_path,
                     init_value,
                     settings_mutex.clone(),
                 ));
             }
             Err(err) => {
-                log::error!("Failed to open settings file: {:?}", err);
-                log::error!("Settings will not be saved.");
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    let init_value: Settings = Default::default();
 
-                settings_mutex = Arc::new(Mutex::new(Default::default()));
+                    settings_mutex = Arc::new(Mutex::new(init_value.clone()));
+                    async_rt.spawn(run_settings_save_loop(
+                        config_path,
+                        init_value,
+                        settings_mutex.clone(),
+                    ));
+                } else {
+                    log::error!("Failed to open settings file: {:?}", err);
+                    log::error!("Settings will not be saved.");
+
+                    settings_mutex = Arc::new(Mutex::new(Default::default()));
+                }
             }
         }
     }
