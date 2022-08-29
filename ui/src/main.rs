@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 mod connection;
 
-use connection::ConnectionMessage;
+use connection::{ConnectionEvent, ConnectionMessage};
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
@@ -429,6 +429,11 @@ async fn main() {
     let cursors_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::CURSORS, Some(mq::ImageFormat::Png));
 
+    let round_start_music =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nertson.ogg"))
+            .await
+            .unwrap();
+
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
             cards_texture,
@@ -550,6 +555,8 @@ async fn main() {
     }));
     let game_msg_send = RefCell::new(None);
 
+    let (events_send, mut events_recv) = futures_channel::mpsc::unbounded();
+
     let http_client = reqwest::Client::new();
 
     let settings_mutex;
@@ -653,6 +660,7 @@ async fn main() {
             let game_info_mutex = game_info_mutex.clone();
             let http_client = http_client.clone();
             let settings_mutex = settings_mutex.clone();
+            let events_send = events_send.clone();
             async move {
                 {
                     (*game_info_mutex.lock().unwrap()) = ConnectionState::Connecting;
@@ -663,6 +671,7 @@ async fn main() {
                     &game_info_mutex,
                     game_msg_recv,
                     settings_mutex,
+                    events_send,
                 )
                 .await;
 
@@ -2055,6 +2064,24 @@ async fn main() {
                 }
             }
         };
+
+        match events_recv.try_next() {
+            Ok(Some(evt)) => match evt {
+                ConnectionEvent::HandInit => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.round_start_music {
+                        println!("playing sound");
+                        macroquad::audio::play_sound_once(round_start_music);
+                    }
+                }
+            },
+            Ok(None) => unreachable!(),
+            Err(_) => {
+                // no events
+            }
+        }
 
         mq::next_frame().await
     }

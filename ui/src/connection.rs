@@ -60,12 +60,18 @@ fn bi_bincode_options() -> impl bincode::Options {
         .allow_trailing_bytes()
 }
 
+/// Used to trigger sounds
+pub enum ConnectionEvent {
+    HandInit,
+}
+
 pub(crate) async fn handle_connection(
     http_client: &reqwest::Client,
     connection_type: ConnectionType<'_>,
     info_mutex: &std::sync::Mutex<ConnectionState>,
     mut game_msg_recv: futures_channel::mpsc::UnboundedReceiver<ConnectionMessage>,
     settings_mutex: Arc<Mutex<crate::Settings>>,
+    events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
 ) -> Result<(), anyhow::Error> {
     let (server, game_id, new_game_public) = match connection_type {
         ConnectionType::CreateGame { public } => {
@@ -451,183 +457,193 @@ pub(crate) async fn handle_connection(
             async move {
                 game_stream_recv
                     .map_err(Into::into)
-                    .try_for_each(|msg| async move {
-                        use ni_ty::protocol::GameMessageS2C;
+                    .try_for_each(|msg| {
+                        let events_send = &events_send;
+                        async move {
+                            use ni_ty::protocol::GameMessageS2C;
 
-                        log::debug!("received {:?}", msg);
+                            log::debug!("received {:?}", msg);
 
-                        match msg {
-                            GameMessageS2C::Joined {
-                                info,
-                                your_player_id,
-                            } => {
-                                *info_mutex.lock().unwrap() =
-                                    ConnectionState::Connected(SharedInfo {
-                                        hand_extra: info.hand.as_ref().map(|hand| {
-                                            crate::HandExtra::new(hand.players().len())
-                                        }),
-                                        game: info,
-                                        my_player_id: your_player_id,
-                                        server_id,
-                                        new_end_scores: None,
-                                    });
-                            }
-                            GameMessageS2C::PlayerJoin { id, info } => {
-                                (*info_mutex.lock().unwrap())
-                                    .as_info_mut()
-                                    .unwrap()
-                                    .game
-                                    .players
-                                    .insert(id, info);
-                            }
-                            GameMessageS2C::PlayerLeave { id } => {
-                                (*info_mutex.lock().unwrap())
-                                    .as_info_mut()
-                                    .unwrap()
-                                    .game
-                                    .players
-                                    .remove(&id);
-                            }
-                            GameMessageS2C::PlayerUpdateReady { id, value } => {
-                                (*info_mutex.lock().unwrap())
-                                    .as_info_mut()
-                                    .unwrap()
-                                    .game
-                                    .players
-                                    .get_mut(&id)
-                                    .unwrap()
-                                    .ready = value;
-                            }
-                            GameMessageS2C::HandInit { info, delay } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = (*lock).as_info_mut().unwrap();
+                            match msg {
+                                GameMessageS2C::Joined {
+                                    info,
+                                    your_player_id,
+                                } => {
+                                    *info_mutex.lock().unwrap() =
+                                        ConnectionState::Connected(SharedInfo {
+                                            hand_extra: info.hand.as_ref().map(|hand| {
+                                                crate::HandExtra::new(hand.players().len())
+                                            }),
+                                            game: info,
+                                            my_player_id: your_player_id,
+                                            server_id,
+                                            new_end_scores: None,
+                                        });
+                                }
+                                GameMessageS2C::PlayerJoin { id, info } => {
+                                    (*info_mutex.lock().unwrap())
+                                        .as_info_mut()
+                                        .unwrap()
+                                        .game
+                                        .players
+                                        .insert(id, info);
+                                }
+                                GameMessageS2C::PlayerLeave { id } => {
+                                    (*info_mutex.lock().unwrap())
+                                        .as_info_mut()
+                                        .unwrap()
+                                        .game
+                                        .players
+                                        .remove(&id);
+                                }
+                                GameMessageS2C::PlayerUpdateReady { id, value } => {
+                                    (*info_mutex.lock().unwrap())
+                                        .as_info_mut()
+                                        .unwrap()
+                                        .game
+                                        .players
+                                        .get_mut(&id)
+                                        .unwrap()
+                                        .ready = value;
+                                }
+                                GameMessageS2C::HandInit { info, delay } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = (*lock).as_info_mut().unwrap();
 
-                                let mut hand_extra = crate::HandExtra::new(info.players().len());
-                                hand_extra.expected_start_time =
-                                    Some(instant::Instant::now() + delay);
-                                shared.hand_extra = Some(hand_extra);
+                                    let mut hand_extra =
+                                        crate::HandExtra::new(info.players().len());
+                                    hand_extra.expected_start_time =
+                                        Some(instant::Instant::now() + delay);
+                                    shared.hand_extra = Some(hand_extra);
 
-                                shared.game.hand = Some(info);
-                            }
-                            GameMessageS2C::PlayerHandAction { player, action } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
+                                    shared.game.hand = Some(info);
 
-                                let hand = shared.game.hand.as_mut().unwrap();
-                                let hand_extra = shared.hand_extra.as_mut().unwrap();
+                                    if let Err(err) =
+                                        events_send.unbounded_send(ConnectionEvent::HandInit)
+                                    {
+                                        eprintln!("unable to trigger HandInit event: {:?}", err);
+                                    }
+                                }
+                                GameMessageS2C::PlayerHandAction { player, action } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
 
-                                if let Some(my_player_idx) = hand
-                                    .players()
-                                    .iter()
-                                    .position(|player| player.player_id() == shared.my_player_id)
-                                {
-                                    if player == my_player_idx as u8 {
-                                        // my move, check if matches expected
+                                    let hand = shared.game.hand.as_mut().unwrap();
+                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
 
-                                        while let Some(front) =
-                                            hand_extra.pending_actions.pop_front()
-                                        {
-                                            if front == action {
-                                                break;
+                                    if let Some(my_player_idx) =
+                                        hand.players().iter().position(|player| {
+                                            player.player_id() == shared.my_player_id
+                                        })
+                                    {
+                                        if player == my_player_idx as u8 {
+                                            // my move, check if matches expected
+
+                                            while let Some(front) =
+                                                hand_extra.pending_actions.pop_front()
+                                            {
+                                                if front == action {
+                                                    break;
+                                                }
                                             }
                                         }
                                     }
+
+                                    hand.apply(Some(player), action).unwrap();
                                 }
+                                GameMessageS2C::ServerHandAction { action } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
 
-                                hand.apply(Some(player), action).unwrap();
-                            }
-                            GameMessageS2C::ServerHandAction { action } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
+                                    let hand = shared.game.hand.as_mut().unwrap();
 
-                                let hand = shared.game.hand.as_mut().unwrap();
+                                    hand.apply(None, action).unwrap();
 
-                                hand.apply(None, action).unwrap();
-
-                                if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
-                                    shared.hand_extra.as_mut().unwrap().stalled = false;
-                                }
-                            }
-                            GameMessageS2C::NertsCalled { player: _ } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-
-                                let hand = shared.game.hand.as_mut().unwrap();
-
-                                hand.nerts_called = true;
-                            }
-                            GameMessageS2C::HandEnd { scores } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-
-                                let hand_state = shared.game.hand.take().unwrap();
-
-                                for (player, score) in hand_state.players().iter().zip(scores) {
-                                    if let Some(info) =
-                                        shared.game.players.get_mut(&player.player_id())
-                                    {
-                                        info.score += score;
+                                    if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
+                                        shared.hand_extra.as_mut().unwrap().stalled = false;
                                     }
                                 }
+                                GameMessageS2C::NertsCalled { player: _ } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
 
-                                for player in shared.game.players.values_mut() {
-                                    player.ready = false;
+                                    let hand = shared.game.hand.as_mut().unwrap();
+
+                                    hand.nerts_called = true;
                                 }
+                                GameMessageS2C::HandEnd { scores } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
 
-                                shared.hand_extra = None;
+                                    let hand_state = shared.game.hand.take().unwrap();
+
+                                    for (player, score) in hand_state.players().iter().zip(scores) {
+                                        if let Some(info) =
+                                            shared.game.players.get_mut(&player.player_id())
+                                        {
+                                            info.score += score;
+                                        }
+                                    }
+
+                                    for player in shared.game.players.values_mut() {
+                                        player.ready = false;
+                                    }
+
+                                    shared.hand_extra = None;
+                                }
+                                GameMessageS2C::HandStalled => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                    hand_extra.stalled = true;
+                                }
+                                GameMessageS2C::HandStallCancel => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                    hand_extra.stalled = false;
+                                }
+                                GameMessageS2C::GameEnd => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    let mut scores: Vec<_> = shared
+                                        .game
+                                        .players
+                                        .iter_mut()
+                                        .map(|(key, player)| {
+                                            let score = player.score;
+                                            player.score = 0;
+
+                                            (*key, score)
+                                        })
+                                        .collect();
+
+                                    scores.sort_by_key(|x| -x.1);
+
+                                    shared.new_end_scores = Some(scores);
+                                }
+                                GameMessageS2C::NewMasterPlayer { player } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    shared.game.master_player = player;
+                                }
+                                GameMessageS2C::HandStart => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+                                    let hand = shared.game.hand.as_mut().unwrap();
+
+                                    hand.started = true;
+                                }
                             }
-                            GameMessageS2C::HandStalled => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
 
-                                let hand_extra = shared.hand_extra.as_mut().unwrap();
-
-                                hand_extra.stalled = true;
-                            }
-                            GameMessageS2C::HandStallCancel => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-
-                                let hand_extra = shared.hand_extra.as_mut().unwrap();
-
-                                hand_extra.stalled = false;
-                            }
-                            GameMessageS2C::GameEnd => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-
-                                let mut scores: Vec<_> = shared
-                                    .game
-                                    .players
-                                    .iter_mut()
-                                    .map(|(key, player)| {
-                                        let score = player.score;
-                                        player.score = 0;
-
-                                        (*key, score)
-                                    })
-                                    .collect();
-
-                                scores.sort_by_key(|x| -x.1);
-
-                                shared.new_end_scores = Some(scores);
-                            }
-                            GameMessageS2C::NewMasterPlayer { player } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-
-                                shared.game.master_player = player;
-                            }
-                            GameMessageS2C::HandStart => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                let shared = lock.as_info_mut().unwrap();
-                                let hand = shared.game.hand.as_mut().unwrap();
-
-                                hand.started = true;
-                            }
+                            Ok(())
                         }
-
-                        Ok(())
                     })
                     .await
             },
