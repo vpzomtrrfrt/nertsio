@@ -361,9 +361,20 @@ pub struct HandState {
 
 impl HandState {
     pub fn generate(players: impl Iterator<Item = u8>) -> Self {
+        let players: Vec<_> = players.collect();
+
+        let tableau_stacks_count = match players.len() {
+            1 | 2 => 6,
+            3 => 5,
+            _ => 4,
+        };
+
         let players: Vec<_> = players
+            .into_iter()
             .enumerate()
-            .map(|(idx, player_id)| HandPlayerState::generate(player_id, idx as u8, 4))
+            .map(|(idx, player_id)| {
+                HandPlayerState::generate(player_id, idx as u8, tableau_stacks_count)
+            })
             .collect();
         let lake_stacks = (0..(players.len() * 4))
             .map(|_| Stack::new(Ordering::SingleSuitUp, true))
