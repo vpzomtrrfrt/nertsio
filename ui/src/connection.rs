@@ -64,6 +64,7 @@ fn bi_bincode_options() -> impl bincode::Options {
 pub enum ConnectionEvent {
     HandInit,
     PlayerHandAction(ni_ty::HandAction),
+    NertsCalled,
 }
 
 pub(crate) async fn handle_connection(
@@ -574,6 +575,9 @@ pub(crate) async fn handle_connection(
                                     let hand = shared.game.hand.as_mut().unwrap();
 
                                     hand.nerts_called = true;
+
+                                    let _ =
+                                        events_send.unbounded_send(ConnectionEvent::NertsCalled);
                                 }
                                 GameMessageS2C::HandEnd { scores } => {
                                     let mut lock = info_mutex.lock().unwrap();

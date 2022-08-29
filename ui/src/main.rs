@@ -61,6 +61,9 @@ struct Settings {
 
     #[serde(default)]
     suit_callouts: bool,
+
+    #[serde(default)]
+    nerts_callout: bool,
 }
 
 impl Default for Settings {
@@ -69,6 +72,7 @@ impl Default for Settings {
             name: default_name(),
             round_start_music: false,
             suit_callouts: false,
+            nerts_callout: false,
         }
     }
 }
@@ -457,6 +461,10 @@ async fn main() {
         macroquad::audio::load_sound_from_bytes(include_bytes!("../res/hearts.ogg"))
             .await
             .unwrap();
+
+    let nerts_callout = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nerts.ogg"))
+        .await
+        .unwrap();
 
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
@@ -892,6 +900,16 @@ async fn main() {
                         .size(mq::Vec2::new(menu_width, entry_height))
                         .ratio(0.1)
                         .ui(&mut mqui::root_ui(), &mut settings.suit_callouts);
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Nerts Callout")
+                        .pos(mq::Vec2::new(
+                            menu_x,
+                            menu_y + (entry_height + entry_spacing) * 2.0,
+                        ))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.nerts_callout);
                 }
 
                 State::MainMenuSettings
@@ -1737,6 +1755,13 @@ async fn main() {
                                                 ni_ty::protocol::GameMessageC2S::CallNerts.into(),
                                             )
                                             .unwrap();
+
+                                        let mut settings_lock = settings_mutex.lock().unwrap();
+                                        let settings = &mut *settings_lock;
+
+                                        if settings.nerts_callout {
+                                            macroquad::audio::play_sound_once(nerts_callout);
+                                        }
                                     }
                                 }
                             }
@@ -2147,6 +2172,14 @@ async fn main() {
                             }
                             _ => {}
                         }
+                    }
+                }
+                ConnectionEvent::NertsCalled => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.nerts_callout {
+                        macroquad::audio::play_sound_once(nerts_callout);
                     }
                 }
             },
