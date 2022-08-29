@@ -397,7 +397,7 @@ pub(crate) async fn handle_connection(
                                                 seq,
                                                 state: ni_ty::MouseState {
                                                     position: mouse_pos,
-                                                    held: hand_extra.my_held_state,
+                                                    held: hand_extra.my_held_state.as_ref().map(|x| x.info),
                                                 },
                                             },
                                         )

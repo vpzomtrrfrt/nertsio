@@ -175,12 +175,17 @@ impl MouseState {
     }
 }
 
+struct HeldState {
+    info: ni_ty::HeldInfo,
+    mouse_released: bool,
+}
+
 struct HandExtra {
     expected_start_time: Option<instant::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
     mouse_states: Vec<Option<MouseState>>,
-    my_held_state: Option<ni_ty::HeldInfo>,
+    my_held_state: Option<HeldState>,
     last_mouse_position: Option<(f32, f32)>,
     stalled: bool,
 }
@@ -1485,31 +1490,37 @@ async fn main() {
                                                                     .card;
 
                                                                 hand_extra.my_held_state =
-                                                                    Some(ni_ty::HeldInfo {
-                                                                        src,
-                                                                        count: count as u8,
-                                                                        offset: (
-                                                                            offset[0], offset[1],
-                                                                        ),
-                                                                        top_card,
-                                                                    });
+                                                                    Some(HeldState {
+                                                                        info: ni_ty::HeldInfo {
+                                                                            src,
+                                                                            count: count as u8,
+                                                                            offset: (
+                                                                                offset[0],
+                                                                                offset[1],
+                                                                            ),
+                                                                            top_card,
+                                                                        },
+                                                                        mouse_released: false,
+                                                                    })
                                                             }
                                                         }
                                                     }
                                                 }
-                                                Some(ref held) => {
+                                                Some(ref mut held) => {
                                                     let src_loc = ni_ty::StackLocation::Player(
                                                         my_player_idx_u8,
-                                                        held.src,
+                                                        held.info.src,
                                                     );
 
                                                     let (target_loc, ..) = found;
                                                     if target_loc == src_loc {
                                                         if mouse_pressed {
                                                             hand_extra.my_held_state = None;
+                                                        } else {
+                                                            held.mouse_released = true;
                                                         }
                                                     } else {
-                                                        if matches!(
+                                                        let success = if matches!(
                                                             target_loc,
                                                             ni_ty::StackLocation::Player(
                                                                 _,
@@ -1529,7 +1540,8 @@ async fn main() {
                                                                         src_stack.cards();
                                                                     let back_card = &stack_cards
                                                                         [stack_cards.len()
-                                                                            - held.count as usize];
+                                                                            - held.info.count
+                                                                                as usize];
 
                                                                     if target_stack
                                                                         .can_add(*back_card)
@@ -1537,7 +1549,7 @@ async fn main() {
                                                                         let action =
                                                                             ni_ty::HandAction::Move {
                                                                                 from: src_loc,
-                                                                                count: held.count,
+                                                                                count: held.info.count,
                                                                                 to: target_loc,
                                                                             };
 
@@ -1551,24 +1563,46 @@ async fn main() {
                                                                             )
                                                                             .is_ok()
                                                                         {
+                                                                            // should always be
+                                                                            // true?
+
                                                                             hand_extra
                                                                                 .pending_actions
                                                                                 .push_back(action);
                                                                             game_msg_send.borrow().as_ref().unwrap().unbounded_send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
                                                                         }
 
-                                                                        hand_extra.my_held_state =
-                                                                            None;
+                                                                        true
                                                                     } else {
                                                                         log::debug!(
                                                                             "can't add {:?} to {:?}",
                                                                             back_card, target_stack
                                                                         );
+
+                                                                        false
                                                                     }
+                                                                } else {
+                                                                    false
                                                                 }
+                                                            } else {
+                                                                false
                                                             }
+                                                        } else {
+                                                            false
+                                                        };
+
+                                                        if success || !held.mouse_released {
+                                                            hand_extra.my_held_state = None;
+                                                        } else if !mouse_pressed {
+                                                            held.mouse_released = true;
                                                         }
                                                     }
+                                                }
+                                            }
+                                        } else {
+                                            if let Some(held_state) = &hand_extra.my_held_state {
+                                                if !held_state.mouse_released {
+                                                    hand_extra.my_held_state = None;
                                                 }
                                             }
                                         }
@@ -1675,8 +1709,8 @@ async fn main() {
                                 mq::set_camera(&inverted_camera);
                             }
 
-                            let held_state = if Some(idx) == my_player_idx {
-                                hand_extra.my_held_state
+                            let held_info = if Some(idx) == my_player_idx {
+                                hand_extra.my_held_state.as_ref().map(|x| x.info)
                             } else {
                                 hand_extra.mouse_states[idx]
                                     .as_ref()
@@ -1722,7 +1756,7 @@ async fn main() {
 
                                 if started {
                                     if !matches!(
-                                        held_state,
+                                        held_info,
                                         Some(ni_ty::HeldInfo {
                                             src: ni_ty::PlayerStackLocation::Nerts,
                                             ..
@@ -1780,7 +1814,7 @@ async fn main() {
                                     src: ni_ty::PlayerStackLocation::Tableau(stack_idx),
                                     count,
                                     ..
-                                }) = held_state
+                                }) = held_info
                                 {
                                     if i == (stack_idx as usize) {
                                         if count as usize <= cards.len() {
@@ -1826,7 +1860,7 @@ async fn main() {
                                 src: ni_ty::PlayerStackLocation::Waste,
                                 count,
                                 ..
-                            }) = held_state
+                            }) = held_info
                             {
                                 if count as usize <= waste_cards.len() {
                                     &waste_cards[..(waste_cards.len() - count as usize)]
@@ -1939,17 +1973,17 @@ async fn main() {
                         if let Some(my_player_idx) = my_player_idx {
                             let my_player_state = &pred_hand_state.players()[my_player_idx];
                             if let Some(ref held) = hand_extra.my_held_state {
-                                let stack = my_player_state.stack_at(held.src);
+                                let stack = my_player_state.stack_at(held.info.src);
                                 if let Some(stack) = stack {
                                     let stack_cards = stack.cards();
-                                    if stack_cards.len() >= held.count as usize {
+                                    if stack_cards.len() >= held.info.count as usize {
                                         let cards = &stack_cards
-                                            [(stack_cards.len() - held.count as usize)..];
+                                            [(stack_cards.len() - held.info.count as usize)..];
 
                                         draw_vertical_stack_cards(
                                             cards,
-                                            mouse_pos[0] - held.offset.0,
-                                            mouse_pos[1] - held.offset.1,
+                                            mouse_pos[0] - held.info.offset.0,
+                                            mouse_pos[1] - held.info.offset.1,
                                         );
                                     } else {
                                         hand_extra.my_held_state = None;
