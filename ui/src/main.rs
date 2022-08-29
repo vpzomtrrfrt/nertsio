@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 
 mod connection;
 
-use connection::ConnectionMessage;
+use connection::{ConnectionEvent, ConnectionMessage};
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
@@ -55,12 +55,24 @@ fn default_name() -> String {
 struct Settings {
     #[serde(default = "default_name")]
     name: String,
+
+    #[serde(default)]
+    round_start_music: bool,
+
+    #[serde(default)]
+    suit_callouts: bool,
+
+    #[serde(default)]
+    nerts_callout: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             name: default_name(),
+            round_start_music: false,
+            suit_callouts: false,
+            nerts_callout: false,
         }
     }
 }
@@ -189,6 +201,7 @@ impl HandExtra {
 
 enum State {
     MainMenu,
+    MainMenuSettings,
     JoinGameForm {
         input: String,
     },
@@ -424,6 +437,35 @@ async fn main() {
     let cursors_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::CURSORS, Some(mq::ImageFormat::Png));
 
+    let round_start_music =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nertson.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_spades =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/spades.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_diamonds =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/diamonds.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_clubs =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/clubs.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_hearts =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/hearts.ogg"))
+            .await
+            .unwrap();
+
+    let nerts_callout = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nerts.ogg"))
+        .await
+        .unwrap();
+
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
             cards_texture,
@@ -545,6 +587,8 @@ async fn main() {
     }));
     let game_msg_send = RefCell::new(None);
 
+    let (events_send, mut events_recv) = futures_channel::mpsc::unbounded();
+
     let http_client = reqwest::Client::new();
 
     let settings_mutex;
@@ -648,6 +692,7 @@ async fn main() {
             let game_info_mutex = game_info_mutex.clone();
             let http_client = http_client.clone();
             let settings_mutex = settings_mutex.clone();
+            let events_send = events_send.clone();
             async move {
                 {
                     (*game_info_mutex.lock().unwrap()) = ConnectionState::Connecting;
@@ -658,6 +703,7 @@ async fn main() {
                     &game_info_mutex,
                     game_msg_recv,
                     settings_mutex,
+                    events_send,
                 )
                 .await;
 
@@ -774,7 +820,7 @@ async fn main() {
                 let button_height = 50.0;
                 let button_spacing = 25.0;
 
-                let button_count = 5;
+                let button_count = 6;
 
                 let menu_width = 600.0;
                 let menu_height = button_height * (button_count as f32)
@@ -819,8 +865,61 @@ async fn main() {
                     State::JoinGameForm {
                         input: String::new(),
                     }
+                } else if menu_button(5, "Settings") {
+                    State::MainMenuSettings
                 } else {
                     State::MainMenu
+                }
+            }
+            State::MainMenuSettings => {
+                use mqui::hash;
+
+                mq::clear_background(BACKGROUND_COLOR);
+
+                let menu_width = 600.0;
+                let entry_height = 50.0;
+                let entry_spacing = 25.0;
+
+                let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
+                let menu_y = 20.0;
+
+                {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Round Start Music")
+                        .pos(mq::Vec2::new(menu_x, menu_y))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.round_start_music);
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Suit Callouts")
+                        .pos(mq::Vec2::new(menu_x, menu_y + entry_height + entry_spacing))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.suit_callouts);
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Nerts Callout")
+                        .pos(mq::Vec2::new(
+                            menu_x,
+                            menu_y + (entry_height + entry_spacing) * 2.0,
+                        ))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.nerts_callout);
+                }
+
+                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                    State::MainMenu
+                } else {
+                    if mq::is_key_pressed(mq::KeyCode::Escape) {
+                        State::MainMenu
+                    } else {
+                        State::MainMenuSettings
+                    }
                 }
             }
             State::JoinGameForm { mut input } => {
@@ -1664,6 +1763,13 @@ async fn main() {
                                                 ni_ty::protocol::GameMessageC2S::CallNerts.into(),
                                             )
                                             .unwrap();
+
+                                        let mut settings_lock = settings_mutex.lock().unwrap();
+                                        let settings = &mut *settings_lock;
+
+                                        if settings.nerts_callout {
+                                            macroquad::audio::play_sound_once(nerts_callout);
+                                        }
                                     }
                                 }
                             }
@@ -2023,6 +2129,73 @@ async fn main() {
                 }
             }
         };
+
+        match events_recv.try_next() {
+            Ok(Some(evt)) => match evt {
+                ConnectionEvent::HandInit => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.round_start_music {
+                        println!("playing sound");
+                        macroquad::audio::play_sound_once(round_start_music);
+                    }
+                }
+                ConnectionEvent::PlayerHandAction(action) => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.suit_callouts {
+                        match action {
+                            ni_ty::HandAction::Move { to, .. } => {
+                                if matches!(to, ni_ty::StackLocation::Lake(_)) {
+                                    let mut lock = game_info_mutex.lock().unwrap();
+                                    if let Some(shared) = (*lock).as_info_mut() {
+                                        if let Some(hand) = &shared.game.hand {
+                                            if let Some(stack) = hand.stack_at(to) {
+                                                if let Some(top) = stack.last() {
+                                                    if top.card.rank == ni_ty::Rank::ACE {
+                                                        macroquad::audio::play_sound_once(
+                                                            match top.card.suit {
+                                                                ni_ty::Suit::Spades => {
+                                                                    suit_callout_spades
+                                                                }
+                                                                ni_ty::Suit::Diamonds => {
+                                                                    suit_callout_diamonds
+                                                                }
+                                                                ni_ty::Suit::Clubs => {
+                                                                    suit_callout_clubs
+                                                                }
+                                                                ni_ty::Suit::Hearts => {
+                                                                    suit_callout_hearts
+                                                                }
+                                                            },
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                ConnectionEvent::NertsCalled => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.nerts_callout {
+                        macroquad::audio::play_sound_once(nerts_callout);
+                    }
+                }
+            },
+            Ok(None) => unreachable!(),
+            Err(_) => {
+                // no events
+            }
+        }
 
         mq::next_frame().await
     }

@@ -1,2 +1,5 @@
 [workspace]
 members = ["types", "ui", "textures", "gameserver", "coordinator", "ui_metrics"]
+
+[patch.crates-io]
+quad-snd = { git = "https://github.com/not-fl3/quad-snd" }
