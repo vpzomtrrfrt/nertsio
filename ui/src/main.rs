@@ -912,7 +912,15 @@ async fn main() {
                         .ui(&mut mqui::root_ui(), &mut settings.nerts_callout);
                 }
 
-                State::MainMenuSettings
+                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                    State::MainMenu
+                } else {
+                    if mq::is_key_pressed(mq::KeyCode::Escape) {
+                        State::MainMenu
+                    } else {
+                        State::MainMenuSettings
+                    }
+                }
             }
             State::JoinGameForm { mut input } => {
                 use mqui::hash;
