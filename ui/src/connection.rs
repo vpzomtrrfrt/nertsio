@@ -63,6 +63,7 @@ fn bi_bincode_options() -> impl bincode::Options {
 /// Used to trigger sounds
 pub enum ConnectionEvent {
     HandInit,
+    PlayerHandAction(ni_ty::HandAction),
 }
 
 pub(crate) async fn handle_connection(
@@ -550,6 +551,9 @@ pub(crate) async fn handle_connection(
                                     }
 
                                     hand.apply(Some(player), action).unwrap();
+
+                                    let _ = events_send
+                                        .unbounded_send(ConnectionEvent::PlayerHandAction(action));
                                 }
                                 GameMessageS2C::ServerHandAction { action } => {
                                     let mut lock = info_mutex.lock().unwrap();

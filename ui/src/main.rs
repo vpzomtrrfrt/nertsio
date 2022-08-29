@@ -58,6 +58,9 @@ struct Settings {
 
     #[serde(default)]
     round_start_music: bool,
+
+    #[serde(default)]
+    suit_callouts: bool,
 }
 
 impl Default for Settings {
@@ -65,6 +68,7 @@ impl Default for Settings {
         Settings {
             name: default_name(),
             round_start_music: false,
+            suit_callouts: false,
         }
     }
 }
@@ -431,6 +435,26 @@ async fn main() {
 
     let round_start_music =
         macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nertson.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_spades =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/spades.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_diamonds =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/diamonds.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_clubs =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/clubs.ogg"))
+            .await
+            .unwrap();
+
+    let suit_callout_hearts =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/hearts.ogg"))
             .await
             .unwrap();
 
@@ -846,6 +870,7 @@ async fn main() {
 
                 let menu_width = 600.0;
                 let entry_height = 50.0;
+                let entry_spacing = 25.0;
 
                 let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
                 let menu_y = 20.0;
@@ -860,6 +885,13 @@ async fn main() {
                         .size(mq::Vec2::new(menu_width, entry_height))
                         .ratio(0.1)
                         .ui(&mut mqui::root_ui(), &mut settings.round_start_music);
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Suit Callouts")
+                        .pos(mq::Vec2::new(menu_x, menu_y + entry_height + entry_spacing))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.suit_callouts);
                 }
 
                 State::MainMenuSettings
@@ -2074,6 +2106,47 @@ async fn main() {
                     if settings.round_start_music {
                         println!("playing sound");
                         macroquad::audio::play_sound_once(round_start_music);
+                    }
+                }
+                ConnectionEvent::PlayerHandAction(action) => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.suit_callouts {
+                        match action {
+                            ni_ty::HandAction::Move { to, .. } => {
+                                if matches!(to, ni_ty::StackLocation::Lake(_)) {
+                                    let mut lock = game_info_mutex.lock().unwrap();
+                                    if let Some(shared) = (*lock).as_info_mut() {
+                                        if let Some(hand) = &shared.game.hand {
+                                            if let Some(stack) = hand.stack_at(to) {
+                                                if let Some(top) = stack.last() {
+                                                    if top.card.rank == ni_ty::Rank::ACE {
+                                                        macroquad::audio::play_sound_once(
+                                                            match top.card.suit {
+                                                                ni_ty::Suit::Spades => {
+                                                                    suit_callout_spades
+                                                                }
+                                                                ni_ty::Suit::Diamonds => {
+                                                                    suit_callout_diamonds
+                                                                }
+                                                                ni_ty::Suit::Clubs => {
+                                                                    suit_callout_clubs
+                                                                }
+                                                                ni_ty::Suit::Hearts => {
+                                                                    suit_callout_hearts
+                                                                }
+                                                            },
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                 }
             },
