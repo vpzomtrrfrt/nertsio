@@ -1226,6 +1226,10 @@ async fn main() {
                             && real_screen_size.1 > needed_screen_height * 2.0
                         {
                             (real_screen_size.0 / 2.0, real_screen_size.1 / 2.0)
+                        } else if real_screen_size.0 > needed_screen_width * 1.5
+                            && real_screen_size.1 > needed_screen_height * 1.5
+                        {
+                            (real_screen_size.0 / 1.5, real_screen_size.1 / 1.5)
                         } else if real_screen_size.0 < needed_screen_width
                             || real_screen_size.1 < needed_screen_height
                         {
