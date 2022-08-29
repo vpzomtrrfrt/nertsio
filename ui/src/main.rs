@@ -55,12 +55,16 @@ fn default_name() -> String {
 struct Settings {
     #[serde(default = "default_name")]
     name: String,
+
+    #[serde(default)]
+    round_start_music: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             name: default_name(),
+            round_start_music: false,
         }
     }
 }
@@ -189,6 +193,7 @@ impl HandExtra {
 
 enum State {
     MainMenu,
+    MainMenuSettings,
     JoinGameForm {
         input: String,
     },
@@ -774,7 +779,7 @@ async fn main() {
                 let button_height = 50.0;
                 let button_spacing = 25.0;
 
-                let button_count = 5;
+                let button_count = 6;
 
                 let menu_width = 600.0;
                 let menu_height = button_height * (button_count as f32)
@@ -819,9 +824,36 @@ async fn main() {
                     State::JoinGameForm {
                         input: String::new(),
                     }
+                } else if menu_button(5, "Settings") {
+                    State::MainMenuSettings
                 } else {
                     State::MainMenu
                 }
+            }
+            State::MainMenuSettings => {
+                use mqui::hash;
+
+                mq::clear_background(BACKGROUND_COLOR);
+
+                let menu_width = 600.0;
+                let entry_height = 50.0;
+
+                let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
+                let menu_y = 20.0;
+
+                {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Round Start Music")
+                        .pos(mq::Vec2::new(menu_x, menu_y))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.round_start_music);
+                }
+
+                State::MainMenuSettings
             }
             State::JoinGameForm { mut input } => {
                 use mqui::hash;
