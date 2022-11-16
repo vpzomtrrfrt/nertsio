@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 nertsio_textures = { path = "../textures" }
 nertsio_types = { path = "../types" }
-macroquad = { git = "https://github.com/vpzomtrrfrt/macroquad", branch = "checkbox-pos-backport" }
+macroquad = "0.3.25"
 anyhow = "1.0.51"
 rustls = { version = "0.20.2", features = ["dangerous_configuration"] }
 futures-util = { version = "0.3.18", features = ["sink"] }

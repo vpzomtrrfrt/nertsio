@@ -1288,15 +1288,15 @@ async fn main() {
                                     let nerts_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Nerts,
                                         my_location,
-                                    )) + screen_center.into();
+                                    )) + mq::Vec2::from(screen_center);
                                     let stock_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Stock,
                                         my_location,
-                                    )) + screen_center.into();
+                                    )) + mq::Vec2::from(screen_center);
                                     let waste_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Waste,
                                         my_location,
-                                    )) + screen_center.into();
+                                    )) + mq::Vec2::from(screen_center);
 
                                     if mq::Rect::new(
                                         stock_stack_pos[0],
@@ -1384,7 +1384,7 @@ async fn main() {
 
                                             let loc = ni_ty::StackLocation::Lake(stack_idx);
                                             let stack_pos = mq::Vec2::from(metrics.stack_pos(loc))
-                                                + screen_center.into();
+                                                + mq::Vec2::from(screen_center);
 
                                             Some((loc, 1, mouse_pos - stack_pos))
                                         } else if mq::Rect::new(
@@ -1424,7 +1424,7 @@ async fn main() {
                                                 .filter_map(|(i, stack)| {
                                                     let loc = ni_ty::PlayerStackLocation::Tableau(i as u8);
 
-                                                    let stack_pos = mq::Vec2::from(metrics.player_stack_pos(loc, my_location)) + screen_center.into();
+                                                    let stack_pos = mq::Vec2::from(metrics.player_stack_pos(loc, my_location)) + mq::Vec2::from(screen_center);
                                                     if mq::Rect::new(
                                                         stack_pos[0],
                                                         stack_pos[1],
@@ -1667,7 +1667,8 @@ async fn main() {
 
                         for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
                             let location = metrics.player_loc(idx);
-                            let position = mq::Vec2::from(location.pos()) + screen_center.into();
+                            let position =
+                                mq::Vec2::from(location.pos()) + mq::Vec2::from(screen_center);
 
                             mq::set_camera(&normal_camera);
                             if let Some(player) = shared.game.players.get(&player_state.player_id())
@@ -1746,7 +1747,7 @@ async fn main() {
                                     mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Nerts,
                                         location,
-                                    )) + screen_center.into();
+                                    )) + mq::Vec2::from(screen_center);
 
                                 for i in 0..(player_state.nerts_stack().len() - 1) {
                                     draw_back(
@@ -1847,7 +1848,7 @@ async fn main() {
                             let stock_pos = mq::Vec2::from(
                                 metrics
                                     .player_stack_pos(ni_ty::PlayerStackLocation::Stock, location),
-                            ) + screen_center.into();
+                            ) + mq::Vec2::from(screen_center);
                             if player_state.stock_stack().len() > 0 {
                                 draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
                             } else {
@@ -1880,7 +1881,7 @@ async fn main() {
                                     mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Waste,
                                         location,
-                                    )) + screen_center.into();
+                                    )) + mq::Vec2::from(screen_center);
 
                                 draw_horizontal_stack_cards(
                                     waste_cards,
@@ -1908,7 +1909,8 @@ async fn main() {
 
                         for (i, stack) in pred_hand_state.lake_stacks().iter().enumerate() {
                             let loc = ni_ty::StackLocation::Lake(i as u16);
-                            let pos = mq::Vec2::from(metrics.stack_pos(loc)) + screen_center.into();
+                            let pos = mq::Vec2::from(metrics.stack_pos(loc))
+                                + mq::Vec2::from(screen_center);
 
                             match stack.cards().last() {
                                 None => {
