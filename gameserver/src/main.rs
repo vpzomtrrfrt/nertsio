@@ -241,8 +241,7 @@ async fn main() {
 
             let mut key = Vec::new();
             keyfile.read_to_end(&mut key).unwrap();
-            let pkey = openssl::rsa::Rsa::private_key_from_pem(&key).unwrap();
-            let pkey = openssl::pkey::PKey::from_rsa(pkey).unwrap();
+            let pkey = openssl::pkey::PKey::private_key_from_pem(&key).unwrap();
 
             let mut certfile = std::io::BufReader::new(certfile);
 
