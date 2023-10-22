@@ -1651,7 +1651,7 @@ async fn main() {
 
                             (Cow::Owned(pred_hand_state), my_location.inverted)
                         } else {
-                            (Cow::Borrowed(shared.game.hand.as_ref().unwrap()), false)
+                            (Cow::Borrowed(real_hand_state), false)
                         };
                         let _ = real_hand_state;
 
