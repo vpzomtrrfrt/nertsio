@@ -1,6 +1,3 @@
-#[cfg(target_family = "wasm")]
-use bincode::Options;
-#[cfg(not(target_family = "wasm"))]
 use futures_util::SinkExt;
 use futures_util::{StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
@@ -53,13 +50,6 @@ impl std::fmt::Display for CloseError {
 
 impl std::error::Error for CloseError {}
 
-#[cfg(target_family = "wasm")]
-fn bi_bincode_options() -> impl bincode::Options {
-    bincode::options()
-        .with_limit(u32::max_value() as u64)
-        .allow_trailing_bytes()
-}
-
 /// Used to trigger sounds
 pub enum ConnectionEvent {
     HandInit,
@@ -108,7 +98,6 @@ pub(crate) async fn handle_connection(
 
     let server_id = server.server_id;
 
-    #[cfg(not(target_family = "wasm"))]
     let conn = {
         let host: std::net::SocketAddr = server.address_ipv4.into();
 
@@ -139,54 +128,6 @@ pub(crate) async fn handle_connection(
         endpoint.connect(host, "nio.invalid")?.await?
     };
 
-    #[cfg(target_family = "wasm")]
-    let mut conn = {
-        struct WSDropper(wasm_sockets::EventClient);
-
-        impl std::ops::Deref for WSDropper {
-            type Target = wasm_sockets::EventClient;
-
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl std::ops::DerefMut for WSDropper {
-            fn deref_mut(&mut self) -> &mut <Self as std::ops::Deref>::Target {
-                &mut self.0
-            }
-        }
-
-        impl Drop for WSDropper {
-            fn drop(&mut self) {
-                log::debug!("closing WS");
-                if let Err(err) = self.0.close() {
-                    log::error!("Failed to close socket: {:?}", err);
-                }
-            }
-        }
-
-        let mut conn = WSDropper(wasm_sockets::EventClient::new(&match server.hostname {
-            Some(hostname) => format!("wss://{}:{}", hostname, server.address_ipv4.port()),
-            None => format!("ws://{}", server.address_ipv4),
-        })?);
-
-        let (connect_send, mut connect_recv) = futures_channel::mpsc::channel(1);
-        let connect_send = std::cell::RefCell::new(connect_send);
-
-        conn.set_on_connection(Some(Box::new(move |_| {
-            connect_send.borrow_mut().try_send(()).unwrap();
-        })));
-
-        connect_recv
-            .next()
-            .await
-            .ok_or_else(|| anyhow::anyhow!("Connection dropped"))?;
-
-        conn
-    };
-
-    #[cfg(not(target_family = "wasm"))]
     let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {
         let handshake_stream = conn.connection.open_bi().await?;
 
@@ -209,106 +150,6 @@ pub(crate) async fn handle_connection(
             send_datagram,
             handshake_stream_send,
             handshake_stream_recv,
-        )
-    };
-
-    #[cfg(target_family = "wasm")]
-    let (
-        datagrams_recv,
-        send_datagram,
-        handshake_stream_send,
-        handshake_stream_recv,
-        game_stream_send,
-        game_stream_recv,
-    ) = {
-        use serde::Serialize;
-        struct WSBiQuasiSink<'a, T: Serialize> {
-            conn: &'a wasm_sockets::EventClient,
-            id: i8,
-            _p: std::marker::PhantomData<T>,
-        }
-
-        impl<'a, T: Serialize> WSBiQuasiSink<'a, T> {
-            pub async fn send(&self, message: T) -> Result<(), anyhow::Error> {
-                let mut data = bi_bincode_options().serialize(&message)?;
-
-                data.push(self.id.to_ne_bytes()[0]);
-
-                match self.conn.send_binary(data) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(anyhow::anyhow!(
-                        "Failed to send WebSocket message: {:?}",
-                        err
-                    )),
-                }
-            }
-        }
-
-        let (datagrams_recv_send, datagrams_recv_recv) =
-            futures_channel::mpsc::channel::<Result<Vec<u8>, std::convert::Infallible>>(2);
-        let (handshake_stream_recv_send, handshake_stream_recv_recv) =
-            futures_channel::mpsc::unbounded::<Result<_, anyhow::Error>>();
-        let (game_stream_recv_send, game_stream_recv_recv) =
-            futures_channel::mpsc::unbounded::<Result<_, anyhow::Error>>();
-
-        let datagrams_recv_send = std::cell::RefCell::new(datagrams_recv_send);
-        let handshake_stream_recv_send = std::cell::RefCell::new(handshake_stream_recv_send);
-        let game_stream_recv_send = std::cell::RefCell::new(game_stream_recv_send);
-
-        conn.set_on_message(Some(Box::new(move |_, msg| {
-            if let wasm_sockets::Message::Binary(mut data) = msg {
-                if let Some(id) = data.pop() {
-                    let id = i8::from_ne_bytes([id]);
-                    match id {
-                        0 => {
-                            let _ = datagrams_recv_send.borrow_mut().try_send(Ok(data));
-                        }
-                        1 => {
-                            let _ = handshake_stream_recv_send.borrow_mut().unbounded_send(
-                                bi_bincode_options().deserialize(&data).map_err(Into::into),
-                            );
-                        }
-                        -1 => {
-                            let _ = game_stream_recv_send.borrow_mut().unbounded_send(
-                                bi_bincode_options().deserialize(&data).map_err(Into::into),
-                            );
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        })));
-
-        let send_datagram = |mut data: Vec<u8>| {
-            data.push(0);
-            match conn.send_binary(data) {
-                Ok(_) => Ok(()),
-                Err(err) => Err(anyhow::anyhow!(
-                    "Failed to send WebSocket message: {:?}",
-                    err
-                )),
-            }
-        };
-
-        let handshake_stream_send = WSBiQuasiSink {
-            conn: &conn,
-            id: 1,
-            _p: std::marker::PhantomData,
-        };
-
-        let game_stream_send = WSBiQuasiSink {
-            conn: &conn,
-            id: -1,
-            _p: std::marker::PhantomData,
-        };
-
-        (
-            datagrams_recv_recv,
-            send_datagram,
-            handshake_stream_send,
-            handshake_stream_recv_recv,
-            game_stream_send,
-            game_stream_recv_recv,
         )
     };
 
@@ -338,7 +179,6 @@ pub(crate) async fn handle_connection(
 
     log::debug!("aaa");
 
-    #[cfg(not(target_family = "wasm"))]
     let (mut game_stream_send, game_stream_recv) = {
         let (game_stream_res, _bi_streams) = conn.bi_streams.into_future().await;
         let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
@@ -380,39 +220,40 @@ pub(crate) async fn handle_connection(
                 Result::<_, anyhow::Error>::Ok(())
             },
             async move {
-                let interval = futures_ticker::Ticker::new(std::time::Duration::from_millis(50));
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+                let mut seq = 0;
 
-                interval
-                    .map::<anyhow::Result<_>, _>(Ok)
-                    .try_fold(0u32, move |mut seq, _| async move {
-                        let mut lock = info_mutex.lock().unwrap();
+                loop {
+                    interval.tick().await;
 
-                        if let Some(shared) = lock.as_info_mut() {
-                            if shared.game.hand.is_some() {
-                                let hand_extra = shared.hand_extra.as_ref().unwrap();
-                                if let Some(mouse_pos) = hand_extra.last_mouse_position {
-                                    send_datagram(
-                                        bincode::serialize(
-                                            &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
-                                                seq,
-                                                state: ni_ty::MouseState {
-                                                    position: mouse_pos,
-                                                    held: hand_extra.my_held_state.as_ref().map(|x| x.info),
-                                                },
+                    let mut lock = info_mutex.lock().unwrap();
+
+                    if let Some(shared) = lock.as_info_mut() {
+                        if shared.game.hand.is_some() {
+                            let hand_extra = shared.hand_extra.as_ref().unwrap();
+                            if let Some(mouse_pos) = hand_extra.last_mouse_position {
+                                send_datagram(
+                                    bincode::serialize(
+                                        &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
+                                            seq,
+                                            state: ni_ty::MouseState {
+                                                position: mouse_pos,
+                                                held: hand_extra
+                                                    .my_held_state
+                                                    .as_ref()
+                                                    .map(|x| x.info),
                                             },
-                                        )
-                                        .unwrap()
-                                        .into(),
-                                    )?;
+                                        },
+                                    )
+                                    .unwrap()
+                                    .into(),
+                                )?;
 
-                                    seq += 1;
-                                }
+                                seq += 1;
                             }
                         }
-
-                        Ok(seq)
-                    })
-                    .await?;
+                    }
+                }
 
                 // allows inferring return type
                 #[allow(unreachable_code)]
@@ -515,7 +356,7 @@ pub(crate) async fn handle_connection(
                                     let mut hand_extra =
                                         crate::HandExtra::new(info.players().len());
                                     hand_extra.expected_start_time =
-                                        Some(instant::Instant::now() + delay);
+                                        Some(std::time::Instant::now() + delay);
                                     shared.hand_extra = Some(hand_extra);
 
                                     shared.game.hand = Some(info);

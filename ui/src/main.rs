@@ -1,6 +1,4 @@
 use futures_util::FutureExt;
-#[cfg(target_family = "wasm")]
-use futures_util::StreamExt;
 use macroquad::prelude as mq;
 use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
@@ -9,8 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-#[cfg(target_family = "wasm")]
-use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 mod connection;
@@ -181,7 +177,7 @@ struct HeldState {
 }
 
 struct HandExtra {
-    expected_start_time: Option<instant::Instant>,
+    expected_start_time: Option<std::time::Instant>,
     pending_actions: VecDeque<ni_ty::HandAction>,
     self_called_nerts: bool,
     mouse_states: Vec<Option<MouseState>>,
@@ -292,10 +288,6 @@ fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     }
 }
 
-#[cfg(target_family = "wasm")]
-const SETTINGS_KEY: &str = "nertsioSettings";
-
-#[cfg(not(target_family = "wasm"))]
 async fn run_settings_save_loop(
     config_path: std::path::PathBuf,
     init_value: Settings,
@@ -347,45 +339,6 @@ async fn run_settings_save_loop(
     }
 }
 
-#[cfg(target_family = "wasm")]
-async fn run_settings_save_loop(
-    storage: web_sys::Storage,
-    init_value: Settings,
-    mutex: Arc<Mutex<Settings>>,
-) {
-    let mut saved_value = init_value;
-
-    let mut interval = futures_ticker::Ticker::new(std::time::Duration::from_secs(5));
-
-    loop {
-        interval.next().await;
-
-        if {
-            let lock = mutex.lock().unwrap();
-            if saved_value != *lock {
-                saved_value = (*lock).clone();
-                true
-            } else {
-                false
-            }
-        } {
-            // value changed, need to save it
-
-            if let Err(err) = async {
-                let buf = serde_json::to_string(&saved_value)?;
-
-                storage
-                    .set_item(SETTINGS_KEY, &buf)
-                    .map_err(|err| anyhow::anyhow!("Failed to set item: {:?}", err))
-            }
-            .await
-            {
-                log::error!("failed to save settings: {:?}", err);
-            }
-        }
-    }
-}
-
 fn get_window_conf() -> mq::Conf {
     mq::Conf {
         window_title: "nertsio".to_owned(),
@@ -398,18 +351,8 @@ fn get_window_conf() -> mq::Conf {
     }
 }
 
-#[cfg(target_family = "wasm")]
-struct WasmAsyncRt;
-#[cfg(target_family = "wasm")]
-impl WasmAsyncRt {
-    pub fn spawn<F: Future<Output = ()> + 'static>(&self, fut: F) {
-        wasm_bindgen_futures::spawn_local(fut);
-    }
-}
-
 #[macroquad::main(get_window_conf)]
 async fn main() {
-    #[cfg(not(target_family = "wasm"))]
     {
         env_logger::init_from_env(
             env_logger::Env::default()
@@ -417,17 +360,7 @@ async fn main() {
         );
     }
 
-    #[cfg(target_family = "wasm")]
-    {
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-        wasm_logger::init(wasm_logger::Config::default());
-    }
-
-    #[cfg(not(target_family = "wasm"))]
     let async_rt = tokio::runtime::Runtime::new().unwrap();
-
-    #[cfg(target_family = "wasm")]
-    let async_rt = WasmAsyncRt;
 
     let card_size = mq::Vec2::new(metrics::CARD_WIDTH, metrics::CARD_HEIGHT);
 
@@ -597,7 +530,6 @@ async fn main() {
     let http_client = reqwest::Client::new();
 
     let settings_mutex;
-    #[cfg(not(target_family = "wasm"))]
     {
         let config_dir = dirs::config_dir()
             .map(Cow::Owned)
@@ -643,51 +575,6 @@ async fn main() {
             }
         }
     }
-    #[cfg(target_family = "wasm")]
-    {
-        match web_sys::window()
-            .ok_or_else(|| anyhow::anyhow!("Can't access window"))
-            .and_then(|window| {
-                window
-                    .local_storage()
-                    .map_err(|err| anyhow::anyhow!("Can't access localStorage: {:?}", err))
-                    .and_then(|x| x.ok_or_else(|| anyhow::anyhow!("Can't access localStorage")))
-            }) {
-            Ok(storage) => {
-                let init_value: Settings = match storage.get_item(SETTINGS_KEY) {
-                    Ok(None) => Default::default(),
-                    Ok(Some(buf)) => match serde_json::from_str(&buf) {
-                        Ok(value) => value,
-                        Err(err) => {
-                            log::debug!("Failed to parse config file: {:?}", err);
-                            log::debug!("Will reset config to defaults.");
-
-                            Default::default()
-                        }
-                    },
-                    Err(err) => {
-                        log::debug!("Failed to fetch config file: {:?}", err);
-                        log::debug!("Will reset config to defaults.");
-
-                        Default::default()
-                    }
-                };
-
-                settings_mutex = Arc::new(Mutex::new(init_value.clone()));
-                async_rt.spawn(run_settings_save_loop(
-                    storage,
-                    init_value,
-                    settings_mutex.clone(),
-                ));
-            }
-            Err(err) => {
-                log::error!("Failed to init settings: {:?}", err);
-                log::error!("Settings will not be saved.");
-
-                settings_mutex = Arc::new(Mutex::new(Default::default()));
-            }
-        }
-    }
 
     let do_connection = |connection_type| {
         let (new_game_msg_send, game_msg_recv) = futures_channel::mpsc::unbounded();
@@ -714,25 +601,11 @@ async fn main() {
 
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Err(err) = res {
-                    #[cfg(not(target_family = "wasm"))]
                     let code = match err.downcast_ref::<quinn::ConnectionError>() {
                         Some(quinn::ConnectionError::ApplicationClosed(close)) => {
                             close.error_code.into_inner().try_into().ok()
                         }
                         _ => None,
-                    };
-
-                    #[cfg(target_family = "wasm")]
-                    let code = match err.downcast_ref::<connection::CloseError>() {
-                        Some(err) => {
-                            let code = err.code();
-                            if code >= 4000 && code < 4256 {
-                                Some((code - 4000) as u8)
-                            } else {
-                                None
-                            }
-                        }
-                        None => None,
                     };
 
                     (*lock) = ConnectionState::NotConnected {
@@ -2029,7 +1902,7 @@ async fn main() {
 
                             if let Some(expected_start_time) = hand_extra.expected_start_time {
                                 if let Some(time_until) = expected_start_time
-                                    .checked_duration_since(instant::Instant::now())
+                                    .checked_duration_since(std::time::Instant::now())
                                 {
                                     draw_text_centered(
                                         &(time_until.as_secs() + 1).to_string(),

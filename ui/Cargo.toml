@@ -21,22 +21,9 @@ nertsio_ui_metrics = { path = "../ui_metrics" }
 futures-channel = "0.3.21"
 reqwest = { version = "0.11.9", features = ["json"] }
 log = "0.4.14"
-instant = { version = "0.1.12", features = ["wasm-bindgen"] }
-futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
-futures-ticker = { git = "https://github.com/vpzomtrrfrt/futures-ticker", rev = "7ab689" }
 splines = { version = "4.0.3", features = ["glam"] }
-
-[target.'cfg(not(target_family = "wasm"))'.dependencies]
 quinn = "0.8.0"
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }
 async-bincode = "0.6.1"
 env_logger = "0.9.0"
 atomicwrites = "0.3.1"
-
-[target.'cfg(target_family = "wasm")'.dependencies]
-getrandom = { version = "0.2.3", features = ["js"] }
-wasm-sockets = { git = "https://github.com/vpzomtrrfrt/wasm-sockets", rev = "4d1cad9d" }
-wasm-bindgen-futures = "0.4.29"
-console_error_panic_hook = "0.1.7"
-web-sys = { version = "0.3.56", features = ["Window", "Storage"] }
-wasm-logger = "0.2.0"
