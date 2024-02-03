@@ -26,3 +26,4 @@ tokio-util = { version = "0.7.0", features = ["codec"] }
 pin-project-lite = "0.2.8"
 tokio-rustls = "0.23.2"
 rustls-pemfile = "0.3.0"
+webtransport-quinn = "0.7.0"

@@ -229,6 +229,12 @@ async fn main() {
         .parse()
         .unwrap();
 
+    let web_port: u16 = std::env::var("WEB_PORT")
+        .as_deref()
+        .unwrap_or("6466")
+        .parse()
+        .unwrap();
+
     let (certs, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
         Some(certfile) => {
             let keyfile =
@@ -301,11 +307,23 @@ async fn main() {
             .expect("Failed to initialize TLS config"),
     );
 
+    let web_server_config = {
+        let mut config = (*server_config).clone();
+        config
+            .alpn_protocols
+            .push(webtransport_quinn::ALPN.to_vec());
+
+        Arc::new(config)
+    };
+
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
 
-    let mut quic_server_config = quinn::ServerConfig::with_crypto(server_config.clone());
+    let mut quic_server_config = quinn::ServerConfig::with_crypto(server_config);
     quic_server_config.transport = Arc::new(transport_config);
+
+    let mut web_quic_server_config = quinn::ServerConfig::with_crypto(web_server_config);
+    web_quic_server_config.transport = quic_server_config.transport.clone();
 
     let redis_conn_details = match std::env::var("REDIS_URI") {
         Ok(value) => Some((
@@ -363,8 +381,29 @@ async fn main() {
         conn.map(|conn| (conn, ()))
     });
 
+    let web_quic_endpoint =
+        quinn::Endpoint::server(web_quic_server_config, ([0, 0, 0, 0], web_port).into()).unwrap();
+    let web_incoming = futures_util::stream::unfold((), |()| async {
+        if let Some(connecting) = web_quic_endpoint.accept().await {
+            Some((
+                async {
+                    let conn = connecting.await?;
+
+                    let req = webtransport_quinn::accept(conn).await?;
+                    let session = req.ok().await?;
+
+                    Result::<_, anyhow::Error>::Ok(session)
+                },
+                (),
+            ))
+        } else {
+            None
+        }
+    });
+
     futures_util::join!(
         systems::handle_connection::run(global_state.clone(), quic_incoming),
+        systems::handle_connection::run(global_state.clone(), web_incoming),
         systems::cleanup::run(global_state.clone()),
         {
             let global_state = global_state.clone();
