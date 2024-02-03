@@ -2,6 +2,7 @@ use futures_util::SinkExt;
 use futures_util::{StreamExt, TryStreamExt};
 use nertsio_types as ni_ty;
 use std::sync::{Arc, Mutex};
+use xwt_core::traits::*;
 
 use crate::{ConnectionState, SharedInfo};
 
@@ -64,6 +65,7 @@ pub(crate) async fn handle_connection(
     mut game_msg_recv: futures_channel::mpsc::UnboundedReceiver<ConnectionMessage>,
     settings_mutex: Arc<Mutex<crate::Settings>>,
     events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
+    async_rt: crate::AsyncRt,
 ) -> Result<(), anyhow::Error> {
     let (server, game_id, new_game_public) = match connection_type {
         ConnectionType::CreateGame { public } => {
@@ -99,54 +101,68 @@ pub(crate) async fn handle_connection(
     let server_id = server.server_id;
 
     let conn = {
-        let host: std::net::SocketAddr = server.address_ipv4.into();
+        let endpoint = xwt::current::Endpoint(wtransport::Endpoint::client(
+            wtransport::ClientConfig::builder()
+                .with_bind_default()
+                .with_no_cert_validation()
+                .build(),
+        )?);
 
-        let mut endpoint = quinn::Endpoint::client(
-            (
-                match host {
-                    std::net::SocketAddr::V4(_) => {
-                        std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)
-                    }
-                    std::net::SocketAddr::V6(_) => {
-                        std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)
-                    }
-                },
-                0,
-            )
-                .into(),
-        )?;
-        endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new({
-            let mut cfg = rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(rustls::RootCertStore { roots: vec![] })
-                .with_no_client_auth();
-            cfg.dangerous()
-                .set_certificate_verifier(Arc::new(InsecureVerifier));
-            cfg
-        })));
-
-        endpoint.connect(host, "nio.invalid")?.await?
+        let connecting = endpoint
+            .connect(&format!(
+                "https://{}:{}",
+                server
+                    .hostname
+                    .unwrap_or_else(|| server.address_ipv4.ip().to_string().into()),
+                server
+                    .web_port
+                    .ok_or(anyhow::anyhow!("No web_port for server"))?
+            ))
+            .await?;
+        Arc::new(connecting.wait_connect().await?)
     };
 
     let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {
-        let handshake_stream = conn.connection.open_bi().await?;
+        use xwt_core::datagram::{Receive, Send};
+
+        let handshake_stream = conn.open_bi().await?.wait_bi().await?;
 
         log::debug!("opened stream");
 
-        let handshake_stream_send =
-            async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::HandshakeMessageC2S, _>::from(
-                handshake_stream.0,
-            )
-            .for_async();
-        let handshake_stream_recv = async_bincode::AsyncBincodeReader::<
+        let handshake_stream_send = async_bincode::tokio::AsyncBincodeWriter::<
+            _,
+            ni_ty::protocol::HandshakeMessageC2S,
+            _,
+        >::from(hack_send_stream(Box::new(handshake_stream.0)))
+        .for_async();
+        let handshake_stream_recv = async_bincode::tokio::AsyncBincodeReader::<
             _,
             ni_ty::protocol::HandshakeMessageS2C,
-        >::from(handshake_stream.1);
+        >::from(hack_recv_stream(Box::new(handshake_stream.1)));
 
-        let send_datagram = |data| conn.connection.send_datagram(data);
+        let (datagrams_out_tx, datagrams_out_rx) = futures_channel::mpsc::unbounded();
+
+        {
+            let conn = conn.clone();
+            async_rt.spawn(async move {
+                datagrams_out_rx
+                    .for_each(|bytes| async {
+                        if let Err(err) = conn.send_datagram(bytes).await {
+                            eprintln!("Failed to send datagram: {:?}", err);
+                        }
+                    })
+                    .await;
+            });
+        }
+
+        let send_datagram = move |data| datagrams_out_tx.unbounded_send(data);
+
+        let datagrams_recv = futures_util::stream::unfold((), |()| async {
+            Some((conn.receive_datagram().await, ()))
+        });
 
         (
-            conn.datagrams,
+            datagrams_recv,
             send_datagram,
             handshake_stream_send,
             handshake_stream_recv,
@@ -180,20 +196,20 @@ pub(crate) async fn handle_connection(
     log::debug!("aaa");
 
     let (mut game_stream_send, game_stream_recv) = {
-        let (game_stream_res, _bi_streams) = conn.bi_streams.into_future().await;
-        let game_stream = game_stream_res.ok_or(anyhow::anyhow!("Missing game stream"))??;
+        let game_stream = conn.accept_bi().await?;
 
         log::debug!("bbb");
 
-        let game_stream_send =
-            async_bincode::AsyncBincodeWriter::<_, ni_ty::protocol::GameMessageC2S, _>::from(
-                game_stream.0,
-            )
-            .for_async();
-        let game_stream_recv = async_bincode::AsyncBincodeReader::<
+        let game_stream_send = async_bincode::tokio::AsyncBincodeWriter::<
+            _,
+            ni_ty::protocol::GameMessageC2S,
+            _,
+        >::from(hack_send_stream(Box::new(game_stream.0)))
+        .for_async();
+        let game_stream_recv = async_bincode::tokio::AsyncBincodeReader::<
             _,
             ni_ty::protocol::GameMessageS2C,
-        >::from(game_stream.1);
+        >::from(hack_recv_stream(Box::new(game_stream.1)));
 
         (game_stream_send, game_stream_recv)
     };
@@ -245,8 +261,7 @@ pub(crate) async fn handle_connection(
                                             },
                                         },
                                     )
-                                    .unwrap()
-                                    .into(),
+                                    .unwrap(),
                                 )?;
 
                                 seq += 1;
@@ -265,7 +280,7 @@ pub(crate) async fn handle_connection(
                     .try_for_each(|bytes| async move {
                         use ni_ty::protocol::DatagramMessageS2C;
 
-                        let msg: DatagramMessageS2C = bincode::deserialize(&bytes)?;
+                        let msg: DatagramMessageS2C = bincode::deserialize(bytes.as_ref())?;
                         match msg {
                             DatagramMessageS2C::UpdateMouseState {
                                 player_idx,
@@ -522,4 +537,12 @@ impl rustls::client::ServerCertVerifier for InsecureVerifier {
     ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
         Ok(rustls::client::ServerCertVerified::assertion())
     }
+}
+
+pub fn hack_send_stream(src: Box<dyn std::any::Any>) -> wtransport::SendStream {
+    (*src.downcast::<xwt_wtransport::SendStream>().unwrap()).0
+}
+
+pub fn hack_recv_stream(src: Box<dyn std::any::Any>) -> wtransport::RecvStream {
+    (*src.downcast::<xwt_wtransport::RecvStream>().unwrap()).0
 }

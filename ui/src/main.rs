@@ -351,6 +351,8 @@ fn get_window_conf() -> mq::Conf {
     }
 }
 
+type AsyncRt = tokio::runtime::Handle;
+
 #[macroquad::main(get_window_conf)]
 async fn main() {
     {
@@ -580,6 +582,8 @@ async fn main() {
         let (new_game_msg_send, game_msg_recv) = futures_channel::mpsc::unbounded();
         *game_msg_send.borrow_mut() = Some(new_game_msg_send);
 
+        let handle = async_rt.handle().clone();
+
         async_rt.spawn({
             let game_info_mutex = game_info_mutex.clone();
             let http_client = http_client.clone();
@@ -596,21 +600,15 @@ async fn main() {
                     game_msg_recv,
                     settings_mutex,
                     events_send,
+                    handle,
                 )
                 .await;
 
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Err(err) = res {
-                    let code = match err.downcast_ref::<quinn::ConnectionError>() {
-                        Some(quinn::ConnectionError::ApplicationClosed(close)) => {
-                            close.error_code.into_inner().try_into().ok()
-                        }
-                        _ => None,
-                    };
-
                     (*lock) = ConnectionState::NotConnected {
                         expected: false,
-                        code,
+                        code: Some(0), // TODO?
                     };
                     log::error!("Failed to handle connection: {:?}", err);
                 } else {
