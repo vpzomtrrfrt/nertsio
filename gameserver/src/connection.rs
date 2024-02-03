@@ -1,4 +1,4 @@
-use futures_util::{Sink, Stream, StreamExt};
+use futures_util::{Sink, Stream};
 use nertsio_types as ni_ty;
 
 #[async_trait::async_trait]
@@ -11,15 +11,14 @@ pub trait ConnectionHandle {
 pub trait Connection {
     type BiOut: Sink<bytes::Bytes, Error = anyhow::Error> + Send + Unpin;
     type BiIn: Stream<Item = Result<bytes::BytesMut, anyhow::Error>> + Send + Unpin;
-    type DatagramsIn: Stream<Item = Result<bytes::Bytes, anyhow::Error>> + Send;
     type Handle: ConnectionHandle + Sync + Send + 'static;
 
     async fn accept_bi_stream(
         &mut self,
     ) -> Option<Result<(Self::BiOut, Self::BiIn), anyhow::Error>>;
     async fn start_bi_stream(&mut self) -> Result<(Self::BiOut, Self::BiIn), anyhow::Error>;
+    async fn read_datagram(&self) -> Result<bytes::Bytes, anyhow::Error>;
 
-    fn into_datagrams(self) -> Self::DatagramsIn;
     fn create_handle(&self) -> Self::Handle;
 }
 
@@ -101,14 +100,14 @@ impl<T, E: Into<anyhow::Error>, R: Stream<Item = Result<T, E>>> Stream
     }
 }
 
-fn add_write_framing(dest: quinn::SendStream) -> <quinn::NewConnection as Connection>::BiOut {
+fn add_write_framing(dest: quinn::SendStream) -> <quinn::Connection as Connection>::BiOut {
     MapErrAnyhowSink::new(tokio_util::codec::FramedWrite::new(
         dest,
         tokio_util::codec::LengthDelimitedCodec::new(),
     ))
 }
 
-fn add_read_framing(src: quinn::RecvStream) -> <quinn::NewConnection as Connection>::BiIn {
+fn add_read_framing(src: quinn::RecvStream) -> <quinn::Connection as Connection>::BiIn {
     MapErrAnyhowStream::new(tokio_util::codec::FramedRead::new(
         src,
         tokio_util::codec::LengthDelimitedCodec::new(),
@@ -116,7 +115,7 @@ fn add_read_framing(src: quinn::RecvStream) -> <quinn::NewConnection as Connecti
 }
 
 #[async_trait::async_trait]
-impl Connection for quinn::NewConnection {
+impl Connection for quinn::Connection {
     type BiOut = MapErrAnyhowSink<
         bytes::Bytes,
         std::io::Error,
@@ -127,31 +126,29 @@ impl Connection for quinn::NewConnection {
         std::io::Error,
         tokio_util::codec::FramedRead<quinn::RecvStream, tokio_util::codec::LengthDelimitedCodec>,
     >;
-    type DatagramsIn = MapErrAnyhowStream<bytes::Bytes, quinn::ConnectionError, quinn::Datagrams>;
     type Handle = quinn::Connection;
 
     async fn accept_bi_stream(
         &mut self,
     ) -> Option<Result<(Self::BiOut, Self::BiIn), anyhow::Error>> {
-        match self.bi_streams.next().await {
-            None => None,
-            Some(Err(err)) => Some(Err(err.into())),
-            Some(Ok((send, recv))) => Some(Ok((add_write_framing(send), add_read_framing(recv)))),
+        match self.accept_bi().await {
+            Err(err) => Some(Err(err.into())),
+            Ok((send, recv)) => Some(Ok((add_write_framing(send), add_read_framing(recv)))),
         }
     }
 
     async fn start_bi_stream(&mut self) -> Result<(Self::BiOut, Self::BiIn), anyhow::Error> {
-        let (send, recv) = self.connection.open_bi().await?;
+        let (send, recv) = self.open_bi().await?;
 
         Ok((add_write_framing(send), add_read_framing(recv)))
     }
 
-    fn into_datagrams(self) -> Self::DatagramsIn {
-        MapErrAnyhowStream::new(self.datagrams)
+    async fn read_datagram(&self) -> Result<bytes::Bytes, anyhow::Error> {
+        self.read_datagram().await.map_err(Into::into)
     }
 
     fn create_handle(&self) -> Self::Handle {
-        self.connection.clone()
+        self.clone()
     }
 }
 

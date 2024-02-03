@@ -355,8 +355,13 @@ async fn main() {
         Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
     };
 
-    let (_, quic_incoming) =
+    let quic_endpoint =
         quinn::Endpoint::server(quic_server_config, ([0, 0, 0, 0], port).into()).unwrap();
+    let quic_incoming = futures_util::stream::unfold((), |()| async {
+        let conn = quic_endpoint.accept().await;
+
+        conn.map(|conn| (conn, ()))
+    });
 
     futures_util::join!(
         systems::handle_connection::run(global_state.clone(), quic_incoming),

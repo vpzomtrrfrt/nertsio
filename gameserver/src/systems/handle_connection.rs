@@ -318,40 +318,39 @@ where
             },
             async {
                 let global_state = global_state.clone();
-                connection.into_datagrams().map_err(Into::into).try_for_each(|bytes| {
-                    let global_state = global_state.clone();
-                    async move {
-                        use ni_ty::protocol::DatagramMessageC2S;
+                loop {
+                    use ni_ty::protocol::DatagramMessageC2S;
 
-                        let msg: DatagramMessageC2S = bincode::deserialize(&bytes)?;
-                        match msg {
-                            DatagramMessageC2S::UpdateMouseState { seq, state } => {
-                                let mut server_game_state = global_state
-                                    .games
-                                    .get_mut(&game_id)
-                                    .ok_or(anyhow::anyhow!("Unknown game"))?;
+                    let bytes = connection.read_datagram().await?;
 
-                                if let Some(ref mut hand_state) = server_game_state.hand {
-                                    if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
-                                        if match hand_state.mouse_states[player_idx] {
-                                            Some(ref state) => state.0 < seq,
-                                                None => true,
-                                        } {
-                                            hand_state.mouse_states[player_idx] = Some((seq, state.clone()));
+                    let msg: DatagramMessageC2S = bincode::deserialize(&bytes)?;
+                    match msg {
+                        DatagramMessageC2S::UpdateMouseState { seq, state } => {
+                            let mut server_game_state = global_state
+                                .games
+                                .get_mut(&game_id)
+                                .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-                                            let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
-                                                player_idx: player_idx as u8,
-                                                seq,
-                                                state,
-                                            }).unwrap().into();
+                            if let Some(ref mut hand_state) = server_game_state.hand {
+                                if let Some(player_idx) = hand_state.hand.players().iter().position(|player| player.player_id() == player_id) {
+                                    if match hand_state.mouse_states[player_idx] {
+                                        Some(ref state) => state.0 < seq,
+                                            None => true,
+                                    } {
+                                        hand_state.mouse_states[player_idx] = Some((seq, state.clone()));
 
-                                            for (id, server_player_state) in &server_game_state.players {
-                                                if *id != player_id {
-                                                    if let PlayerController::Network { ref connection, .. } = server_player_state.controller {
-                                                        if let Err(err) = connection.send_datagram(out_msg.clone())
-                                                        {
-                                                            eprintln!("Failed to queue update to player: {:?}", err);
-                                                        }
+                                        let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMouseState {
+                                            player_idx: player_idx as u8,
+                                            seq,
+                                            state,
+                                        }).unwrap().into();
+
+                                        for (id, server_player_state) in &server_game_state.players {
+                                            if *id != player_id {
+                                                if let PlayerController::Network { ref connection, .. } = server_player_state.controller {
+                                                    if let Err(err) = connection.send_datagram(out_msg.clone())
+                                                    {
+                                                        eprintln!("Failed to queue update to player: {:?}", err);
                                                     }
                                                 }
                                             }
@@ -360,11 +359,11 @@ where
                                 }
                             }
                         }
-
-                        Result::<_, anyhow::Error>::Ok(())
                     }
-                }).await?;
+                }
 
+                // required for type inference
+                #[allow(unreachable_code)]
                 Ok(())
             },
             async {
@@ -555,7 +554,7 @@ where
 }
 
 pub(crate) async fn run<
-    C: crate::connection::Connection + Send,
+    C: crate::connection::Connection + Send + Sync,
     E: Into<anyhow::Error> + Sync + Send + 'static,
     F: Future<Output = Result<C, E>> + Send + 'static,
 >(
