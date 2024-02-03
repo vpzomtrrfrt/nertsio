@@ -416,6 +416,7 @@ async fn main() {
                         global_state,
                         my_address_ipv4,
                         my_hostname,
+                        web_port,
                         server_id,
                         redis_conn,
                     )
