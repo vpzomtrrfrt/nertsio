@@ -6,6 +6,11 @@ use xwt_core::traits::*;
 
 use crate::{ConnectionState, SharedInfo};
 
+#[cfg(target_family = "wasm")]
+use async_bincode::futures as async_bincode_current;
+#[cfg(not(target_family = "wasm"))]
+use async_bincode::tokio as async_bincode_current;
+
 pub enum ConnectionType<'a> {
     CreateGame {
         public: bool,
@@ -101,6 +106,10 @@ pub(crate) async fn handle_connection(
     let server_id = server.server_id;
 
     let conn = {
+        #[cfg(target_family = "wasm")]
+        let endpoint = xwt::current::Endpoint::default();
+
+        #[cfg(not(target_family = "wasm"))]
         let endpoint = xwt::current::Endpoint(wtransport::Endpoint::client(
             wtransport::ClientConfig::builder()
                 .with_bind_default()
@@ -118,24 +127,25 @@ pub(crate) async fn handle_connection(
                     .web_port
                     .ok_or(anyhow::anyhow!("No web_port for server"))?
             ))
-            .await?;
+            .await
+            .map_err(error_send)?;
         Arc::new(connecting.wait_connect().await?)
     };
 
     let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {
         use xwt_core::datagram::{Receive, Send};
 
-        let handshake_stream = conn.open_bi().await?.wait_bi().await?;
+        let handshake_stream = conn.open_bi().await.map_err(error_send)?.wait_bi().await?;
 
         log::debug!("opened stream");
 
-        let handshake_stream_send = async_bincode::tokio::AsyncBincodeWriter::<
+        let handshake_stream_send = async_bincode_current::AsyncBincodeWriter::<
             _,
             ni_ty::protocol::HandshakeMessageC2S,
             _,
         >::from(hack_send_stream(Box::new(handshake_stream.0)))
         .for_async();
-        let handshake_stream_recv = async_bincode::tokio::AsyncBincodeReader::<
+        let handshake_stream_recv = async_bincode_current::AsyncBincodeReader::<
             _,
             ni_ty::protocol::HandshakeMessageS2C,
         >::from(hack_recv_stream(Box::new(handshake_stream.1)));
@@ -196,17 +206,17 @@ pub(crate) async fn handle_connection(
     log::debug!("aaa");
 
     let (mut game_stream_send, game_stream_recv) = {
-        let game_stream = conn.accept_bi().await?;
+        let game_stream = conn.accept_bi().await.map_err(error_send)?;
 
         log::debug!("bbb");
 
-        let game_stream_send = async_bincode::tokio::AsyncBincodeWriter::<
+        let game_stream_send = async_bincode_current::AsyncBincodeWriter::<
             _,
             ni_ty::protocol::GameMessageC2S,
             _,
         >::from(hack_send_stream(Box::new(game_stream.0)))
         .for_async();
-        let game_stream_recv = async_bincode::tokio::AsyncBincodeReader::<
+        let game_stream_recv = async_bincode_current::AsyncBincodeReader::<
             _,
             ni_ty::protocol::GameMessageS2C,
         >::from(hack_recv_stream(Box::new(game_stream.1)));
@@ -236,11 +246,12 @@ pub(crate) async fn handle_connection(
                 Result::<_, anyhow::Error>::Ok(())
             },
             async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+                let mut interval =
+                    futures_ticker::Ticker::new(std::time::Duration::from_millis(50));
                 let mut seq = 0;
 
                 loop {
-                    interval.tick().await;
+                    interval.next().await;
 
                     let mut lock = info_mutex.lock().unwrap();
 
@@ -276,7 +287,7 @@ pub(crate) async fn handle_connection(
             },
             async {
                 datagrams_recv
-                    .map_err(Into::into)
+                    .map_err(error_send)
                     .try_for_each(|bytes| async move {
                         use ni_ty::protocol::DatagramMessageS2C;
 
@@ -371,7 +382,7 @@ pub(crate) async fn handle_connection(
                                     let mut hand_extra =
                                         crate::HandExtra::new(info.players().len());
                                     hand_extra.expected_start_time =
-                                        Some(std::time::Instant::now() + delay);
+                                        Some(web_time::Instant::now() + delay);
                                     shared.hand_extra = Some(hand_extra);
 
                                     shared.game.hand = Some(info);
@@ -524,25 +535,40 @@ pub(crate) async fn handle_connection(
     x
 }
 
-struct InsecureVerifier;
-impl rustls::client::ServerCertVerifier for InsecureVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &rustls::Certificate,
-        _intermediates: &[rustls::Certificate],
-        _server_name: &rustls::client::ServerName,
-        _scts: &mut dyn Iterator<Item = &[u8]>,
-        _ocsp_response: &[u8],
-        _now: std::time::SystemTime,
-    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
-        Ok(rustls::client::ServerCertVerified::assertion())
-    }
-}
-
+#[cfg(not(target_family = "wasm"))]
 pub fn hack_send_stream(src: Box<dyn std::any::Any>) -> wtransport::SendStream {
     (*src.downcast::<xwt_wtransport::SendStream>().unwrap()).0
 }
 
+#[cfg(not(target_family = "wasm"))]
 pub fn hack_recv_stream(src: Box<dyn std::any::Any>) -> wtransport::RecvStream {
     (*src.downcast::<xwt_wtransport::RecvStream>().unwrap()).0
+}
+
+#[cfg(target_family = "wasm")]
+pub fn hack_send_stream(
+    src: Box<dyn std::any::Any>,
+) -> tokio_util::compat::Compat<xwt_web_sys::SendStream> {
+    tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(
+        *src.downcast::<xwt_web_sys::SendStream>().unwrap(),
+    )
+}
+
+#[cfg(target_family = "wasm")]
+pub fn hack_recv_stream(
+    src: Box<dyn std::any::Any>,
+) -> tokio_util::compat::Compat<xwt_web_sys::RecvStream> {
+    tokio_util::compat::TokioAsyncReadCompatExt::compat(
+        *src.downcast::<xwt_web_sys::RecvStream>().unwrap(),
+    )
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn error_send<T: Into<anyhow::Error>>(src: T) -> anyhow::Error {
+    src.into()
+}
+
+#[cfg(target_family = "wasm")]
+fn error_send(src: xwt_web_sys::Error) -> anyhow::Error {
+    anyhow::anyhow!("Error in connection: {:?}", src)
 }
