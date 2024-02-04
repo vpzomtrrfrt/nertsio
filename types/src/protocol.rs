@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 5;
+pub const PROTOCOL_VERSION: u16 = 6;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
@@ -115,6 +115,7 @@ pub struct ServerStatusMessage<'a> {
     pub open_public_games: Vec<PublicGameInfo>,
     pub stats: ServerStats,
     pub hostname: Option<Cow<'a, str>>,
+    pub web_port: Option<u16>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -122,6 +123,7 @@ pub struct ServerConnectionInfo<'a> {
     pub server_id: u8,
     pub address_ipv4: std::net::SocketAddrV4,
     pub hostname: Option<Cow<'a, str>>,
+    pub web_port: Option<u16>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -100,14 +100,26 @@ impl<T, E: Into<anyhow::Error>, R: Stream<Item = Result<T, E>>> Stream
     }
 }
 
-fn add_write_framing(dest: quinn::SendStream) -> <quinn::Connection as Connection>::BiOut {
+fn add_write_framing<S: tokio::io::AsyncWrite>(
+    dest: S,
+) -> MapErrAnyhowSink<
+    bytes::Bytes,
+    std::io::Error,
+    tokio_util::codec::FramedWrite<S, tokio_util::codec::LengthDelimitedCodec>,
+> {
     MapErrAnyhowSink::new(tokio_util::codec::FramedWrite::new(
         dest,
         tokio_util::codec::LengthDelimitedCodec::new(),
     ))
 }
 
-fn add_read_framing(src: quinn::RecvStream) -> <quinn::Connection as Connection>::BiIn {
+fn add_read_framing<S: tokio::io::AsyncRead>(
+    src: S,
+) -> MapErrAnyhowStream<
+    bytes::BytesMut,
+    std::io::Error,
+    tokio_util::codec::FramedRead<S, tokio_util::codec::LengthDelimitedCodec>,
+> {
     MapErrAnyhowStream::new(tokio_util::codec::FramedRead::new(
         src,
         tokio_util::codec::LengthDelimitedCodec::new(),
@@ -160,6 +172,88 @@ impl ConnectionHandle for quinn::Connection {
 
     fn close(&self, code: u8) {
         self.close(
+            code.into(),
+            ni_ty::protocol::get_close_message(code).as_bytes(),
+        );
+    }
+}
+
+#[async_trait::async_trait]
+impl Connection for webtransport_quinn::Session {
+    type BiOut = MapErrAnyhowSink<
+        bytes::Bytes,
+        std::io::Error,
+        tokio_util::codec::FramedWrite<
+            webtransport_quinn::SendStream,
+            tokio_util::codec::LengthDelimitedCodec,
+        >,
+    >;
+    type BiIn = MapErrAnyhowStream<
+        bytes::BytesMut,
+        std::io::Error,
+        tokio_util::codec::FramedRead<
+            webtransport_quinn::RecvStream,
+            tokio_util::codec::LengthDelimitedCodec,
+        >,
+    >;
+    type Handle = WebConnectionHandle;
+
+    async fn accept_bi_stream(
+        &mut self,
+    ) -> Option<Result<(Self::BiOut, Self::BiIn), anyhow::Error>> {
+        match self.accept_bi().await {
+            Err(err) => Some(Err(err.into())),
+            Ok((send, recv)) => Some(Ok((add_write_framing(send), add_read_framing(recv)))),
+        }
+    }
+
+    async fn start_bi_stream(&mut self) -> Result<(Self::BiOut, Self::BiIn), anyhow::Error> {
+        let (send, recv) = self.open_bi().await?;
+
+        Ok((add_write_framing(send), add_read_framing(recv)))
+    }
+
+    async fn read_datagram(&self) -> Result<bytes::Bytes, anyhow::Error> {
+        self.read_datagram().await.map_err(Into::into)
+    }
+
+    fn create_handle(&self) -> Self::Handle {
+        let (datagrams_tx, mut datagrams_rx) = tokio::sync::mpsc::unbounded_channel();
+
+        {
+            let session = self.clone();
+            tokio::spawn(async move {
+                while let Some(data) = datagrams_rx.recv().await {
+                    // it's not actually doing any async things but maybe they expect to in the future?
+                    if let Err(err) = session.send_datagram(data).await {
+                        eprintln!("Failed to send datagram: {:?}", err);
+                    }
+                }
+            });
+        }
+
+        WebConnectionHandle {
+            datagrams_tx,
+            session: self.clone(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct WebConnectionHandle {
+    datagrams_tx: tokio::sync::mpsc::UnboundedSender<bytes::Bytes>,
+    session: webtransport_quinn::Session,
+}
+
+#[async_trait::async_trait]
+impl ConnectionHandle for WebConnectionHandle {
+    fn send_datagram(&self, data: bytes::Bytes) -> Result<(), anyhow::Error> {
+        self.datagrams_tx.send(data)?;
+        Ok(())
+    }
+
+    fn close(&self, code: u8) {
+        self.session.close(
             code.into(),
             ni_ty::protocol::get_close_message(code).as_bytes(),
         );
