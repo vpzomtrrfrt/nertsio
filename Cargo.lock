@@ -103,8 +103,7 @@ dependencies = [
 [[package]]
 name = "async-bincode"
 version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21849a990d47109757e820904d7c0b569a8013f6595bf14d911884634d58795f"
+source = "git+https://github.com/vpzomtrrfrt/async-bincode?branch=constant-len#b1c201b5f5ab2550dce2afe83ccd2fca2f33dc38"
 dependencies = [
  "bincode",
  "byteorder",
@@ -2864,8 +2863,7 @@ dependencies = [
 [[package]]
 name = "web-sys-async-io"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0ba39f06125fd8b7028d7107b7cd19b9ac1c6af8eedb0385fee61a3f29dd6cd"
+source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "js-sys",
  "tokio 1.29.1",
@@ -2877,8 +2875,7 @@ dependencies = [
 [[package]]
 name = "web-sys-stream-utils"
 version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4d9c81ef25314f96f388e1365fc413ae43af447400ffcd565357e452200485e7"
+source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -3195,8 +3192,7 @@ dependencies = [
 [[package]]
 name = "xwt-core"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f9d2641de52ba7f54be367d495429239a82a970742e3c4053c311faed1df0c3"
+source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "async-trait",
  "tokio 1.29.1",
@@ -3205,8 +3201,7 @@ dependencies = [
 [[package]]
 name = "xwt-web-sys"
 version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e49c8e78afe1373f5444c25f4667a598a2bdc02b2443f5b8cdfbe01e1a70b93"
+source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "js-sys",
  "tokio 1.29.1",
