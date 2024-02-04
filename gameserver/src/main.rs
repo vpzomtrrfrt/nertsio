@@ -296,16 +296,18 @@ async fn main() {
         games: Default::default(),
     });
 
-    let server_config = Arc::new(
-        rustls::ServerConfig::builder()
-            .with_safe_default_cipher_suites()
-            .with_safe_default_kx_groups()
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .unwrap()
-            .with_no_client_auth()
-            .with_single_cert(certs, privkey)
-            .expect("Failed to initialize TLS config"),
-    );
+    let mut server_config = rustls::ServerConfig::builder()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(certs, privkey)
+        .expect("Failed to initialize TLS config");
+
+    server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
+    let server_config = Arc::new(server_config);
 
     let web_server_config = {
         let mut config = (*server_config).clone();
