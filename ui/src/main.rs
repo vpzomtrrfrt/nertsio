@@ -54,6 +54,9 @@ struct Settings {
     name: String,
 
     #[serde(default)]
+    drag: bool,
+
+    #[serde(default)]
     round_start_music: bool,
 
     #[serde(default)]
@@ -67,6 +70,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             name: default_name(),
+            drag: false,
             round_start_music: false,
             suit_callouts: false,
             nerts_callout: false,
@@ -884,15 +888,25 @@ async fn main() {
                     let settings = &mut *settings_lock;
 
                     mqui::widgets::Checkbox::new(hash!())
-                        .label("Round Start Music")
+                        .label("Allow Drag-and-Drop")
                         .pos(mq::Vec2::new(menu_x, menu_y))
+                        .size(mq::Vec2::new(menu_width, entry_height))
+                        .ratio(0.1)
+                        .ui(&mut mqui::root_ui(), &mut settings.drag);
+
+                    mqui::widgets::Checkbox::new(hash!())
+                        .label("Round Start Music")
+                        .pos(mq::Vec2::new(menu_x, menu_y + entry_height + entry_spacing))
                         .size(mq::Vec2::new(menu_width, entry_height))
                         .ratio(0.1)
                         .ui(&mut mqui::root_ui(), &mut settings.round_start_music);
 
                     mqui::widgets::Checkbox::new(hash!())
                         .label("Suit Callouts")
-                        .pos(mq::Vec2::new(menu_x, menu_y + entry_height + entry_spacing))
+                        .pos(mq::Vec2::new(
+                            menu_x,
+                            menu_y + (entry_height + entry_spacing) * 2.0,
+                        ))
                         .size(mq::Vec2::new(menu_width, entry_height))
                         .ratio(0.1)
                         .ui(&mut mqui::root_ui(), &mut settings.suit_callouts);
@@ -901,7 +915,7 @@ async fn main() {
                         .label("Nerts Callout")
                         .pos(mq::Vec2::new(
                             menu_x,
-                            menu_y + (entry_height + entry_spacing) * 2.0,
+                            menu_y + (entry_height + entry_spacing) * 3.0,
                         ))
                         .size(mq::Vec2::new(menu_width, entry_height))
                         .ratio(0.1)
@@ -1273,8 +1287,12 @@ async fn main() {
                                 let mouse_pressed =
                                     mq::is_mouse_button_pressed(mq::MouseButton::Left);
 
+                                let mut settings_lock = settings_mutex.lock().unwrap();
+                                let settings = &mut *settings_lock;
+
                                 if mouse_pressed
-                                    || mq::is_mouse_button_released(mq::MouseButton::Left)
+                                    || (mq::is_mouse_button_released(mq::MouseButton::Left)
+                                        && settings.drag)
                                 {
                                     let nerts_stack_pos = mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Nerts,
@@ -1586,7 +1604,10 @@ async fn main() {
                                                             false
                                                         };
 
-                                                        if success || !held.mouse_released {
+                                                        if success
+                                                            || (!held.mouse_released
+                                                                && settings.drag)
+                                                        {
                                                             hand_extra.my_held_state = None;
                                                         } else if !mouse_pressed {
                                                             held.mouse_released = true;
