@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 nertsio_textures = { path = "../textures" }
 nertsio_types = { path = "../types" }
-macroquad = "0.3.25"
+macroquad = { version = "0.4.4", features = ["audio"] }
 anyhow = "1.0.51"
 futures-util = { version = "0.3.18", features = ["sink"] }
 bincode = "1.3.3"

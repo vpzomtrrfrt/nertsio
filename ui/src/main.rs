@@ -486,7 +486,7 @@ async fn main() {
 
     let draw_card = |card: ni_ty::Card, x: f32, y: f32| {
         mq::draw_texture_ex(
-            cards_texture,
+            &cards_texture,
             x,
             y,
             mq::WHITE,
@@ -503,7 +503,7 @@ async fn main() {
         let fg_color = PLAYER_COLORS[(owner_id & 0xF) as usize];
 
         mq::draw_texture_ex(
-            backs_texture,
+            &backs_texture,
             x,
             y,
             bg_color,
@@ -520,7 +520,7 @@ async fn main() {
         );
 
         mq::draw_texture_ex(
-            backs_texture,
+            &backs_texture,
             x,
             y,
             fg_color,
@@ -539,7 +539,7 @@ async fn main() {
 
     let draw_placeholder = |x: f32, y: f32| {
         mq::draw_texture_ex(
-            placeholder_texture,
+            &placeholder_texture,
             x,
             y,
             mq::WHITE,
@@ -573,7 +573,7 @@ async fn main() {
     let draw_horizontal_stack_cards = |cards: &[ni_ty::CardInstance], x: f32, y: f32| {
         if cards.is_empty() {
             mq::draw_texture_ex(
-                placeholder_texture,
+                &placeholder_texture,
                 x,
                 y,
                 mq::WHITE,
@@ -1247,14 +1247,16 @@ async fn main() {
 
                         let scale = real_screen_size.0 / screen_size.0;
 
-                        let normal_camera = mq::Camera2D::from_display_rect(
-                            mq::Rect::new(0.0, 0.0, screen_size.0, screen_size.1).into(),
-                        );
+                        let camera_rect =
+                            mq::Rect::new(0.0, screen_size.1, screen_size.0, -screen_size.1).into();
 
-                        let inverted_camera: mq::Camera2D = {
-                            let mut res = normal_camera.clone();
-                            res.rotation = 180.0;
-                            res
+                        let normal_camera = mq::Camera2D {
+                            ..mq::Camera2D::from_display_rect(camera_rect)
+                        };
+
+                        let inverted_camera = mq::Camera2D {
+                            rotation: 180.0,
+                            ..mq::Camera2D::from_display_rect(camera_rect)
                         };
 
                         let screen_center = (screen_size.0 / 2.0, screen_size.1 / 2.0);
@@ -1819,7 +1821,7 @@ async fn main() {
                                         let settings = &mut *settings_lock;
 
                                         if settings.nerts_callout {
-                                            macroquad::audio::play_sound_once(nerts_callout);
+                                            macroquad::audio::play_sound_once(&nerts_callout);
                                         }
                                     }
                                 }
@@ -1967,7 +1969,7 @@ async fn main() {
                                 }
 
                                 mq::draw_texture_ex(
-                                    cursors_texture,
+                                    &cursors_texture,
                                     screen_center.0 + mouse_pos[0] - 1.0,
                                     screen_center.1 + mouse_pos[1] - 1.0,
                                     PLAYER_COLORS[(pred_hand_state.players()[idx].player_id() >> 4)
@@ -2190,7 +2192,7 @@ async fn main() {
 
                     if settings.round_start_music {
                         println!("playing sound");
-                        macroquad::audio::play_sound_once(round_start_music);
+                        macroquad::audio::play_sound_once(&round_start_music);
                     }
                 }
                 ConnectionEvent::PlayerHandAction(action) => {
@@ -2210,16 +2212,16 @@ async fn main() {
                                                         macroquad::audio::play_sound_once(
                                                             match top.card.suit {
                                                                 ni_ty::Suit::Spades => {
-                                                                    suit_callout_spades
+                                                                    &suit_callout_spades
                                                                 }
                                                                 ni_ty::Suit::Diamonds => {
-                                                                    suit_callout_diamonds
+                                                                    &suit_callout_diamonds
                                                                 }
                                                                 ni_ty::Suit::Clubs => {
-                                                                    suit_callout_clubs
+                                                                    &suit_callout_clubs
                                                                 }
                                                                 ni_ty::Suit::Hearts => {
-                                                                    suit_callout_hearts
+                                                                    &suit_callout_hearts
                                                                 }
                                                             },
                                                         );
@@ -2239,7 +2241,7 @@ async fn main() {
                     let settings = &mut *settings_lock;
 
                     if settings.nerts_callout {
-                        macroquad::audio::play_sound_once(nerts_callout);
+                        macroquad::audio::play_sound_once(&nerts_callout);
                     }
                 }
             },

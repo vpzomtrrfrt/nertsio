@@ -3,7 +3,6 @@ members = ["types", "ui", "textures", "gameserver", "coordinator", "ui_metrics"]
 resolver = "2"
 
 [patch.crates-io]
-quad-snd = { git = "https://github.com/not-fl3/quad-snd" }
 xwt-web-sys = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
 xwt-core = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
 async-bincode = { git = "https://github.com/vpzomtrrfrt/async-bincode", branch = "constant-len" }
