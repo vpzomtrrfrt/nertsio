@@ -28,6 +28,8 @@ futures-io = "0.3.30"
 futures-ticker = "0.0.3"
 futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
 web-time = "1.0.0"
+egui-macroquad = { git = "https://github.com/optozorax/egui-macroquad" }
+egui = "0.25.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }

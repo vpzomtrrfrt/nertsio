@@ -1,6 +1,5 @@
 use futures_util::{FutureExt, StreamExt};
 use macroquad::prelude as mq;
-use macroquad::ui as mqui;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 use serde::{Deserialize, Serialize};
@@ -43,6 +42,8 @@ const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
 // const COORDINATOR_URL: &str = "http://localhost:6462/";
 
 const MAX_INTERPOLATION_TIME: f32 = 0.3;
+
+const SCREEN_MARGIN: f32 = 2.5;
 
 fn default_name() -> String {
     "Nerter".to_owned()
@@ -791,24 +792,12 @@ async fn main() {
         );
     };
 
-    let skin = {
-        let style = mqui::root_ui()
-            .style_builder()
-            .font_size(64)
-            .color_hovered(mq::Color::from_rgba(170, 170, 170, 255))
-            .build();
-
-        let mut skin = mqui::root_ui().default_skin().clone();
-        skin.label_style = style.clone();
-        skin.button_style = style.clone();
-        skin.editbox_style = style;
-
-        skin
-    };
-
-    mqui::root_ui().push_skin(&skin);
-
     let mut state = State::MainMenu;
+
+    egui_macroquad::cfg(|egui_ctx| {
+        egui_ctx.set_visuals(egui::style::Visuals::light());
+        egui_ctx.set_zoom_factor(3.0);
+    });
 
     loop {
         mq::set_default_camera();
@@ -817,144 +806,189 @@ async fn main() {
             State::MainMenu => {
                 mq::clear_background(BACKGROUND_COLOR);
 
-                let button_height = 50.0;
-                let button_spacing = 25.0;
+                let button_height = 20.0;
 
                 let button_count = 6;
 
-                let menu_width = 600.0;
-                let menu_height = button_height * (button_count as f32)
-                    + ((button_count - 1) as f32) * button_spacing;
-                let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
-                let menu_y = mq::screen_height() / 2.0 - menu_height / 2.0;
+                let menu_width = 150.0;
 
-                let menu_button = |idx, label| {
-                    mqui::widgets::Button::new(label)
-                        .position(mq::Vec2::new(
-                            menu_x,
-                            menu_y + (button_height + button_spacing) * (idx as f32),
-                        ))
-                        .size(mq::Vec2::new(menu_width, button_height))
-                        .ui(&mut mqui::root_ui())
-                };
+                let mut next_state = State::MainMenu;
 
-                {
-                    use mqui::hash;
+                egui_macroquad::ui(|egui_ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none())
+                        .show(egui_ctx, |ui| {
+                            let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
+                            let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
 
-                    let mut settings_lock = settings_mutex.lock().unwrap();
-                    let settings = &mut *settings_lock;
+                            let menu_height = button_height * (button_count as f32)
+                                + ((button_count - 1) as f32) * ui.spacing().item_spacing.y;
 
-                    mqui::widgets::InputText::new(hash!())
-                        .label("Name")
-                        .size(mq::Vec2::new(menu_width, button_height + 20.0))
-                        .position(mq::Vec2::new(menu_x, menu_y - 20.0))
-                        .ratio(0.8)
-                        .ui(&mut mqui::root_ui(), &mut settings.name);
-                }
+                            let menu_x = ui_screen_width / 2.0 - menu_width / 2.0;
+                            let menu_y = ui_screen_height / 2.0 - menu_height / 2.0;
 
-                if menu_button(1, "Create Public Game") {
-                    do_connection(connection::ConnectionType::CreateGame { public: true });
-                    State::Connecting
-                } else if menu_button(2, "Create Private Game") {
-                    do_connection(connection::ConnectionType::CreateGame { public: false });
-                    State::Connecting
-                } else if menu_button(3, "Join Public Game") {
-                    let channel = start_loading_public_games();
-                    State::PublicGameListLoading { channel }
-                } else if menu_button(4, "Join Private Game") {
-                    State::JoinGameForm {
-                        input: String::new(),
-                    }
-                } else if menu_button(5, "Settings") {
-                    State::MainMenuSettings
-                } else {
-                    State::MainMenu
-                }
+                            ui.allocate_ui_at_rect(
+                                egui::Rect {
+                                    min: egui::Pos2::new(menu_x, menu_y),
+                                    max: egui::Pos2::new(menu_x + menu_width, menu_y + menu_height),
+                                },
+                                |ui| {
+                                    let menu_button =
+                                        |ui: &mut egui::Ui, label| {
+                                            ui.add(egui::widgets::Button::new(label).min_size(
+                                                egui::Vec2::new(menu_width, button_height),
+                                            ))
+                                            .clicked()
+                                        };
+
+                                    {
+                                        let mut settings_lock = settings_mutex.lock().unwrap();
+                                        let settings = &mut *settings_lock;
+
+                                        ui.horizontal(|ui| {
+                                            ui.label("Name:");
+                                            ui.text_edit_singleline(&mut settings.name);
+                                        });
+                                    }
+
+                                    next_state = if menu_button(ui, "Create Public Game") {
+                                        do_connection(connection::ConnectionType::CreateGame {
+                                            public: true,
+                                        });
+                                        State::Connecting
+                                    } else if menu_button(ui, "Create Private Game") {
+                                        do_connection(connection::ConnectionType::CreateGame {
+                                            public: false,
+                                        });
+                                        State::Connecting
+                                    } else if menu_button(ui, "Join Public Game") {
+                                        let channel = start_loading_public_games();
+                                        State::PublicGameListLoading { channel }
+                                    } else if menu_button(ui, "Join Private Game") {
+                                        State::JoinGameForm {
+                                            input: String::new(),
+                                        }
+                                    } else if menu_button(ui, "Settings") {
+                                        State::MainMenuSettings
+                                    } else {
+                                        State::MainMenu
+                                    };
+                                },
+                            );
+                        });
+                });
+
+                egui_macroquad::draw();
+
+                next_state
             }
             State::MainMenuSettings => {
-                use mqui::hash;
-
                 mq::clear_background(BACKGROUND_COLOR);
 
-                let menu_width = 600.0;
-                let entry_height = 50.0;
-                let entry_spacing = 25.0;
+                let menu_width = 150.0;
 
-                let menu_x = mq::screen_width() / 2.0 - menu_width / 2.0;
-                let menu_y = 20.0;
+                let mut go_back = false;
 
-                {
-                    let mut settings_lock = settings_mutex.lock().unwrap();
-                    let settings = &mut *settings_lock;
+                egui_macroquad::ui(|egui_ctx| {
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::none()
+                                .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                        )
+                        .show(egui_ctx, |ui| {
+                            let mut settings_lock = settings_mutex.lock().unwrap();
+                            let settings = &mut *settings_lock;
 
-                    mqui::widgets::Checkbox::new(hash!())
-                        .label("Allow Drag-and-Drop")
-                        .pos(mq::Vec2::new(menu_x, menu_y))
-                        .size(mq::Vec2::new(menu_width, entry_height))
-                        .ratio(0.1)
-                        .ui(&mut mqui::root_ui(), &mut settings.drag);
+                            if ui.button("Back").clicked() {
+                                go_back = true;
+                            }
 
-                    mqui::widgets::Checkbox::new(hash!())
-                        .label("Round Start Music")
-                        .pos(mq::Vec2::new(menu_x, menu_y + entry_height + entry_spacing))
-                        .size(mq::Vec2::new(menu_width, entry_height))
-                        .ratio(0.1)
-                        .ui(&mut mqui::root_ui(), &mut settings.round_start_music);
+                            ui.vertical_centered(|ui| {
+                                ui.heading("Settings");
+                                ui.allocate_ui_with_layout(
+                                    egui::Vec2::new(menu_width, 0.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        ui.checkbox(&mut settings.drag, "Allow Drag-and-Drop");
+                                        ui.checkbox(
+                                            &mut settings.round_start_music,
+                                            "Round Start Music",
+                                        );
+                                        ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
+                                        ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
+                                    },
+                                );
+                            });
+                        });
+                });
 
-                    mqui::widgets::Checkbox::new(hash!())
-                        .label("Suit Callouts")
-                        .pos(mq::Vec2::new(
-                            menu_x,
-                            menu_y + (entry_height + entry_spacing) * 2.0,
-                        ))
-                        .size(mq::Vec2::new(menu_width, entry_height))
-                        .ratio(0.1)
-                        .ui(&mut mqui::root_ui(), &mut settings.suit_callouts);
+                egui_macroquad::draw();
 
-                    mqui::widgets::Checkbox::new(hash!())
-                        .label("Nerts Callout")
-                        .pos(mq::Vec2::new(
-                            menu_x,
-                            menu_y + (entry_height + entry_spacing) * 3.0,
-                        ))
-                        .size(mq::Vec2::new(menu_width, entry_height))
-                        .ratio(0.1)
-                        .ui(&mut mqui::root_ui(), &mut settings.nerts_callout);
-                }
+                go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
 
-                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                if go_back {
                     State::MainMenu
                 } else {
-                    if mq::is_key_pressed(mq::KeyCode::Escape) {
-                        State::MainMenu
-                    } else {
-                        State::MainMenuSettings
-                    }
+                    State::MainMenuSettings
                 }
             }
             State::JoinGameForm { mut input } => {
-                use mqui::hash;
+                let menu_width = 150.0;
 
-                let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
+                let button_height = 20.0;
+                let button_count = 2;
 
                 mq::clear_background(BACKGROUND_COLOR);
 
-                mqui::widgets::InputText::new(hash!())
-                    .label("Room Code")
-                    .size(mq::Vec2::new(500.0, 70.0))
-                    .position(mq::Vec2::new(
-                        screen_center.0 - 250.0,
-                        screen_center.1 - 35.0,
-                    ))
-                    .ui(&mut mqui::root_ui(), &mut input);
-                if mqui::widgets::Button::new("Join")
-                    .position(mq::Vec2::new(
-                        screen_center.0 - 100.0,
-                        screen_center.1 + 70.0,
-                    ))
-                    .size(mq::Vec2::new(200.0, 50.0))
-                    .ui(&mut mqui::root_ui())
-                {
+                let mut go_connect = false;
+                let mut go_back = false;
+
+                egui_macroquad::ui(|egui_ctx| {
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::none()
+                                .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                        )
+                        .show(egui_ctx, |ui| {
+                            let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
+                            let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
+
+                            let menu_height = button_height * (button_count as f32)
+                                + ((button_count - 1) as f32) * ui.spacing().item_spacing.y;
+
+                            let menu_x = ui_screen_width / 2.0 - menu_width / 2.0;
+                            let menu_y = ui_screen_height / 2.0 - menu_height / 2.0;
+
+                            if ui.button("Back").clicked() {
+                                go_back = true;
+                            }
+
+                            ui.allocate_ui_at_rect(
+                                egui::Rect {
+                                    min: egui::Pos2::new(menu_x, menu_y),
+                                    max: egui::Pos2::new(menu_x + menu_width, menu_y + menu_height),
+                                },
+                                |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Room Code:");
+                                        ui.text_edit_singleline(&mut input);
+                                    });
+
+                                    ui.vertical_centered(|ui| {
+                                        if ui.button("Join").clicked() {
+                                            go_connect = true;
+                                        }
+                                    });
+                                },
+                            );
+                        });
+                });
+
+                egui_macroquad::draw();
+
+                go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
+
+                if go_connect {
                     if let Ok((server_id, game_id)) = parse_full_game_id_str(&input) {
                         do_connection(connection::ConnectionType::JoinPrivateGame {
                             server_id,
@@ -964,16 +998,10 @@ async fn main() {
                     } else {
                         State::JoinGameForm { input }
                     }
+                } else if go_back {
+                    State::MainMenu
                 } else {
-                    if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
-                        State::MainMenu
-                    } else {
-                        if mq::is_key_pressed(mq::KeyCode::Escape) {
-                            State::MainMenu
-                        } else {
-                            State::JoinGameForm { input }
-                        }
-                    }
+                    State::JoinGameForm { input }
                 }
             }
             State::PublicGameListLoading { mut channel } => {
@@ -1004,11 +1032,58 @@ async fn main() {
 
                 let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
 
-                let row_height = 50.0;
-                let spacing = 25.0;
-                let row_width = 1000.0;
+                let menu_width = 250.0;
+
+                let mut go_back = false;
 
                 let mut joining = None;
+
+                egui_macroquad::ui(|egui_ctx| {
+                    egui::CentralPanel::default()
+                        .frame(
+                            egui::Frame::none()
+                                .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                        )
+                        .show(egui_ctx, |ui| {
+                            if ui.button("Back").clicked() {
+                                go_back = true;
+                            }
+
+                            if !list.is_empty() {
+                                ui.vertical_centered(|ui| {
+                                    ui.heading("Public Games");
+                                    ui.allocate_ui_with_layout(
+                                        egui::Vec2::new(menu_width, 0.0),
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            egui::Grid::new("public_game_list").show(ui, |ui| {
+                                                for game in &list {
+                                                    ui.label(to_full_game_id_str(
+                                                        game.server.server_id,
+                                                        game.game_id,
+                                                    ));
+                                                    ui.label(format!("{} players", game.players));
+                                                    ui.label(if game.waiting {
+                                                        "waiting"
+                                                    } else {
+                                                        "playing"
+                                                    });
+                                                    if ui.button("Join").clicked() {
+                                                        joining = Some(game);
+                                                    }
+
+                                                    ui.end_row();
+                                                }
+                                            });
+                                        },
+                                    );
+                                });
+                            }
+                        });
+                });
+
+                egui_macroquad::draw();
+
                 if list.is_empty() {
                     draw_text_centered(
                         "No games found.",
@@ -1017,43 +1092,16 @@ async fn main() {
                         50,
                         mq::BLACK,
                     );
-                } else {
-                    let list_height =
-                        (row_height * list.len() as f32) + (spacing * (list.len() - 1) as f32);
-                    let list_x = screen_center.0 - row_width / 2.0;
-                    let list_y = screen_center.1 - list_height / 2.0;
-
-                    for (idx, game) in list.iter().enumerate() {
-                        let y = list_y + (idx as f32) * (row_height + spacing);
-
-                        mqui::root_ui().label(
-                            mq::Vec2::new(list_x, y),
-                            &to_full_game_id_str(game.server.server_id, game.game_id),
-                        );
-                        mqui::root_ui().label(
-                            mq::Vec2::new(list_x + 270.0, y),
-                            &format!("{} players", game.players),
-                        );
-                        mqui::root_ui().label(
-                            mq::Vec2::new(list_x + 570.0, y),
-                            if game.waiting { "waiting" } else { "playing" },
-                        );
-                        if mqui::root_ui().button(mq::Vec2::new(list_x + 820.0, y), "Join") {
-                            joining = Some(game);
-                        }
-                    }
                 }
+
+                go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
 
                 match joining {
                     None => {
-                        if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Back") {
+                        if go_back {
                             State::MainMenu
                         } else {
-                            if mq::is_key_pressed(mq::KeyCode::Escape) {
-                                State::MainMenu
-                            } else {
-                                State::PublicGameList { list }
-                            }
+                            State::PublicGameList { list }
                         }
                     }
                     Some(game) => {
@@ -1102,14 +1150,6 @@ async fn main() {
                             if let Some(scores) = shared.new_end_scores.take() {
                                 State::GameEnd { scores }
                             } else {
-                                mqui::root_ui().label(
-                                    mq::Vec2::new(60.0, 100.0),
-                                    &format!(
-                                        "Room Code: {}",
-                                        to_full_game_id_str(shared.server_id, shared.game.id),
-                                    ),
-                                );
-
                                 let sorted = {
                                     let mut result: Vec<u8> =
                                         shared.game.players.keys().copied().collect();
@@ -1117,85 +1157,88 @@ async fn main() {
                                     result
                                 };
 
-                                for (i, key) in sorted.iter().enumerate() {
-                                    let player = shared.game.players.get_mut(key).unwrap();
-
-                                    let y = 160.0 + (i as f32) * 75.0;
-
-                                    mqui::root_ui()
-                                        .label(mq::Vec2::new(30.0, y), &player.score.to_string());
-
-                                    if *key == shared.my_player_id {
-                                        if mqui::root_ui().button(
-                                            mq::Vec2::new(150.0, y),
-                                            if player.ready { "Unready" } else { "Ready" },
-                                        ) {
-                                            let new_value = !player.ready;
-                                            player.ready = new_value;
-
+                                egui_macroquad::ui(|egui_ctx| {
+                                    egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
+                                        if ui.button("Leave").clicked() {
                                             game_msg_send
                                                 .borrow()
                                                 .as_ref()
                                                 .unwrap()
-                                                .unbounded_send(
-                                                    ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
-                                                        value: new_value,
-                                                    }
-                                                    .into(),
-                                                )
+                                                .unbounded_send(ConnectionMessage::Leave)
                                                 .unwrap();
                                         }
-                                    } else {
-                                        mqui::root_ui().label(
-                                            mq::Vec2::new(150.0, y),
-                                            if player.ready { "Ready" } else { "Not Ready" },
-                                        );
-                                    }
 
-                                    if shared.game.master_player == *key {
-                                        mq::draw_poly(430.0, y + 35.0, 4, 15.0, 0.0, mq::YELLOW);
-                                    } else if shared.game.master_player == shared.my_player_id {
-                                        if mqui::root_ui().button(mq::Vec2::new(410.0, y), "x") {
-                                            game_msg_send
-                                                .borrow()
-                                                .as_ref()
-                                                .unwrap()
-                                                .unbounded_send(
-                                                    ni_ty::protocol::GameMessageC2S::KickPlayer {
-                                                        player: *key,
+                                        ui.label(format!("Room Code: {}", to_full_game_id_str(shared.server_id, shared.game.id)));
+
+                                        egui::Grid::new("scoreboard_grid").show(ui, |ui| {
+                                            for key in sorted.iter() {
+                                                let player = shared.game.players.get_mut(key).unwrap();
+
+                                                ui.label(player.score.to_string());
+
+                                                if *key == shared.my_player_id {
+                                                    if ui.button(if player.ready { "Unready" } else { "Ready" }).clicked() {
+                                                        let new_value = !player.ready;
+                                                        player.ready = new_value;
+
+                                                        game_msg_send
+                                                            .borrow()
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .unbounded_send(
+                                                                ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                                                    value: new_value,
+                                                                }
+                                                                .into(),
+                                                            )
+                                                            .unwrap();
                                                     }
-                                                    .into(),
-                                                )
-                                                .unwrap();
+                                                } else {
+                                                    ui.label(if player.ready { "Ready" } else { "Not Ready" });
+                                                }
+
+                                                ui.horizontal(|ui| {
+                                                    if shared.game.master_player == *key {
+                                                        ui.colored_label(egui::Color32::YELLOW, "★");
+                                                    } else if shared.game.master_player == shared.my_player_id {
+                                                        if ui.button("x").clicked() {
+                                                            game_msg_send
+                                                                .borrow()
+                                                                .as_ref()
+                                                                .unwrap()
+                                                                .unbounded_send(
+                                                                    ni_ty::protocol::GameMessageC2S::KickPlayer {
+                                                                        player: *key,
+                                                                    }
+                                                                    .into(),
+                                                                )
+                                                                .unwrap();
+                                                        }
+                                                    }
+                                                    ui.label(&player.name);
+                                                });
+
+                                                ui.end_row();
+                                            }
+                                        });
+
+                                        if shared.game.master_player == shared.my_player_id {
+                                            if ui.button("Add Bot").clicked() {
+                                                game_msg_send
+                                                    .borrow()
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .unbounded_send(
+                                                        ni_ty::protocol::GameMessageC2S::AddBot.into(),
+                                                    )
+                                                    .unwrap();
+                                            }
                                         }
-                                    }
-                                    mqui::root_ui().label(mq::Vec2::new(450.0, y), &player.name);
-                                }
 
-                                if shared.game.master_player == shared.my_player_id {
-                                    if mqui::root_ui().button(
-                                        mq::Vec2::new(10.0, 160.0 + (sorted.len() as f32) * 75.0),
-                                        "Add Bot",
-                                    ) {
-                                        game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .unbounded_send(
-                                                ni_ty::protocol::GameMessageC2S::AddBot.into(),
-                                            )
-                                            .unwrap();
-                                    }
-                                }
+                                    });
+                                });
+                                egui_macroquad::draw();
 
-                                if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
-                                    game_msg_send
-                                        .borrow()
-                                        .as_ref()
-                                        .unwrap()
-                                        .unbounded_send(ConnectionMessage::Leave)
-                                        .unwrap();
-                                }
                                 State::GameNeutral
                             }
                         }
@@ -1671,14 +1714,6 @@ async fn main() {
 
                         mq::clear_background(BACKGROUND_COLOR);
 
-                        mqui::root_ui().label(
-                            mq::Vec2::new(200.0, 10.0),
-                            &format!(
-                                "Room Code: {}",
-                                to_full_game_id_str(shared.server_id, shared.game.id),
-                            ),
-                        );
-
                         for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
                             let location = metrics.player_loc(idx);
                             let position =
@@ -1797,33 +1832,6 @@ async fn main() {
                                         nerts_stack_pos[1],
                                         player_state.player_id(),
                                     );
-                                }
-                            } else {
-                                if Some(idx) == my_player_idx {
-                                    if mqui::root_ui().button(
-                                        mq::Vec2::new(
-                                            (position[0] + metrics::CARD_WIDTH / 2.0) * scale,
-                                            (position[1] + metrics::CARD_HEIGHT / 2.0) * scale,
-                                        ),
-                                        "Nerts!",
-                                    ) {
-                                        hand_extra.self_called_nerts = true;
-                                        game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .unbounded_send(
-                                                ni_ty::protocol::GameMessageC2S::CallNerts.into(),
-                                            )
-                                            .unwrap();
-
-                                        let mut settings_lock = settings_mutex.lock().unwrap();
-                                        let settings = &mut *settings_lock;
-
-                                        if settings.nerts_callout {
-                                            macroquad::audio::play_sound_once(&nerts_callout);
-                                        }
-                                    }
                                 }
                             }
 
@@ -2056,14 +2064,73 @@ async fn main() {
                             }
                         }
 
-                        if mqui::root_ui().button(mq::Vec2::new(10.0, 10.0), "Leave") {
-                            game_msg_send
-                                .borrow()
-                                .as_ref()
-                                .unwrap()
-                                .unbounded_send(ConnectionMessage::Leave)
-                                .unwrap();
-                        }
+                        egui_macroquad::ui(|egui_ctx| {
+                            let ui_scale = scale / egui_ctx.zoom_factor();
+
+                            egui::CentralPanel::default()
+                                .frame(
+                                    egui::Frame::none()
+                                        .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                                )
+                                .show(egui_ctx, |ui| {
+                                    if ui.button("Leave").clicked() {
+                                        game_msg_send
+                                            .borrow()
+                                            .as_ref()
+                                            .unwrap()
+                                            .unbounded_send(ConnectionMessage::Leave)
+                                            .unwrap();
+                                    }
+
+                                    ui.label(format!(
+                                        "Room Code: {}",
+                                        to_full_game_id_str(shared.server_id, shared.game.id)
+                                    ));
+
+                                    if let Some(my_player_idx) = my_player_idx {
+                                        let my_player_state = &pred_hand_state.players()[my_player_idx];
+
+                                        if my_player_state.nerts_stack().len() < 1 {
+                                            let location = metrics.player_loc(my_player_idx);
+                                            let position = mq::Vec2::from(location.pos()) + mq::Vec2::from(screen_center);
+
+                                            ui.allocate_ui_at_rect(
+                                                egui::Rect {
+                                                    min: egui::Pos2::new(position[0], position[1]),
+                                                    max: egui::Pos2::new(
+                                                        position[0] + 12.0 * metrics::HORIZONTAL_STACK_SPACING + metrics::CARD_WIDTH,
+                                                        position[1] + metrics::CARD_HEIGHT,
+                                                    )
+                                                } * ui_scale,
+                                                |ui| {
+                                                    ui.centered_and_justified(|ui| {
+                                                        if ui.button("Nerts!").clicked() {
+                                                            hand_extra.self_called_nerts = true;
+                                                            game_msg_send
+                                                                .borrow()
+                                                                .as_ref()
+                                                                .unwrap()
+                                                                .unbounded_send(
+                                                                    ni_ty::protocol::GameMessageC2S::CallNerts.into(),
+                                                                )
+                                                                .unwrap();
+
+                                                            let mut settings_lock = settings_mutex.lock().unwrap();
+                                                            let settings = &mut *settings_lock;
+
+                                                            if settings.nerts_callout {
+                                                                macroquad::audio::play_sound_once(&nerts_callout);
+                                                            }
+                                                        }
+                                                    });
+                                                },
+                                            );
+                                        }
+                                    }
+                                });
+                        });
+
+                        egui_macroquad::draw();
 
                         State::GameHand { my_player_idx }
                     } else {
@@ -2076,39 +2143,69 @@ async fn main() {
             State::GameEnd { scores } => {
                 mq::clear_background(BACKGROUND_COLOR);
 
-                let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
-
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Some(shared) = (*lock).as_info_mut() {
                     match &shared.game.hand {
                         None => {
-                            let row_height = 75.0;
+                            let mut go_next = false;
 
-                            let box_width = 450.0;
-                            let box_height = row_height * (scores.len() as f32);
+                            egui_macroquad::ui(|egui_ctx| {
+                                egui::CentralPanel::default()
+                                    .frame(egui::Frame::none())
+                                    .show(egui_ctx, |ui| {
+                                        let ui_screen_width =
+                                            mq::screen_width() / egui_ctx.zoom_factor();
+                                        let ui_screen_height =
+                                            mq::screen_height() / egui_ctx.zoom_factor();
 
-                            let box_x = screen_center.0 - box_width / 2.0;
-                            let box_y = screen_center.1 - box_height / 2.0;
+                                        let row_height = 25.0;
 
-                            for (i, (player_id, score)) in scores.iter().enumerate() {
-                                let y = box_y + (i as f32) * row_height;
+                                        let box_width = 250.0;
+                                        let box_height = (row_height + ui.spacing().item_spacing.y)
+                                            * (scores.len() as f32)
+                                            + row_height;
 
-                                mqui::root_ui().label(mq::Vec2::new(box_x, y), &score.to_string());
+                                        let box_x = ui_screen_width / 2.0 - box_width / 2.0;
+                                        let box_y = ui_screen_height / 2.0 - box_height / 2.0;
 
-                                if let Some(player) = shared.game.players.get(&player_id) {
-                                    mqui::root_ui()
-                                        .label(mq::Vec2::new(box_x + 150.0, y), &player.name);
-                                }
-                            }
+                                        ui.allocate_ui_at_rect(
+                                            egui::Rect {
+                                                min: egui::Pos2::new(box_x, box_y),
+                                                max: egui::Pos2::new(
+                                                    box_x + box_width,
+                                                    box_y + box_height,
+                                                ),
+                                            },
+                                            |ui| {
+                                                egui::Grid::new("end_scores")
+                                                    .min_row_height(row_height)
+                                                    .show(ui, |ui| {
+                                                        for (player_id, score) in scores.iter() {
+                                                            ui.label(score.to_string());
 
-                            if mqui::widgets::Button::new("Continue")
-                                .position(mq::Vec2::new(
-                                    screen_center.0 - 150.0,
-                                    box_y + box_height + 50.0,
-                                ))
-                                .size(mq::Vec2::new(300.0, 50.0))
-                                .ui(&mut mqui::root_ui())
-                            {
+                                                            if let Some(player) =
+                                                                shared.game.players.get(&player_id)
+                                                            {
+                                                                ui.label(&player.name);
+                                                            }
+
+                                                            ui.end_row();
+                                                        }
+                                                    });
+
+                                                ui.vertical_centered(|ui| {
+                                                    if ui.button("Continue").clicked() {
+                                                        go_next = true;
+                                                    }
+                                                });
+                                            },
+                                        );
+                                    });
+                            });
+
+                            egui_macroquad::draw();
+
+                            if go_next {
                                 State::GameNeutral
                             } else {
                                 State::GameEnd { scores }
@@ -2130,10 +2227,6 @@ async fn main() {
                 code,
             } => {
                 mq::clear_background(BACKGROUND_COLOR);
-
-                let back_button_width = 300.0;
-                let back_button_height = 50.0;
-                let spacing = 120.0;
 
                 let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
 
@@ -2166,14 +2259,37 @@ async fn main() {
                     );
                 }
 
-                if mqui::widgets::Button::new("Main Menu")
-                    .position(mq::Vec2::new(
-                        screen_center.0 - back_button_width / 2.0,
-                        screen_center.1 + spacing,
-                    ))
-                    .size(mq::Vec2::new(back_button_width, back_button_height))
-                    .ui(&mut mqui::root_ui())
-                {
+                let mut go_back = false;
+
+                egui_macroquad::ui(|egui_ctx| {
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none())
+                        .show(egui_ctx, |ui| {
+                            ui.allocate_ui_at_rect(
+                                egui::Rect {
+                                    min: egui::Pos2::new(
+                                        0.0,
+                                        (screen_center.1 + 120.0) / egui_ctx.zoom_factor(),
+                                    ),
+                                    max: egui::Pos2::new(
+                                        mq::screen_width() / egui_ctx.zoom_factor(),
+                                        mq::screen_height() / egui_ctx.zoom_factor(),
+                                    ),
+                                },
+                                |ui| {
+                                    ui.vertical_centered(|ui| {
+                                        if ui.button("Main Menu").clicked() {
+                                            go_back = true;
+                                        }
+                                    });
+                                },
+                            );
+                        });
+                });
+
+                egui_macroquad::draw();
+
+                if go_back {
                     State::MainMenu
                 } else {
                     State::LostConnection {
