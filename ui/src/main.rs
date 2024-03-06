@@ -222,9 +222,12 @@ enum State {
         list: Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>,
     },
     Connecting,
-    GameNeutral,
+    GameNeutral {
+        show_settings: bool,
+    },
     GameHand {
         my_player_idx: Option<usize>,
+        show_settings: bool,
     },
     GameEnd {
         scores: Vec<(u8, i32)>,
@@ -237,6 +240,10 @@ enum State {
 
 impl State {
     pub const MAIN_MENU: State = State::MainMenu {
+        show_settings: false,
+    };
+
+    pub const GAME_NEUTRAL: State = State::GameNeutral {
         show_settings: false,
     };
 
@@ -428,7 +435,7 @@ impl WasmAsyncRt {
 }
 
 fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<Settings>) -> bool {
-    let menu_width = 150.0;
+    let menu_width = 300.0;
 
     let mut open = true;
 
@@ -442,7 +449,6 @@ fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<Setti
             let settings = &mut *settings_lock;
 
             ui.vertical_centered(|ui| {
-                ui.heading("Settings");
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(menu_width, 0.0),
                     egui::Layout::top_down(egui::Align::Min),
@@ -1126,7 +1132,7 @@ async fn main() {
 
                 match *game_info_mutex.lock().unwrap() {
                     ConnectionState::Connecting => State::Connecting,
-                    ConnectionState::Connected(_) => State::GameNeutral,
+                    ConnectionState::Connected(_) => State::GAME_NEUTRAL,
                     ConnectionState::NotConnected { expected, code } => {
                         if expected {
                             State::MAIN_MENU
@@ -1139,7 +1145,7 @@ async fn main() {
                     }
                 }
             }
-            State::GameNeutral => {
+            State::GameNeutral { show_settings } => {
                 mq::clear_background(BACKGROUND_COLOR);
 
                 let mut lock = game_info_mutex.lock().unwrap();
@@ -1156,16 +1162,26 @@ async fn main() {
                                     result
                                 };
 
+                                let mut next_state = State::GameNeutral { show_settings };
+
                                 egui_macroquad::ui(|egui_ctx| {
                                     egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
-                                        if ui.button("Leave").clicked() {
-                                            game_msg_send
-                                                .borrow()
-                                                .as_ref()
-                                                .unwrap()
-                                                .unbounded_send(ConnectionMessage::Leave)
-                                                .unwrap();
-                                        }
+                                        ui.set_enabled(!show_settings);
+
+                                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                            if ui.button("Leave").clicked() {
+                                                game_msg_send
+                                                    .borrow()
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .unbounded_send(ConnectionMessage::Leave)
+                                                    .unwrap();
+                                            }
+
+                                            if ui.button("Settings").clicked() {
+                                                next_state = State::GameNeutral { show_settings: true };
+                                            }
+                                        });
 
                                         ui.label(format!("Room Code: {}", to_full_game_id_str(shared.server_id, shared.game.id)));
 
@@ -1235,10 +1251,19 @@ async fn main() {
                                         }
 
                                     });
+
+                                    if show_settings {
+                                        if !render_settings_window(&egui_ctx, &settings_mutex) {
+                                            next_state = State::GameNeutral {
+                                                show_settings: false,
+                                            };
+                                        }
+                                    }
                                 });
+
                                 egui_macroquad::draw();
 
-                                State::GameNeutral
+                                next_state
                             }
                         }
                         Some(hand) => State::GameHand {
@@ -1246,13 +1271,19 @@ async fn main() {
                                 .players()
                                 .iter()
                                 .position(|player| player.player_id() == shared.my_player_id),
+                            show_settings,
                         },
                     }
                 } else {
                     State::from_connection_state(&*lock)
                 }
             }
-            State::GameHand { my_player_idx } => {
+            State::GameHand {
+                my_player_idx,
+                show_settings,
+            } => {
+                let interaction_enabled = !show_settings;
+
                 let mut lock = game_info_mutex.lock().unwrap();
                 if let Some(shared) = (*lock).as_info_mut() {
                     if let Some(real_hand_state) = shared.game.hand.as_mut() {
@@ -1325,7 +1356,7 @@ async fn main() {
                                 pred_hand_state.nerts_called = true;
                             }
 
-                            if started {
+                            if started && interaction_enabled {
                                 let player_state = &pred_hand_state.players()[my_player_idx];
 
                                 let mouse_pressed =
@@ -2063,6 +2094,11 @@ async fn main() {
                             }
                         }
 
+                        let mut next_state = State::GameHand {
+                            my_player_idx,
+                            show_settings,
+                        };
+
                         egui_macroquad::ui(|egui_ctx| {
                             let ui_scale = scale / egui_ctx.zoom_factor();
 
@@ -2072,14 +2108,22 @@ async fn main() {
                                         .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
                                 )
                                 .show(egui_ctx, |ui| {
-                                    if ui.button("Leave").clicked() {
-                                        game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .unbounded_send(ConnectionMessage::Leave)
-                                            .unwrap();
-                                    }
+                                    ui.set_enabled(interaction_enabled);
+
+                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                        if ui.button("Leave").clicked() {
+                                            game_msg_send
+                                                .borrow()
+                                                .as_ref()
+                                                .unwrap()
+                                                .unbounded_send(ConnectionMessage::Leave)
+                                                .unwrap();
+                                        }
+
+                                        if ui.button("Settings").clicked() {
+                                            next_state = State::GameNeutral { show_settings: true };
+                                        }
+                                    });
 
                                     ui.label(format!(
                                         "Room Code: {}",
@@ -2127,13 +2171,21 @@ async fn main() {
                                         }
                                     }
                                 });
+
+                            if show_settings {
+                                if !render_settings_window(&egui_ctx, &settings_mutex) {
+                                    next_state = State::GameNeutral {
+                                        show_settings: false,
+                                    };
+                                }
+                            }
                         });
 
                         egui_macroquad::draw();
 
-                        State::GameHand { my_player_idx }
+                        next_state
                     } else {
-                        State::GameNeutral
+                        State::GameNeutral { show_settings }
                     }
                 } else {
                     State::from_connection_state(&*lock)
@@ -2205,7 +2257,7 @@ async fn main() {
                             egui_macroquad::draw();
 
                             if go_next {
-                                State::GameNeutral
+                                State::GAME_NEUTRAL
                             } else {
                                 State::GameEnd { scores }
                             }
@@ -2215,6 +2267,7 @@ async fn main() {
                                 .players()
                                 .iter()
                                 .position(|player| player.player_id() == shared.my_player_id),
+                            show_settings: false,
                         },
                     }
                 } else {
