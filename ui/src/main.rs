@@ -207,8 +207,9 @@ impl HandExtra {
 }
 
 enum State {
-    MainMenu,
-    MainMenuSettings,
+    MainMenu {
+        show_settings: bool,
+    },
     JoinGameForm {
         input: String,
     },
@@ -235,12 +236,16 @@ enum State {
 }
 
 impl State {
+    pub const MAIN_MENU: State = State::MainMenu {
+        show_settings: false,
+    };
+
     pub fn from_connection_state(src: &ConnectionState) -> Self {
         match src {
             ConnectionState::NotConnected {
                 expected: true,
                 code: _,
-            } => State::MainMenu,
+            } => State::MAIN_MENU,
             ConnectionState::NotConnected {
                 expected: false,
                 code,
@@ -420,6 +425,38 @@ impl WasmAsyncRt {
     pub fn handle(&self) -> &Self {
         &self
     }
+}
+
+fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<Settings>) -> bool {
+    let menu_width = 150.0;
+
+    let mut open = true;
+
+    egui::containers::Window::new("Settings")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+        .open(&mut open)
+        .show(egui_ctx, |ui| {
+            let mut settings_lock = settings_mutex.lock().unwrap();
+            let settings = &mut *settings_lock;
+
+            ui.vertical_centered(|ui| {
+                ui.heading("Settings");
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(menu_width, 0.0),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.checkbox(&mut settings.drag, "Allow Drag-and-Drop");
+                        ui.checkbox(&mut settings.round_start_music, "Round Start Music");
+                        ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
+                        ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
+                    },
+                );
+            });
+        });
+
+    open
 }
 
 #[macroquad::main(get_window_conf)]
@@ -792,7 +829,7 @@ async fn main() {
         );
     };
 
-    let mut state = State::MainMenu;
+    let mut state = State::MAIN_MENU;
 
     egui_macroquad::cfg(|egui_ctx| {
         egui_ctx.set_visuals(egui::style::Visuals::light());
@@ -803,7 +840,7 @@ async fn main() {
         mq::set_default_camera();
 
         state = match state {
-            State::MainMenu => {
+            State::MainMenu { show_settings } => {
                 mq::clear_background(BACKGROUND_COLOR);
 
                 let button_height = 20.0;
@@ -812,12 +849,14 @@ async fn main() {
 
                 let menu_width = 150.0;
 
-                let mut next_state = State::MainMenu;
+                let mut next_state = State::MainMenu { show_settings };
 
                 egui_macroquad::ui(|egui_ctx| {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::none())
                         .show(egui_ctx, |ui| {
+                            ui.set_enabled(!show_settings);
+
                             let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
                             let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
 
@@ -869,68 +908,28 @@ async fn main() {
                                             input: String::new(),
                                         }
                                     } else if menu_button(ui, "Settings") {
-                                        State::MainMenuSettings
+                                        State::MainMenu {
+                                            show_settings: true,
+                                        }
                                     } else {
-                                        State::MainMenu
+                                        State::MainMenu { show_settings }
                                     };
                                 },
                             );
                         });
+
+                    if show_settings {
+                        if !render_settings_window(&egui_ctx, &settings_mutex) {
+                            next_state = State::MainMenu {
+                                show_settings: false,
+                            };
+                        }
+                    }
                 });
 
                 egui_macroquad::draw();
 
                 next_state
-            }
-            State::MainMenuSettings => {
-                mq::clear_background(BACKGROUND_COLOR);
-
-                let menu_width = 150.0;
-
-                let mut go_back = false;
-
-                egui_macroquad::ui(|egui_ctx| {
-                    egui::CentralPanel::default()
-                        .frame(
-                            egui::Frame::none()
-                                .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
-                        )
-                        .show(egui_ctx, |ui| {
-                            let mut settings_lock = settings_mutex.lock().unwrap();
-                            let settings = &mut *settings_lock;
-
-                            if ui.button("Back").clicked() {
-                                go_back = true;
-                            }
-
-                            ui.vertical_centered(|ui| {
-                                ui.heading("Settings");
-                                ui.allocate_ui_with_layout(
-                                    egui::Vec2::new(menu_width, 0.0),
-                                    egui::Layout::top_down(egui::Align::Min),
-                                    |ui| {
-                                        ui.checkbox(&mut settings.drag, "Allow Drag-and-Drop");
-                                        ui.checkbox(
-                                            &mut settings.round_start_music,
-                                            "Round Start Music",
-                                        );
-                                        ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
-                                        ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
-                                    },
-                                );
-                            });
-                        });
-                });
-
-                egui_macroquad::draw();
-
-                go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
-
-                if go_back {
-                    State::MainMenu
-                } else {
-                    State::MainMenuSettings
-                }
             }
             State::JoinGameForm { mut input } => {
                 let menu_width = 150.0;
@@ -999,7 +998,7 @@ async fn main() {
                         State::JoinGameForm { input }
                     }
                 } else if go_back {
-                    State::MainMenu
+                    State::MAIN_MENU
                 } else {
                     State::JoinGameForm { input }
                 }
@@ -1018,12 +1017,12 @@ async fn main() {
                 );
 
                 if mq::is_key_pressed(mq::KeyCode::Escape) {
-                    State::MainMenu
+                    State::MAIN_MENU
                 } else {
                     match channel.try_recv() {
                         Ok(Some(list)) => State::PublicGameList { list },
                         Ok(None) => State::PublicGameListLoading { channel },
-                        Err(futures_channel::oneshot::Canceled) => State::MainMenu,
+                        Err(futures_channel::oneshot::Canceled) => State::MAIN_MENU,
                     }
                 }
             }
@@ -1099,7 +1098,7 @@ async fn main() {
                 match joining {
                     None => {
                         if go_back {
-                            State::MainMenu
+                            State::MAIN_MENU
                         } else {
                             State::PublicGameList { list }
                         }
@@ -1130,7 +1129,7 @@ async fn main() {
                     ConnectionState::Connected(_) => State::GameNeutral,
                     ConnectionState::NotConnected { expected, code } => {
                         if expected {
-                            State::MainMenu
+                            State::MAIN_MENU
                         } else {
                             State::LostConnection {
                                 was_connected: false,
@@ -2290,7 +2289,7 @@ async fn main() {
                 egui_macroquad::draw();
 
                 if go_back {
-                    State::MainMenu
+                    State::MAIN_MENU
                 } else {
                     State::LostConnection {
                         was_connected,
