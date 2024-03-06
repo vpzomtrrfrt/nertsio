@@ -212,6 +212,7 @@ enum State {
     },
     JoinGameForm {
         input: String,
+        initing: bool,
     },
     PublicGameListLoading {
         channel: futures_channel::oneshot::Receiver<
@@ -921,6 +922,7 @@ async fn main() {
                                     } else if menu_button(ui, "Join Private Game") {
                                         State::JoinGameForm {
                                             input: String::new(),
+                                            initing: true,
                                         }
                                     } else if menu_button(ui, "Settings") {
                                         State::MainMenu {
@@ -951,7 +953,10 @@ async fn main() {
 
                 next_state
             }
-            State::JoinGameForm { mut input } => {
+            State::JoinGameForm {
+                mut input,
+                mut initing,
+            } => {
                 let menu_width = 150.0;
 
                 let button_height = 20.0;
@@ -990,7 +995,17 @@ async fn main() {
                                 |ui| {
                                     ui.horizontal(|ui| {
                                         ui.label("Room Code:");
-                                        ui.text_edit_singleline(&mut input);
+                                        let response = ui.text_edit_singleline(&mut input);
+
+                                        if initing {
+                                            response.request_focus();
+                                        }
+
+                                        if response.lost_focus()
+                                            && ui.input(|i| i.key_pressed(egui::Key::Enter))
+                                        {
+                                            go_connect = true;
+                                        }
                                     });
 
                                     ui.vertical_centered(|ui| {
@@ -1007,6 +1022,8 @@ async fn main() {
 
                 go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
 
+                initing = false;
+
                 if go_connect {
                     if let Ok((server_id, game_id)) = parse_full_game_id_str(&input) {
                         do_connection(connection::ConnectionType::JoinPrivateGame {
@@ -1015,12 +1032,12 @@ async fn main() {
                         });
                         State::Connecting
                     } else {
-                        State::JoinGameForm { input }
+                        State::JoinGameForm { input, initing }
                     }
                 } else if go_back {
                     State::MAIN_MENU
                 } else {
-                    State::JoinGameForm { input }
+                    State::JoinGameForm { input, initing }
                 }
             }
             State::PublicGameListLoading { mut channel } => {
