@@ -1776,49 +1776,46 @@ async fn main() {
                         mq::clear_background(BACKGROUND_COLOR);
 
                         for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
+                            let player = match shared.game.players.get(&player_state.player_id()) {
+                                Some(player) => player,
+                                None => continue,
+                            };
+
                             let location = metrics.player_loc(idx);
                             let position =
                                 mq::Vec2::from(location.pos()) + mq::Vec2::from(screen_center);
 
                             mq::set_camera(&normal_camera);
-                            if let Some(player) = shared.game.players.get(&player_state.player_id())
-                            {
-                                let name_pos = if location.inverted == self_inverted {
-                                    (
-                                        position[0] + metrics.player_hand_width() / 2.0,
-                                        position[1] - 20.0,
-                                    )
-                                } else {
-                                    (
-                                        screen_center.0
-                                            - location.x
-                                            - metrics.player_hand_width() / 2.0,
-                                        screen_center.1 - metrics::PLAYER_Y + 20.0,
-                                    )
-                                };
 
-                                if shared.game.master_player == player_state.player_id() {
-                                    mq::draw_poly(
-                                        name_pos.0,
-                                        if location.inverted == self_inverted {
-                                            name_pos.1 - 20.0
-                                        } else {
-                                            name_pos.1 + 20.0
-                                        },
-                                        4,
-                                        10.0,
-                                        0.0,
-                                        mq::YELLOW,
-                                    );
-                                }
-                                draw_text_centered(
-                                    &player.name,
+                            let name_pos = if location.inverted == self_inverted {
+                                (
+                                    position[0] + metrics.player_hand_width() / 2.0,
+                                    position[1] - 20.0,
+                                )
+                            } else {
+                                (
+                                    screen_center.0
+                                        - location.x
+                                        - metrics.player_hand_width() / 2.0,
+                                    screen_center.1 - metrics::PLAYER_Y + 20.0,
+                                )
+                            };
+
+                            if shared.game.master_player == player_state.player_id() {
+                                mq::draw_poly(
                                     name_pos.0,
-                                    name_pos.1,
-                                    40,
-                                    mq::BLACK,
+                                    if location.inverted == self_inverted {
+                                        name_pos.1 - 20.0
+                                    } else {
+                                        name_pos.1 + 20.0
+                                    },
+                                    4,
+                                    10.0,
+                                    0.0,
+                                    mq::YELLOW,
                                 );
                             }
+                            draw_text_centered(&player.name, name_pos.0, name_pos.1, 40, mq::BLACK);
 
                             if location.inverted != self_inverted {
                                 mq::set_camera(&inverted_camera);
