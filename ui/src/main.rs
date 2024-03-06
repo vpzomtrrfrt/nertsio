@@ -878,6 +878,13 @@ async fn main() {
                                     max: egui::Pos2::new(menu_x + menu_width, menu_y + menu_height),
                                 },
                                 |ui| {
+                                    ui.with_layout(
+                                        egui::Layout::top_down(egui::Align::Center),
+                                        |ui| {
+                                            ui.heading("nertsio");
+                                        },
+                                    );
+
                                     let menu_button =
                                         |ui: &mut egui::Ui, label| {
                                             ui.add(egui::widgets::Button::new(label).min_size(
