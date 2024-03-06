@@ -1723,7 +1723,7 @@ async fn main() {
                                             }
                                         } else {
                                             if let Some(held_state) = &hand_extra.my_held_state {
-                                                if !held_state.mouse_released {
+                                                if !held_state.mouse_released && settings.drag {
                                                     hand_extra.my_held_state = None;
                                                 }
                                             }
