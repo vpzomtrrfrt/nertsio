@@ -842,7 +842,9 @@ async fn main() {
         egui_ctx.set_zoom_factor(3.0);
     });
 
-    loop {
+    let mut quit = false;
+
+    while !quit {
         mq::set_default_camera();
 
         state = match state {
@@ -851,7 +853,7 @@ async fn main() {
 
                 let button_height = 20.0;
 
-                let button_count = 6;
+                let button_count = 7;
 
                 let menu_width = 150.0;
 
@@ -924,6 +926,11 @@ async fn main() {
                                         State::MainMenu {
                                             show_settings: true,
                                         }
+                                    } else if cfg!(not(target_family = "wasm"))
+                                        && menu_button(ui, "Quit")
+                                    {
+                                        quit = true;
+                                        State::MainMenu { show_settings }
                                     } else {
                                         State::MainMenu { show_settings }
                                     };
