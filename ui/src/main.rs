@@ -2,7 +2,6 @@ use futures_util::{FutureExt, StreamExt};
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
-use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -10,8 +9,11 @@ use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 mod connection;
+mod settings;
+mod util;
 
 use connection::{ConnectionEvent, ConnectionMessage};
+use settings::Settings;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
 const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
@@ -36,48 +38,12 @@ const PLAYER_COLORS: [mq::Color; 16] = [
     mq::Color::new(1.0, 0.0, 0.7, 1.0),
 ];
 
-const GAME_ID_FORMAT: u128 = lexical::NumberFormatBuilder::from_radix(36);
-
 const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
 // const COORDINATOR_URL: &str = "http://localhost:6462/";
 
 const MAX_INTERPOLATION_TIME: f32 = 0.3;
 
 const SCREEN_MARGIN: f32 = 2.5;
-
-fn default_name() -> String {
-    "Nerter".to_owned()
-}
-
-#[derive(Clone, PartialEq, Deserialize, Serialize)]
-struct Settings {
-    #[serde(default = "default_name")]
-    name: String,
-
-    #[serde(default)]
-    drag: bool,
-
-    #[serde(default)]
-    round_start_music: bool,
-
-    #[serde(default)]
-    suit_callouts: bool,
-
-    #[serde(default)]
-    nerts_callout: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Settings {
-            name: default_name(),
-            drag: false,
-            round_start_music: false,
-            suit_callouts: false,
-            nerts_callout: false,
-        }
-    }
-}
 
 enum ConnectionState {
     NotConnected { expected: bool, code: Option<u8> },
@@ -269,22 +235,6 @@ impl State {
     }
 }
 
-fn parse_full_game_id_str(src: &str) -> Result<(u8, u32), lexical::Error> {
-    let result: u64 = lexical::parse_with_options::<_, _, GAME_ID_FORMAT>(
-        &src,
-        &lexical::parse_integer_options::Options::default(),
-    )?;
-
-    Ok(((result & (u8::MAX as u64)) as u8, (result >> 8) as u32))
-}
-
-fn to_full_game_id_str(server_id: u8, game_id: u32) -> String {
-    lexical::to_string_with_options::<_, GAME_ID_FORMAT>(
-        (u64::from(game_id) << 8) + u64::from(server_id),
-        &lexical::write_integer_options::Options::default(),
-    )
-}
-
 fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
     const SPACING: f32 = 10.0;
     const WIDTH: f32 = 120.0;
@@ -304,102 +254,6 @@ fn get_card_rect(card: ni_ty::Card) -> mq::Rect {
         y,
         w: WIDTH,
         h: HEIGHT,
-    }
-}
-
-#[cfg(target_family = "wasm")]
-const SETTINGS_KEY: &str = "nertsioSettings";
-
-#[cfg(target_family = "wasm")]
-async fn run_settings_save_loop(
-    storage: web_sys::Storage,
-    init_value: Settings,
-    mutex: Arc<Mutex<Settings>>,
-) {
-    log::debug!("run_settings_save_loop");
-
-    let mut saved_value = init_value;
-
-    let mut interval = futures_ticker::Ticker::new(std::time::Duration::from_secs(5));
-
-    loop {
-        interval.next().await;
-
-        if {
-            let lock = mutex.lock().unwrap();
-            if saved_value != *lock {
-                saved_value = (*lock).clone();
-                true
-            } else {
-                false
-            }
-        } {
-            // value changed, need to save it
-
-            if let Err(err) = async {
-                let buf = serde_json::to_string(&saved_value)?;
-
-                storage
-                    .set_item(SETTINGS_KEY, &buf)
-                    .map_err(|err| anyhow::anyhow!("Failed to set item: {:?}", err))
-            }
-            .await
-            {
-                log::error!("failed to save settings: {:?}", err);
-            }
-        }
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-async fn run_settings_save_loop(
-    config_path: std::path::PathBuf,
-    init_value: Settings,
-    mutex: Arc<Mutex<Settings>>,
-) {
-    let mut saved_value = init_value;
-
-    let file = Arc::new(atomicwrites::AtomicFile::new(
-        config_path,
-        atomicwrites::OverwriteBehavior::AllowOverwrite,
-    ));
-
-    let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-
-    loop {
-        interval.tick().await;
-
-        if {
-            let lock = mutex.lock().unwrap();
-            if saved_value != *lock {
-                saved_value = (*lock).clone();
-                true
-            } else {
-                false
-            }
-        } {
-            // value changed, need to save it
-
-            if let Err(err) = async {
-                let buf = serde_json::to_vec(&saved_value)?;
-                let file = file.clone();
-                tokio::task::spawn_blocking(move || {
-                    file.write(|f| {
-                        use std::io::Write;
-
-                        f.write_all(&buf)
-                    })?;
-
-                    Result::<_, anyhow::Error>::Ok(())
-                })
-                .await?
-            }
-            .await
-            {
-                log::error!("failed to save settings: {:?}", err);
-            }
-        }
     }
 }
 
@@ -663,98 +517,7 @@ async fn main() {
 
     let http_client = reqwest::Client::new();
 
-    let settings_mutex;
-    #[cfg(not(target_family = "wasm"))]
-    {
-        let config_dir = dirs::config_dir()
-            .map(Cow::Owned)
-            .unwrap_or_else(|| std::path::Path::new(".").into());
-
-        let config_path = config_dir.join("nertsio.json");
-
-        match std::fs::File::open(&config_path) {
-            Ok(mut file) => {
-                let init_value: Settings = match serde_json::from_reader(&mut file) {
-                    Ok(value) => value,
-                    Err(err) => {
-                        log::debug!("Failed to parse config file: {:?}", err);
-                        log::debug!("Will reset config to defaults.");
-
-                        Default::default()
-                    }
-                };
-
-                settings_mutex = Arc::new(Mutex::new(init_value.clone()));
-                async_rt.spawn(run_settings_save_loop(
-                    config_path,
-                    init_value,
-                    settings_mutex.clone(),
-                ));
-            }
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::NotFound {
-                    let init_value: Settings = Default::default();
-
-                    settings_mutex = Arc::new(Mutex::new(init_value.clone()));
-                    async_rt.spawn(run_settings_save_loop(
-                        config_path,
-                        init_value,
-                        settings_mutex.clone(),
-                    ));
-                } else {
-                    log::error!("Failed to open settings file: {:?}", err);
-                    log::error!("Settings will not be saved.");
-
-                    settings_mutex = Arc::new(Mutex::new(Default::default()));
-                }
-            }
-        }
-    }
-    #[cfg(target_family = "wasm")]
-    {
-        match web_sys::window()
-            .ok_or_else(|| anyhow::anyhow!("Can't access window"))
-            .and_then(|window| {
-                window
-                    .local_storage()
-                    .map_err(|err| anyhow::anyhow!("Can't access localStorage: {:?}", err))
-                    .and_then(|x| x.ok_or_else(|| anyhow::anyhow!("Can't access localStorage")))
-            }) {
-            Ok(storage) => {
-                let init_value: Settings = match storage.get_item(SETTINGS_KEY) {
-                    Ok(None) => Default::default(),
-                    Ok(Some(buf)) => match serde_json::from_str(&buf) {
-                        Ok(value) => value,
-                        Err(err) => {
-                            log::debug!("Failed to parse config file: {:?}", err);
-                            log::debug!("Will reset config to defaults.");
-
-                            Default::default()
-                        }
-                    },
-                    Err(err) => {
-                        log::debug!("Failed to fetch config file: {:?}", err);
-                        log::debug!("Will reset config to defaults.");
-
-                        Default::default()
-                    }
-                };
-
-                settings_mutex = Arc::new(Mutex::new(init_value.clone()));
-                async_rt.spawn(run_settings_save_loop(
-                    storage,
-                    init_value,
-                    settings_mutex.clone(),
-                ));
-            }
-            Err(err) => {
-                log::error!("Failed to init settings: {:?}", err);
-                log::error!("Settings will not be saved.");
-
-                settings_mutex = Arc::new(Mutex::new(Default::default()));
-            }
-        }
-    }
+    let settings_mutex = settings::init_settings(async_rt.handle());
 
     let do_connection = |connection_type| {
         let (new_game_msg_send, game_msg_recv) = futures_channel::mpsc::unbounded();
@@ -1048,7 +811,7 @@ async fn main() {
                 initing = false;
 
                 if go_connect {
-                    if let Ok((server_id, game_id)) = parse_full_game_id_str(&input) {
+                    if let Ok((server_id, game_id)) = util::parse_full_game_id_str(&input) {
                         do_connection(connection::ConnectionType::JoinPrivateGame {
                             server_id,
                             game_id,
@@ -1117,7 +880,7 @@ async fn main() {
                                         |ui| {
                                             egui::Grid::new("public_game_list").show(ui, |ui| {
                                                 for game in &list {
-                                                    ui.label(to_full_game_id_str(
+                                                    ui.label(util::to_full_game_id_str(
                                                         game.server.server_id,
                                                         game.game_id,
                                                     ));
@@ -1237,7 +1000,7 @@ async fn main() {
                                             }
                                         });
 
-                                        ui.label(format!("Room Code: {}", to_full_game_id_str(shared.server_id, shared.game.id)));
+                                        ui.label(format!("Room Code: {}", util::to_full_game_id_str(shared.server_id, shared.game.id)));
 
                                         egui::Grid::new("scoreboard_grid").show(ui, |ui| {
                                             for key in sorted.iter() {
@@ -2178,7 +1941,7 @@ async fn main() {
 
                                     ui.label(format!(
                                         "Room Code: {}",
-                                        to_full_game_id_str(shared.server_id, shared.game.id)
+                                        util::to_full_game_id_str(shared.server_id, shared.game.id)
                                     ));
 
                                     if let Some(my_player_idx) = my_player_idx {
