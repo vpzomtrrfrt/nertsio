@@ -489,6 +489,15 @@ async fn main() {
 
     let card_size = mq::Vec2::new(metrics::CARD_WIDTH, metrics::CARD_HEIGHT);
 
+    let font = mq::load_ttf_font_from_bytes(
+        &egui::FontDefinitions::default()
+            .font_data
+            .get("Ubuntu-Light")
+            .unwrap()
+            .font,
+    )
+    .unwrap();
+
     let cards_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::CARDS, Some(mq::ImageFormat::Png));
     let backs_texture =
@@ -819,6 +828,20 @@ async fn main() {
         recv
     };
 
+    let draw_text = |text: &str, x, y, font_size: u16, color| {
+        mq::draw_text_ex(
+            text,
+            x,
+            y,
+            mq::TextParams {
+                font_size,
+                color,
+                font: Some(&font),
+                ..Default::default()
+            },
+        );
+    };
+
     let draw_text_centered = |text: &str, x, y, font_size, color| {
         let metrics = mq::measure_text(
             text,
@@ -827,7 +850,7 @@ async fn main() {
             mq::camera_font_scale(font_size.into()).1,
         );
 
-        mq::draw_text(
+        draw_text(
             text,
             x - metrics.width / 2.0,
             y - metrics.height / 2.0 + metrics.offset_y,
@@ -1971,11 +1994,11 @@ async fn main() {
                             }
 
                             if hand_extra.stalled {
-                                mq::draw_text(
+                                draw_text(
                                     "Shuffling soon if game remains stalled...",
                                     stock_pos[0],
                                     stock_pos[1] + metrics::CARD_HEIGHT + 30.0,
-                                    30.0,
+                                    30,
                                     mq::BLACK,
                                 );
                             }
