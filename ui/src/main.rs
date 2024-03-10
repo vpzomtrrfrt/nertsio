@@ -45,6 +45,8 @@ const MAX_INTERPOLATION_TIME: f32 = 0.3;
 
 const SCREEN_MARGIN: f32 = 2.5;
 
+const START_ANIMATION_SPEED: f32 = 1500.0;
+
 enum ConnectionState {
     NotConnected { expected: bool, code: Option<u8> },
     Connecting,
@@ -195,6 +197,7 @@ enum State {
     GameHand {
         my_player_idx: Option<usize>,
         show_settings: bool,
+        start_animation_progress: f32,
     },
     GameEnd {
         scores: Vec<(u8, i32)>,
@@ -1089,6 +1092,7 @@ async fn main() {
                                 .iter()
                                 .position(|player| player.player_id() == shared.my_player_id),
                             show_settings,
+                            start_animation_progress: 0.0,
                         },
                     }
                 } else {
@@ -1098,6 +1102,7 @@ async fn main() {
             State::GameHand {
                 my_player_idx,
                 show_settings,
+                start_animation_progress,
             } => {
                 let interaction_enabled = !show_settings;
 
@@ -1635,24 +1640,37 @@ async fn main() {
                                     })
                             };
 
+                            let mut animation_not_consumed = start_animation_progress;
+
+                            let stock_pos = mq::Vec2::from(
+                                metrics
+                                    .player_stack_pos(ni_ty::PlayerStackLocation::Stock, location),
+                            ) + mq::Vec2::from(screen_center);
+
+                            if player_state.stock_stack().len() > 0 {
+                                draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
+                            } else {
+                                draw_placeholder(stock_pos[0], stock_pos[1]);
+                            }
+
                             if player_state.nerts_stack().len() > 0 {
                                 let nerts_stack_pos =
                                     mq::Vec2::from(metrics.player_stack_pos(
                                         ni_ty::PlayerStackLocation::Nerts,
                                         location,
                                     )) + mq::Vec2::from(screen_center);
-
-                                for i in 0..(player_state.nerts_stack().len() - 1) {
-                                    draw_back(
-                                        nerts_stack_pos[0]
-                                            + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
-                                        nerts_stack_pos[1],
-                                        player_state.player_id(),
-                                    );
-                                }
                                 let card = player_state.nerts_stack().last().unwrap();
 
                                 if started {
+                                    for i in 0..(player_state.nerts_stack().len() - 1) {
+                                        draw_back(
+                                            nerts_stack_pos[0]
+                                                + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                                            nerts_stack_pos[1],
+                                            player_state.player_id(),
+                                        );
+                                    }
+
                                     if !matches!(
                                         held_info,
                                         Some(ni_ty::HeldInfo {
@@ -1669,13 +1687,36 @@ async fn main() {
                                         );
                                     }
                                 } else {
-                                    draw_back(
-                                        nerts_stack_pos[0]
-                                            + ((player_state.nerts_stack().len() - 1) as f32)
-                                                * metrics::HORIZONTAL_STACK_SPACING,
-                                        nerts_stack_pos[1],
-                                        player_state.player_id(),
-                                    );
+                                    for i in 0..player_state.nerts_stack().len() {
+                                        let target_pos = mq::Vec2::new(
+                                            nerts_stack_pos[0]
+                                                + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                                            nerts_stack_pos[1],
+                                        );
+
+                                        let dist = stock_pos.distance(target_pos);
+
+                                        animation_not_consumed -= dist;
+
+                                        if animation_not_consumed < 0.0 {
+                                            log::debug!(
+                                                "portion = {}",
+                                                1.0 - animation_not_consumed / dist
+                                            );
+                                            let pos = stock_pos.lerp(
+                                                target_pos,
+                                                1.0 + animation_not_consumed / dist,
+                                            );
+                                            draw_back(pos.x, pos.y, player_state.player_id());
+                                            break;
+                                        } else {
+                                            draw_back(
+                                                target_pos.x,
+                                                target_pos.y,
+                                                player_state.player_id(),
+                                            );
+                                        }
+                                    }
                                 }
                             }
 
@@ -1701,24 +1742,34 @@ async fn main() {
                                 };
 
                                 let loc = ni_ty::PlayerStackLocation::Tableau(i as u8);
-                                let pos = mq::Vec2::from(metrics.player_stack_pos(loc, location))
-                                    + mq::Vec2::from(screen_center);
+                                let target_pos =
+                                    mq::Vec2::from(metrics.player_stack_pos(loc, location))
+                                        + mq::Vec2::from(screen_center);
 
                                 if started {
-                                    draw_vertical_stack_cards(cards, pos[0], pos[1]);
+                                    draw_vertical_stack_cards(cards, target_pos[0], target_pos[1]);
                                 } else {
-                                    draw_back(pos[0], pos[1], player_state.player_id());
-                                }
-                            }
+                                    if animation_not_consumed > 0.0 {
+                                        let dist = stock_pos.distance(target_pos);
 
-                            let stock_pos = mq::Vec2::from(
-                                metrics
-                                    .player_stack_pos(ni_ty::PlayerStackLocation::Stock, location),
-                            ) + mq::Vec2::from(screen_center);
-                            if player_state.stock_stack().len() > 0 {
-                                draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
-                            } else {
-                                draw_placeholder(stock_pos[0], stock_pos[1]);
+                                        animation_not_consumed -= dist;
+
+                                        if animation_not_consumed < 0.0 {
+                                            let pos = stock_pos.lerp(
+                                                target_pos,
+                                                1.0 + animation_not_consumed / dist,
+                                            );
+
+                                            draw_back(pos[0], pos[1], player_state.player_id());
+                                        } else {
+                                            draw_back(
+                                                target_pos[0],
+                                                target_pos[1],
+                                                player_state.player_id(),
+                                            );
+                                        }
+                                    }
+                                }
                             }
 
                             let waste_cards = player_state.waste_stack().cards();
@@ -1911,6 +1962,12 @@ async fn main() {
                         let mut next_state = State::GameHand {
                             my_player_idx,
                             show_settings,
+                            start_animation_progress: if started {
+                                0.0
+                            } else {
+                                start_animation_progress
+                                    + mq::get_frame_time() * START_ANIMATION_SPEED
+                            },
                         };
 
                         egui_macroquad::ui(|egui_ctx| {
@@ -2082,6 +2139,7 @@ async fn main() {
                                 .iter()
                                 .position(|player| player.player_id() == shared.my_player_id),
                             show_settings: false,
+                            start_animation_progress: 0.0,
                         },
                     }
                 } else {
