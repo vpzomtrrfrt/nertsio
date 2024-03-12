@@ -1,3 +1,5 @@
+#[cfg(target_family = "wasm")]
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
