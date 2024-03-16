@@ -38,7 +38,7 @@ const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
 
 const MAX_INTERPOLATION_TIME: f32 = 0.3;
 
-enum ConnectionState {
+pub enum ConnectionState {
     NotConnected { expected: bool, code: Option<u8> },
     Connecting,
     Connected(SharedInfo),
@@ -53,7 +53,7 @@ impl ConnectionState {
     }
 }
 
-struct SharedInfo {
+pub struct SharedInfo {
     game: ni_ty::GameState,
     my_player_id: u8,
     server_id: u8,
