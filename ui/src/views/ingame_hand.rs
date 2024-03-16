@@ -45,22 +45,18 @@ impl super::ViewImpl for IngameHandView {
                 let needed_screen_height = metrics.needed_screen_height();
 
                 let real_screen_size = (mq::screen_width(), mq::screen_height());
-                let screen_size = if real_screen_size.0 > needed_screen_width * 2.0
-                    && real_screen_size.1 > needed_screen_height * 2.0
-                {
-                    (real_screen_size.0 / 2.0, real_screen_size.1 / 2.0)
-                } else if real_screen_size.0 > needed_screen_width * 1.5
-                    && real_screen_size.1 > needed_screen_height * 1.5
-                {
-                    (real_screen_size.0 / 1.5, real_screen_size.1 / 1.5)
-                } else if real_screen_size.0 < needed_screen_width
-                    || real_screen_size.1 < needed_screen_height
-                {
-                    let factor = (needed_screen_width / real_screen_size.0)
-                        .max(needed_screen_height / real_screen_size.1);
-                    (real_screen_size.0 * factor, real_screen_size.1 * factor)
-                } else {
-                    real_screen_size
+                let screen_size = {
+                    let mut factor = (real_screen_size.0 / needed_screen_width)
+                        .min(real_screen_size.1 / needed_screen_height);
+
+                    println!("factor = {}", factor);
+
+                    if factor > 1.0 {
+                        // round down to nearest 0.5
+                        factor = (factor * 2.0).floor() / 2.0;
+                    }
+
+                    (real_screen_size.0 / factor, real_screen_size.1 / factor)
                 };
 
                 let scale = real_screen_size.0 / screen_size.0;
