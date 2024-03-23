@@ -9,12 +9,27 @@ fn default_name() -> String {
 }
 
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
+pub enum CardTheme {
+    Standard,
+    HighVisibility,
+}
+
+impl Default for CardTheme {
+    fn default() -> Self {
+        CardTheme::Standard
+    }
+}
+
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub struct Settings {
     #[serde(default = "default_name")]
     pub name: String,
 
     #[serde(default)]
     pub drag: bool,
+
+    #[serde(default)]
+    pub card_theme: CardTheme,
 
     #[serde(default)]
     pub round_start_music: bool,
@@ -31,6 +46,7 @@ impl Default for Settings {
         Settings {
             name: default_name(),
             drag: false,
+            card_theme: Default::default(),
             round_start_music: false,
             suit_callouts: false,
             nerts_callout: false,

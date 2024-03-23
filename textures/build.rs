@@ -11,6 +11,7 @@ fn main() {
 
     for (name, size) in [
         ("cards", (1700, 770)),
+        ("cards_hivis", (1700, 770)),
         ("backs", (270, 200)),
         ("placeholder", (140, 200)),
         ("cursors", (40, 80)),

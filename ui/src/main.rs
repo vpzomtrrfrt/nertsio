@@ -227,8 +227,10 @@ async fn main() {
     )
     .unwrap();
 
-    let cards_texture =
+    let cards_texture_standard =
         mq::Texture2D::from_file_with_format(nertsio_textures::CARDS, Some(mq::ImageFormat::Png));
+    let cards_texture_hivis =
+        mq::Texture2D::from_file_with_format(nertsio_textures::CARDS_HIVIS, Some(mq::ImageFormat::Png));
     let backs_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::BACKS, Some(mq::ImageFormat::Png));
     let placeholder_texture = mq::Texture2D::from_file_with_format(
@@ -279,6 +281,14 @@ async fn main() {
 
     let settings_mutex = settings::init_settings(async_rt.handle());
 
+    let get_cards_texture = || {
+        let settings = settings_mutex.lock().unwrap();
+        match settings.card_theme {
+            settings::CardTheme::Standard => &cards_texture_standard,
+            settings::CardTheme::HighVisibility => &cards_texture_hivis,
+        }
+    };
+
     let mut ctx = views::GameContext {
         async_rt: async_rt.handle().clone(),
         game_info_mutex: game_info_mutex.clone(),
@@ -288,7 +298,7 @@ async fn main() {
         game_msg_send,
         quit: false,
 
-        cards_texture,
+        cards_texture: get_cards_texture(),
         backs_texture,
         cursors_texture,
         placeholder_texture,
@@ -305,6 +315,8 @@ async fn main() {
 
     while !ctx.quit {
         mq::set_default_camera();
+
+        ctx.cards_texture = get_cards_texture();
 
         view = views::ViewImpl::tick(view, &mut ctx);
 
