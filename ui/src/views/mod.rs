@@ -1,7 +1,7 @@
 use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
 use futures_util::FutureExt;
+use macroquad::hash;
 use macroquad::prelude as mq;
-use macroquad::hash as hash;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 use std::cell::RefCell;
@@ -350,8 +350,16 @@ pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<S
 
                         ui.label("Card Theme");
                         ui.indent(hash!(), |ui| {
-                            ui.radio_value(&mut settings.card_theme, crate::settings::CardTheme::Standard, "Standard");
-                            ui.radio_value(&mut settings.card_theme, crate::settings::CardTheme::HighVisibility, "High Visibility");
+                            ui.radio_value(
+                                &mut settings.card_theme,
+                                crate::settings::CardTheme::Standard,
+                                "Standard",
+                            );
+                            ui.radio_value(
+                                &mut settings.card_theme,
+                                crate::settings::CardTheme::HighVisibility,
+                                "High Visibility",
+                            );
                         });
 
                         ui.checkbox(&mut settings.round_start_music, "Round Start Music");

@@ -229,8 +229,10 @@ async fn main() {
 
     let cards_texture_standard =
         mq::Texture2D::from_file_with_format(nertsio_textures::CARDS, Some(mq::ImageFormat::Png));
-    let cards_texture_hivis =
-        mq::Texture2D::from_file_with_format(nertsio_textures::CARDS_HIVIS, Some(mq::ImageFormat::Png));
+    let cards_texture_hivis = mq::Texture2D::from_file_with_format(
+        nertsio_textures::CARDS_HIVIS,
+        Some(mq::ImageFormat::Png),
+    );
     let backs_texture =
         mq::Texture2D::from_file_with_format(nertsio_textures::BACKS, Some(mq::ImageFormat::Png));
     let placeholder_texture = mq::Texture2D::from_file_with_format(
