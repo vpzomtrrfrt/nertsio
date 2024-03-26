@@ -6,3 +6,4 @@ resolver = "2"
 xwt-web-sys = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
 xwt-core = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
 async-bincode = { git = "https://github.com/vpzomtrrfrt/async-bincode", branch = "constant-len" }
+egui = { git = "https://github.com/vpzomtrrfrt/egui", branch = "no-tab-start" }
