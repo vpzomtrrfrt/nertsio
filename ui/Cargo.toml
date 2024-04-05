@@ -6,6 +6,9 @@ edition = "2021"
 [package.metadata.android.activity_attributes]
 "android:exported" = "true"
 
+[[package.metadata.android.permission]]
+name = "android.permission.INTERNET"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
