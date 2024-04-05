@@ -1,3 +1,4 @@
+use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::cell::RefCell;

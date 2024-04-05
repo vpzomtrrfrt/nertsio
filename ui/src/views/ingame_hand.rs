@@ -1,4 +1,5 @@
 use crate::ConnectionMessage;
+use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;

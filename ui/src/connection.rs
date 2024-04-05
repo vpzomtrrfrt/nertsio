@@ -1,5 +1,6 @@
 use futures_util::SinkExt;
 use futures_util::{StreamExt, TryStreamExt};
+use macroquad::logging as log;
 use nertsio_types as ni_ty;
 use std::sync::{Arc, Mutex};
 use xwt_core::traits::*;

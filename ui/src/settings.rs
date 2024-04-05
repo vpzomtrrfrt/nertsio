@@ -1,5 +1,6 @@
 #[cfg(target_family = "wasm")]
 use futures_util::StreamExt;
+use macroquad::logging as log;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};

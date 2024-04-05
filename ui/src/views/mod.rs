@@ -1,6 +1,7 @@
 use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
 use futures_util::FutureExt;
 use macroquad::hash;
+use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;

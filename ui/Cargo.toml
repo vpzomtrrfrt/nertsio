@@ -21,7 +21,6 @@ serde = "1.0.131"
 dirs = "4.0.0"
 nertsio_ui_metrics = { path = "../ui_metrics" }
 futures-channel = "0.3.21"
-log = "0.4.14"
 splines = { version = "4.0.3", features = ["glam"] }
 env_logger = "0.9.0"
 xwt = "0.4.2"
@@ -54,6 +53,7 @@ tokio-util = { version = "0.7.10", features = ["compat"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 reqwest = { version = "0.11.9", features = ["json"] }
+macroquad = { version = "0.4.4", features = ["log-rs"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 reqwest = { version = "0.11.9", default-features = false, features = ["rustls-tls", "json"] }
