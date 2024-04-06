@@ -1,6 +1,8 @@
 use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
 use futures_util::FutureExt;
 use macroquad::hash;
+use macroquad::logging as log;
+use macroquad::miniquad;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
@@ -12,7 +14,7 @@ mod ingame_hand;
 use ingame_hand::IngameHandView;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
-const SCREEN_MARGIN: f32 = 2.5;
+const SCREEN_MARGIN: f32 = 10.0;
 const CARD_SIZE: mq::Vec2 = mq::Vec2 {
     x: metrics::CARD_WIDTH,
     y: metrics::CARD_HEIGHT,
@@ -429,7 +431,9 @@ impl ViewImpl for MainMenuView {
 
                                 ui.horizontal(|ui| {
                                     ui.label("Name:");
-                                    ui.text_edit_singleline(&mut settings.name);
+                                    handle_input_response(
+                                        ui.text_edit_singleline(&mut settings.name),
+                                    );
                                 });
                             }
 
@@ -532,6 +536,8 @@ impl ViewImpl for JoinGameFormView {
                                 {
                                     go_connect = true;
                                 }
+
+                                handle_input_response(response);
                             });
 
                             ui.vertical_centered(|ui| {
@@ -1019,5 +1025,13 @@ impl ViewImpl for PublicGameListView {
                 ConnectingView::default().into()
             }
         }
+    }
+}
+
+fn handle_input_response(res: egui::Response) {
+    if res.lost_focus() {
+        miniquad::window::show_keyboard(false);
+    } else if res.gained_focus() {
+        miniquad::window::show_keyboard(true);
     }
 }

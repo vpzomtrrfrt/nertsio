@@ -1,5 +1,6 @@
 #[cfg(target_family = "wasm")]
 use futures_util::StreamExt;
+use macroquad::logging as log;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
@@ -154,11 +155,31 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
     let settings_mutex;
     #[cfg(not(target_family = "wasm"))]
     {
+        #[cfg(target_os = "android")]
+        let config_dir = {
+            // https://stackoverflow.com/a/6284443/2533397
+
+            let cmdline = std::fs::read_to_string("/proc/self/cmdline").unwrap();
+
+            // seems to be full of nul bytes, stop at the first one
+            let cmdline = match cmdline.find('\0') {
+                None => &cmdline,
+                Some(idx) => &cmdline[..idx],
+            };
+
+            let mut result = std::path::PathBuf::from("/data/data/");
+            result.push(std::path::Path::new(cmdline));
+
+            result
+        };
+        #[cfg(not(target_os = "android"))]
         let config_dir = dirs::config_dir()
             .map(Cow::Owned)
             .unwrap_or_else(|| std::path::Path::new(".").into());
 
         let config_path = config_dir.join("nertsio.json");
+
+        log::debug!("config path: {:?}", config_path);
 
         match std::fs::File::open(&config_path) {
             Ok(mut file) => {
@@ -181,6 +202,8 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
             }
             Err(err) => {
                 if err.kind() == std::io::ErrorKind::NotFound {
+                    log::debug!("config file not found, creating new");
+
                     let init_value: Settings = Default::default();
 
                     settings_mutex = Arc::new(Mutex::new(init_value.clone()));
