@@ -2,6 +2,7 @@ use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
 use futures_util::FutureExt;
 use macroquad::hash;
 use macroquad::logging as log;
+use macroquad::miniquad;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
@@ -430,7 +431,9 @@ impl ViewImpl for MainMenuView {
 
                                 ui.horizontal(|ui| {
                                     ui.label("Name:");
-                                    ui.text_edit_singleline(&mut settings.name);
+                                    handle_input_response(
+                                        ui.text_edit_singleline(&mut settings.name),
+                                    );
                                 });
                             }
 
@@ -533,6 +536,8 @@ impl ViewImpl for JoinGameFormView {
                                 {
                                     go_connect = true;
                                 }
+
+                                handle_input_response(response);
                             });
 
                             ui.vertical_centered(|ui| {
@@ -1020,5 +1025,13 @@ impl ViewImpl for PublicGameListView {
                 ConnectingView::default().into()
             }
         }
+    }
+}
+
+fn handle_input_response(res: egui::Response) {
+    if res.lost_focus() {
+        miniquad::window::show_keyboard(false);
+    } else if res.gained_focus() {
+        miniquad::window::show_keyboard(true);
     }
 }
