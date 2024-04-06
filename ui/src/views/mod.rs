@@ -14,7 +14,7 @@ mod ingame_hand;
 use ingame_hand::IngameHandView;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.2, 0.7, 0.2, 1.0);
-const SCREEN_MARGIN: f32 = 2.5;
+const SCREEN_MARGIN: f32 = 10.0;
 const CARD_SIZE: mq::Vec2 = mq::Vec2 {
     x: metrics::CARD_WIDTH,
     y: metrics::CARD_HEIGHT,

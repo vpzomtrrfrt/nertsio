@@ -43,7 +43,7 @@ impl super::ViewImpl for IngameHandView {
                 );
 
                 let needed_screen_width = metrics.needed_screen_width();
-                let needed_screen_height = metrics.needed_screen_height();
+                let needed_screen_height = metrics.needed_screen_height() + super::SCREEN_MARGIN;
 
                 let real_screen_size = (mq::screen_width(), mq::screen_height());
                 let screen_size = {
