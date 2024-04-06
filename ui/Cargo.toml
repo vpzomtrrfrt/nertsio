@@ -5,9 +5,12 @@ edition = "2021"
 
 [package.metadata.android]
 fullscreen = true
+package_name = "io.nerts.nertsio_ui"
+label = "nertsio"
 
 [package.metadata.android.activity_attributes]
 "android:exported" = "true"
+"android:screenOrientation" = "landscape"
 
 [[package.metadata.android.permission]]
 name = "android.permission.INTERNET"
