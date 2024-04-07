@@ -166,7 +166,7 @@ impl super::ViewImpl for IngameHandView {
                                     && mq::Rect::new(
                                         nerts_stack_pos[0]
                                             + ((player_state.nerts_stack().len() - 1) as f32)
-                                                * metrics::HORIZONTAL_STACK_SPACING,
+                                                * metrics::NERTS_STACK_SPACING,
                                         nerts_stack_pos[1],
                                         metrics::CARD_WIDTH,
                                         metrics::CARD_HEIGHT,
@@ -184,7 +184,7 @@ impl super::ViewImpl for IngameHandView {
                                                 nerts_stack_pos[0]
                                                     + ((player_state.nerts_stack().len() - 1)
                                                         as f32)
-                                                        * metrics::HORIZONTAL_STACK_SPACING,
+                                                        * metrics::NERTS_STACK_SPACING,
                                                 nerts_stack_pos[1],
                                             ),
                                     ))
@@ -559,8 +559,7 @@ impl super::ViewImpl for IngameHandView {
                         if started {
                             for i in 0..(player_state.nerts_stack().len() - 1) {
                                 ctx.draw_back(
-                                    nerts_stack_pos[0]
-                                        + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                                    nerts_stack_pos[0] + (i as f32) * metrics::NERTS_STACK_SPACING,
                                     nerts_stack_pos[1],
                                     player_state.player_id(),
                                 );
@@ -577,15 +576,14 @@ impl super::ViewImpl for IngameHandView {
                                     card.card,
                                     nerts_stack_pos[0]
                                         + ((player_state.nerts_stack().len() - 1) as f32)
-                                            * metrics::HORIZONTAL_STACK_SPACING,
+                                            * metrics::NERTS_STACK_SPACING,
                                     nerts_stack_pos[1],
                                 );
                             }
                         } else {
                             for i in 0..player_state.nerts_stack().len() {
                                 let target_pos = mq::Vec2::new(
-                                    nerts_stack_pos[0]
-                                        + (i as f32) * metrics::HORIZONTAL_STACK_SPACING,
+                                    nerts_stack_pos[0] + (i as f32) * metrics::NERTS_STACK_SPACING,
                                     nerts_stack_pos[1],
                                 );
 
@@ -884,7 +882,7 @@ impl super::ViewImpl for IngameHandView {
                                         egui::Rect {
                                             min: egui::Pos2::new(position[0], position[1]),
                                             max: egui::Pos2::new(
-                                                position[0] + 12.0 * metrics::HORIZONTAL_STACK_SPACING + metrics::CARD_WIDTH,
+                                                position[0] + 12.0 * metrics::NERTS_STACK_SPACING + metrics::CARD_WIDTH,
                                                 position[1] + metrics::CARD_HEIGHT,
                                             )
                                         } * ui_scale,

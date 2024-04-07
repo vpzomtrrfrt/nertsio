@@ -3,8 +3,9 @@ use nertsio_types as ni_ty;
 pub const CARD_WIDTH: f32 = 90.0;
 pub const CARD_HEIGHT: f32 = 135.0;
 pub const LAKE_SPACING: f32 = 10.0;
-pub const HORIZONTAL_STACK_SPACING: f32 = 10.0;
-pub const VERTICAL_STACK_SPACING: f32 = 20.0;
+pub const NERTS_STACK_SPACING: f32 = 10.0;
+pub const HORIZONTAL_STACK_SPACING: f32 = 15.0;
+pub const VERTICAL_STACK_SPACING: f32 = 25.0;
 pub const PLAYER_SPACING: f32 = 20.0;
 pub const PLAYER_Y: f32 = 200.0;
 
@@ -36,7 +37,12 @@ impl HandMetrics {
     }
 
     pub fn player_hand_width(&self) -> f32 {
-        130.0 + CARD_WIDTH + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0)
+        CARD_WIDTH
+            + 10.0
+            + HORIZONTAL_STACK_SPACING * 2.0
+            + CARD_WIDTH
+            + 10.0
+            + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0)
     }
 
     pub fn lake_width(&self) -> f32 {
@@ -116,7 +122,13 @@ impl HandMetrics {
         match loc {
             ni_ty::PlayerStackLocation::Nerts => position,
             ni_ty::PlayerStackLocation::Tableau(idx) => (
-                position.0 + 130.0 + CARD_WIDTH + (idx as f32) * (CARD_WIDTH + 10.0),
+                position.0
+                    + CARD_WIDTH
+                    + 10.0
+                    + HORIZONTAL_STACK_SPACING * 2.0
+                    + CARD_WIDTH
+                    + 10.0
+                    + (idx as f32) * (CARD_WIDTH + 10.0),
                 position.1,
             ),
             ni_ty::PlayerStackLocation::Stock => (position.0, position.1 + CARD_HEIGHT + 10.0),

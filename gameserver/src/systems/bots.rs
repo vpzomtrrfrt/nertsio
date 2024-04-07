@@ -51,7 +51,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                 ni_ty::PlayerStackLocation::Nerts => (
                                                     stack_pos.0
                                                         + (remaining_count as f32)
-                                                            * HORIZONTAL_STACK_SPACING,
+                                                            * NERTS_STACK_SPACING,
                                                     stack_pos.1,
                                                 ),
                                                 ni_ty::PlayerStackLocation::Tableau(_) => (
