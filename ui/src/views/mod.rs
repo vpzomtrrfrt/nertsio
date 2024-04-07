@@ -4,6 +4,7 @@ use macroquad::hash;
 use macroquad::logging as log;
 use macroquad::miniquad;
 use macroquad::prelude as mq;
+use nertsio_common as common;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 use std::cell::RefCell;
@@ -432,7 +433,10 @@ impl ViewImpl for MainMenuView {
                                 ui.horizontal(|ui| {
                                     ui.label("Name:");
                                     handle_input_response(
-                                        ui.text_edit_singleline(&mut settings.name),
+                                        ui.add(
+                                            egui::widgets::TextEdit::singleline(&mut settings.name)
+                                                .char_limit(common::MAX_NAME_LENGTH),
+                                        ),
                                     );
                                 });
                             }
