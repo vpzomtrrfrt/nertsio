@@ -81,320 +81,320 @@
 	<g fill="#00000" transform="translate(0, 10)">
 		<g transform="translate(10, 0)">
 			<use href="#card" />
-			<use href="#number-a" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-a" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(140, 0)">
 			<use href="#card" />
-			<use href="#number-2" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-2" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(270, 0)">
 			<use href="#card" />
-			<use href="#number-3" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-3" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(400, 0)">
 			<use href="#card" />
-			<use href="#number-4" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-4" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(530, 0)">
 			<use href="#card" />
-			<use href="#number-5" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-5" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(660, 0)">
 			<use href="#card" />
-			<use href="#number-6" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-6" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(790, 0)">
 			<use href="#card" />
-			<use href="#number-7" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-7" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(920, 0)">
 			<use href="#card" />
-			<use href="#number-8" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-8" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1050, 0)">
 			<use href="#card" />
-			<use href="#number-9" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-9" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1180, 0)">
 			<use href="#card" />
-			<use href="#number-10" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-10" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1310, 0)">
 			<use href="#card" />
-			<use href="#number-j" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-j" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1440, 0)">
 			<use href="#card" />
-			<use href="#number-q" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-q" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1570, 0)">
 			<use href="#card" />
-			<use href="#number-k" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-k" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-spades" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 	</g>
 	<g fill="#dd1a1e" transform="translate(0, 200)">
 		<g transform="translate(10, 0)">
 			<use href="#card" />
-			<use href="#number-a" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-a" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(140, 0)">
 			<use href="#card" />
-			<use href="#number-2" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-2" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(270, 0)">
 			<use href="#card" />
-			<use href="#number-3" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-3" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(400, 0)">
 			<use href="#card" />
-			<use href="#number-4" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-4" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(530, 0)">
 			<use href="#card" />
-			<use href="#number-5" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-5" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(660, 0)">
 			<use href="#card" />
-			<use href="#number-6" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-6" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(790, 0)">
 			<use href="#card" />
-			<use href="#number-7" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-7" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(920, 0)">
 			<use href="#card" />
-			<use href="#number-8" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-8" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1050, 0)">
 			<use href="#card" />
-			<use href="#number-9" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-9" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1180, 0)">
 			<use href="#card" />
-			<use href="#number-10" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-10" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1310, 0)">
 			<use href="#card" />
-			<use href="#number-j" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-j" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1440, 0)">
 			<use href="#card" />
-			<use href="#number-q" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-q" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1570, 0)">
 			<use href="#card" />
-			<use href="#number-k" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-k" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-hearts" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 	</g>
 	<g fill="#dd1a1e" transform="translate(0, 390)">
 		<g transform="translate(10, 0)">
 			<use href="#card" />
-			<use href="#number-a" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-a" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(140, 0)">
 			<use href="#card" />
-			<use href="#number-2" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-2" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(270, 0)">
 			<use href="#card" />
-			<use href="#number-3" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-3" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(400, 0)">
 			<use href="#card" />
-			<use href="#number-4" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-4" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(530, 0)">
 			<use href="#card" />
-			<use href="#number-5" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-5" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(660, 0)">
 			<use href="#card" />
-			<use href="#number-6" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-6" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(790, 0)">
 			<use href="#card" />
-			<use href="#number-7" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-7" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(920, 0)">
 			<use href="#card" />
-			<use href="#number-8" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-8" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1050, 0)">
 			<use href="#card" />
-			<use href="#number-9" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-9" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1180, 0)">
 			<use href="#card" />
-			<use href="#number-10" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-10" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1310, 0)">
 			<use href="#card" />
-			<use href="#number-j" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-j" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1440, 0)">
 			<use href="#card" />
-			<use href="#number-q" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-q" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1570, 0)">
 			<use href="#card" />
-			<use href="#number-k" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-k" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-diamonds" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 	</g>
 	<g fill="#00000" transform="translate(0, 580)">
 		<g transform="translate(10, 0)">
 			<use href="#card" />
-			<use href="#number-a" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-a" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-a" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(140, 0)">
 			<use href="#card" />
-			<use href="#number-2" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-2" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-2" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(270, 0)">
 			<use href="#card" />
-			<use href="#number-3" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-3" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-3" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(400, 0)">
 			<use href="#card" />
-			<use href="#number-4" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-4" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-4" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(530, 0)">
 			<use href="#card" />
-			<use href="#number-5" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-5" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-5" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(660, 0)">
 			<use href="#card" />
-			<use href="#number-6" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-6" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-6" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(790, 0)">
 			<use href="#card" />
-			<use href="#number-7" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-7" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-7" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(920, 0)">
 			<use href="#card" />
-			<use href="#number-8" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-8" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-8" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1050, 0)">
 			<use href="#card" />
-			<use href="#number-9" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-9" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-9" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1180, 0)">
 			<use href="#card" />
-			<use href="#number-10" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-10" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-10" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1310, 0)">
 			<use href="#card" />
-			<use href="#number-j" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-j" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-j" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1440, 0)">
 			<use href="#card" />
-			<use href="#number-q" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-q" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-q" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 		<g transform="translate(1570, 0)">
 			<use href="#card" />
-			<use href="#number-k" transform="translate(-5, 10) scale(0.7)" />
-			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.7)" />
+			<use href="#number-k" transform="translate(-5, 10) scale(0.65)" />
+			<use href="#number-k" transform="translate(120, 180) rotate(180) translate(-5, 10) scale(0.65)" />
 			<use href="#suit-clubs" transform="translate(60, 90) scale(0.3) translate(-120, -130)" />
 		</g>
 	</g>
