@@ -23,6 +23,7 @@ const CARD_SIZE: mq::Vec2 = mq::Vec2 {
 
 #[enum_dispatch::enum_dispatch]
 pub enum View {
+    CreditsView,
     MainMenuView,
     JoinGameFormView,
     PublicGameListLoadingView,
@@ -463,6 +464,15 @@ impl ViewImpl for MainMenuView {
                             }
                         },
                     );
+                });
+
+            egui::TopBottomPanel::bottom("main_menu_bottom")
+                .show_separator_line(false)
+                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .show(egui_ctx, |ui| {
+                    if ui.button("Credits").clicked() {
+                        new_state = Some(CreditsView.into());
+                    }
                 });
 
             if self.show_settings {
@@ -1028,6 +1038,51 @@ impl ViewImpl for PublicGameListView {
                 });
                 ConnectingView::default().into()
             }
+        }
+    }
+}
+
+pub struct CreditsView;
+
+impl ViewImpl for CreditsView {
+    fn tick(self, _ctx: &mut GameContext) -> View {
+        let mut go_back = false;
+
+        mq::clear_background(BACKGROUND_COLOR);
+
+        egui_macroquad::ui(|egui_ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .show(egui_ctx, |ui| {
+                    if ui.button("Back").clicked() {
+                        go_back = true;
+                    }
+
+                    egui::ScrollArea::vertical()
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            ui.heading("Credits");
+
+                            ui.label("nertsio by phygs");
+                            ui.label("using third-party packages:");
+
+                            for (crate_name, license_text) in crate::licenses::LICENSES {
+                                ui.collapsing(*crate_name, |ui| {
+                                    ui.label(*license_text);
+                                });
+                            }
+                        });
+                });
+        });
+
+        egui_macroquad::draw();
+
+        go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
+
+        if go_back {
+            MainMenuView::default().into()
+        } else {
+            self.into()
         }
     }
 }

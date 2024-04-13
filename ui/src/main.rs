@@ -12,6 +12,10 @@ mod settings;
 mod util;
 mod views;
 
+mod licenses {
+    include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+}
+
 use connection::{ConnectionEvent, ConnectionMessage};
 use settings::Settings;
 
