@@ -45,7 +45,7 @@ egui = "0.25.0"
 enum_dispatch = "0.3.12"
 
 [build-dependencies]
-bureau = "0.1.0"
+bureau = "0.2.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }
