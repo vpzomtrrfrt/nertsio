@@ -14,7 +14,8 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                 loop {
                     use nertsio_ui_metrics::{
-                        CARD_HEIGHT, CARD_WIDTH, HORIZONTAL_STACK_SPACING, VERTICAL_STACK_SPACING,
+                        CARD_HEIGHT, CARD_WIDTH, HORIZONTAL_STACK_SPACING, NERTS_STACK_SPACING,
+                        VERTICAL_STACK_SPACING,
                     };
 
                     interval.tick().await;
