@@ -499,7 +499,10 @@ impl super::ViewImpl for IngameHandView {
                             || mq::is_key_pressed(mq::KeyCode::Escape)
                         {
                             hand_extra.my_held_state = None;
-                        } else if mq::is_key_pressed(mq::KeyCode::Tab) {
+                        } else if mq::is_key_pressed(mq::KeyCode::Tab)
+                            || mq::is_key_pressed(mq::KeyCode::Z)
+                            || mq::is_key_pressed(mq::KeyCode::X)
+                        {
                             let action = if player_state.stock_stack().len() > 0 {
                                 ni_ty::HandAction::FlipStock
                             } else {
