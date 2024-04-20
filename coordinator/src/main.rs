@@ -287,10 +287,12 @@ async fn main() {
         })
     });
 
-    let redis_conn =
-        redis_async::client::pubsub_connect(std::env::var("REDIS_URI").expect("Missing REDIS_URI"))
-            .await
-            .expect("Failed to connect to Redis");
+    let redis_conn = nertsio_server_common::redis_connection_builder_from_uri(
+        &std::env::var("REDIS_URI").expect("Missing REDIS_URI"),
+    )
+    .pubsub_connect()
+    .await
+    .expect("Failed to connect to Redis");
     let sub_stream = redis_conn
         .subscribe(ni_ty::protocol::COORDINATOR_CHANNEL)
         .await

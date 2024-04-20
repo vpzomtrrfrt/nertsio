@@ -13,7 +13,8 @@ futures-util = "0.3.18"
 trout = "0.2.0"
 anyhow = "1.0.51"
 http = "0.2.5"
-redis-async = "0.12.0"
+redis-async = "0.17.1"
+nertsio_server_common = { path = "../server_common" }
 nertsio_types = { path = "../types" }
 bincode = "1.3.3"
 rand = "0.8.4"
