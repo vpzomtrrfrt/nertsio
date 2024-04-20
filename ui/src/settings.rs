@@ -9,6 +9,14 @@ fn default_name() -> String {
     "Nerter".to_owned()
 }
 
+#[derive(Clone, PartialEq, Deserialize, Serialize, Default)]
+pub enum DragMode {
+    #[default]
+    Click,
+    Drag,
+    Hybrid,
+}
+
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub enum CardTheme {
     Standard,
@@ -27,7 +35,7 @@ pub struct Settings {
     pub name: String,
 
     #[serde(default)]
-    pub drag: bool,
+    pub drag_mode: DragMode,
 
     #[serde(default)]
     pub card_theme: CardTheme,
@@ -40,17 +48,22 @@ pub struct Settings {
 
     #[serde(default)]
     pub nerts_callout: bool,
+
+    #[serde(rename = "drag")]
+    #[serde(skip_serializing)]
+    pub legacy_drag: Option<bool>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             name: default_name(),
-            drag: false,
+            drag_mode: Default::default(),
             card_theme: Default::default(),
             round_start_music: false,
             suit_callouts: false,
             nerts_callout: false,
+            legacy_drag: None,
         }
     }
 }
@@ -183,7 +196,7 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
 
         match std::fs::File::open(&config_path) {
             Ok(mut file) => {
-                let init_value: Settings = match serde_json::from_reader(&mut file) {
+                let mut init_value: Settings = match serde_json::from_reader(&mut file) {
                     Ok(value) => value,
                     Err(err) => {
                         log::debug!("Failed to parse config file: {:?}", err);
@@ -192,6 +205,14 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
                         Default::default()
                     }
                 };
+
+                if let Some(drag) = init_value.legacy_drag {
+                    init_value.drag_mode = if drag {
+                        DragMode::Hybrid
+                    } else {
+                        DragMode::Click
+                    };
+                }
 
                 settings_mutex = Arc::new(Mutex::new(init_value.clone()));
                 async_rt.spawn(run_settings_save_loop(

@@ -1,3 +1,4 @@
+use crate::settings::DragMode;
 use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
 use futures_util::FutureExt;
 use macroquad::hash;
@@ -350,7 +351,18 @@ pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<S
                     egui::Vec2::new(menu_width, 0.0),
                     egui::Layout::top_down(egui::Align::Min),
                     |ui| {
-                        ui.checkbox(&mut settings.drag, "Allow Drag-and-Drop");
+                        ui.label("Movement Mode");
+                        ui.indent(hash!(), |ui| {
+                            ui.radio_value(&mut settings.drag_mode, DragMode::Click, "Pickup");
+
+                            ui.radio_value(
+                                &mut settings.drag_mode,
+                                DragMode::Drag,
+                                "Drag-and-Drop",
+                            );
+
+                            ui.radio_value(&mut settings.drag_mode, DragMode::Hybrid, "Hybrid");
+                        });
 
                         ui.label("Card Theme");
                         ui.indent(hash!(), |ui| {

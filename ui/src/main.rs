@@ -143,7 +143,7 @@ impl MouseState {
 
 struct HeldState {
     info: ni_ty::HeldInfo,
-    mouse_released: bool,
+    is_drag: bool,
 }
 
 struct HandExtra {

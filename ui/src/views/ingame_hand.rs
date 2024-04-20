@@ -1,3 +1,4 @@
+use crate::settings::DragMode;
 use crate::ConnectionMessage;
 use macroquad::logging as log;
 use macroquad::prelude as mq;
@@ -108,7 +109,10 @@ impl super::ViewImpl for IngameHandView {
 
                         if mouse_pressed
                             || (mq::is_mouse_button_released(mq::MouseButton::Left)
-                                && settings.drag)
+                                && match settings.drag_mode {
+                                    DragMode::Click => false,
+                                    DragMode::Drag | DragMode::Hybrid => true,
+                                })
                         {
                             let nerts_stack_pos =
                                 mq::Vec2::from(metrics.player_stack_pos(
@@ -323,7 +327,11 @@ impl super::ViewImpl for IngameHandView {
                                                                     offset: (offset[0], offset[1]),
                                                                     top_card,
                                                                 },
-                                                                mouse_released: false,
+                                                                is_drag: match settings.drag_mode {
+                                                                    DragMode::Click => false,
+                                                                    DragMode::Drag
+                                                                    | DragMode::Hybrid => true,
+                                                                },
                                                             })
                                                     }
                                                 }
@@ -340,7 +348,15 @@ impl super::ViewImpl for IngameHandView {
                                                 if mouse_pressed {
                                                     hand_extra.my_held_state = None;
                                                 } else {
-                                                    held.mouse_released = true;
+                                                    match settings.drag_mode {
+                                                        DragMode::Click => unreachable!(),
+                                                        DragMode::Drag => {
+                                                            hand_extra.my_held_state = None;
+                                                        }
+                                                        DragMode::Hybrid => {
+                                                            held.is_drag = false;
+                                                        }
+                                                    }
                                                 }
                                             } else {
                                                 let success = if matches!(
@@ -406,19 +422,25 @@ impl super::ViewImpl for IngameHandView {
                                                     false
                                                 };
 
-                                                if success
-                                                    || (!held.mouse_released && settings.drag)
-                                                {
+                                                if success || held.is_drag {
                                                     hand_extra.my_held_state = None;
                                                 } else if !mouse_pressed {
-                                                    held.mouse_released = true;
+                                                    match settings.drag_mode {
+                                                        DragMode::Click => unreachable!(),
+                                                        DragMode::Drag => {
+                                                            hand_extra.my_held_state = None;
+                                                        }
+                                                        DragMode::Hybrid => {
+                                                            held.is_drag = false;
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 } else {
                                     if let Some(held_state) = &hand_extra.my_held_state {
-                                        if !held_state.mouse_released && settings.drag {
+                                        if held_state.is_drag {
                                             hand_extra.my_held_state = None;
                                         }
                                     }
