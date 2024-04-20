@@ -22,6 +22,8 @@ const CARD_SIZE: mq::Vec2 = mq::Vec2 {
     y: metrics::CARD_HEIGHT,
 };
 
+const CAN_QUIT: bool = cfg!(not(any(target_family = "wasm", target_os = "android")));
+
 #[enum_dispatch::enum_dispatch]
 pub enum View {
     CreditsView,
@@ -476,7 +478,7 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
-                            } else if cfg!(not(target_family = "wasm")) && menu_button(ui, "Quit") {
+                            } else if CAN_QUIT && menu_button(ui, "Quit") {
                                 ctx.quit();
                             }
                         },
