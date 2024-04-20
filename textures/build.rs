@@ -78,4 +78,30 @@ fn main() {
             .unwrap();
         }
     }
+
+    {
+        let android_res_dir = std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("target")
+            .join("android_res");
+        let mipmap_dir = android_res_dir.join("mipmap");
+
+        std::fs::create_dir_all(&mipmap_dir).unwrap();
+
+        let content = std::fs::read("res/icon.svg").unwrap();
+        let tree = usvg::Tree::from_data(&content, &usvg::Options::default().to_ref()).unwrap();
+
+        let mut pixmap = tiny_skia::Pixmap::new(512, 512).unwrap();
+        resvg::render(
+            &tree,
+            usvg::FitTo::Size(pixmap.width(), pixmap.height()),
+            pixmap.as_mut(),
+        )
+        .unwrap();
+
+        let bytes = pixmap.encode_png().unwrap();
+        std::fs::write(mipmap_dir.join("icon.png"), bytes).unwrap();
+    }
 }
