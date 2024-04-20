@@ -745,6 +745,19 @@ impl ViewImpl for IngameNeutralView {
                                             )
                                             .unwrap();
                                     }
+
+                                    if shared.game.players.get(&shared.my_player_id).unwrap().ready {
+                                        if ui.button("Force Start").clicked() {
+                                            ctx.game_msg_send
+                                                .borrow()
+                                                .as_ref()
+                                                .unwrap()
+                                                .unbounded_send(
+                                                    ni_ty::protocol::GameMessageC2S::ForceStart.into(),
+                                                )
+                                                .unwrap();
+                                        }
+                                    }
                                 }
 
                             });

@@ -9,6 +9,39 @@ use std::sync::Arc;
 
 const HAND_START_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
+fn start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<GlobalState>) {
+    let new_hand = ni_ty::HandState::generate(server_game_state.players.keys().copied());
+    server_game_state.hand = Some(ServerHandState {
+        hand: new_hand.clone(),
+        mouse_states: vec![None; new_hand.players().len()],
+        stalled_count: 0,
+        sent_stall: false,
+    });
+
+    let delay = HAND_START_DELAY;
+
+    server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandInit {
+        info: new_hand,
+        delay,
+    });
+
+    let game_id = server_game_state.game_id;
+    let global_state = global_state.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(delay).await;
+
+        if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
+            if let Some(hand_state) = server_game_state.hand.as_mut() {
+                if !hand_state.hand.started {
+                    hand_state.hand.started = true;
+
+                    server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandStart);
+                }
+            }
+        }
+    });
+}
+
 fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<GlobalState>) {
     if server_game_state.hand.is_none()
         && !server_game_state.players.is_empty()
@@ -19,36 +52,7 @@ fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<
     {
         // all ready, start hand
 
-        let new_hand = ni_ty::HandState::generate(server_game_state.players.keys().copied());
-        server_game_state.hand = Some(ServerHandState {
-            hand: new_hand.clone(),
-            mouse_states: vec![None; new_hand.players().len()],
-            stalled_count: 0,
-            sent_stall: false,
-        });
-
-        let delay = HAND_START_DELAY;
-
-        server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandInit {
-            info: new_hand,
-            delay,
-        });
-
-        let game_id = server_game_state.game_id;
-        let global_state = global_state.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(delay).await;
-
-            if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
-                if let Some(hand_state) = server_game_state.hand.as_mut() {
-                    if !hand_state.hand.started {
-                        hand_state.hand.started = true;
-
-                        server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::HandStart);
-                    }
-                }
-            }
-        });
+        start_hand(server_game_state, global_state);
     }
 }
 
@@ -398,6 +402,18 @@ where
                                         }
 
                                         maybe_start_hand(&mut server_game_state, &global_state);
+                                    }
+                                }
+                                GameMessageC2S::ForceStart => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if server_game_state.master_player == Some(player_id) {
+                                        if server_game_state.hand.is_none() && !server_game_state.players.is_empty() {
+                                            start_hand(&mut server_game_state, &global_state);
+                                        }
                                     }
                                 }
                                 GameMessageC2S::ApplyHandAction { action } => {
