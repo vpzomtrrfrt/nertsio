@@ -4,9 +4,10 @@ RUN apk add --no-cache cargo pkgconf openssl-dev
 
 WORKDIR /usr/src/nertsio
 
-RUN sh -c "echo -e '[workspace]\nmembers = [\"types\", \"coordinator\"]' > Cargo.toml"
+RUN sh -c "echo -e '[workspace]\nmembers = [\"server_common\", \"types\", \"coordinator\"]' > Cargo.toml"
 COPY Cargo.lock ./
 COPY coordinator ./coordinator
+COPY server_common ./server_common
 COPY types ./types
 
 RUN cd coordinator
