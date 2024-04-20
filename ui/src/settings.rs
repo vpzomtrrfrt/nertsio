@@ -11,8 +11,9 @@ fn default_name() -> String {
 
 #[derive(Clone, PartialEq, Deserialize, Serialize, Default)]
 pub enum DragMode {
-    #[default]
+    #[cfg_attr(not(target_os = "android"), default)]
     Click,
+    #[cfg_attr(target_os = "android", default)]
     Drag,
     Hybrid,
 }
