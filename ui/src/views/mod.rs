@@ -91,6 +91,7 @@ pub struct GameContext<'a> {
     pub async_rt: crate::AsyncRt,
     pub game_info_mutex: Arc<Mutex<ConnectionState>>,
     pub http_client: reqwest::Client,
+    pub coordinator_url: &'a str,
     pub settings_mutex: Arc<Mutex<Settings>>,
     pub events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
     pub game_msg_send: RefCell<Option<futures_channel::mpsc::UnboundedSender<ConnectionMessage>>>,
@@ -116,12 +117,16 @@ impl<'a> GameContext<'a> {
             let http_client = self.http_client.clone();
             let settings_mutex = self.settings_mutex.clone();
             let events_send = self.events_send.clone();
+
+            let coordinator_url = self.coordinator_url.to_owned();
+
             async move {
                 {
                     (*game_info_mutex.lock().unwrap()) = ConnectionState::Connecting;
                 }
                 let res = crate::connection::handle_connection(
                     &http_client,
+                    &coordinator_url,
                     connection_type,
                     &game_info_mutex,
                     game_msg_recv,
@@ -156,7 +161,7 @@ impl<'a> GameContext<'a> {
 
         let req_fut = self
             .http_client
-            .get(format!("{}public_games", crate::COORDINATOR_URL))
+            .get(format!("{}public_games", self.coordinator_url))
             .send();
         self.async_rt.spawn(
             (async move {

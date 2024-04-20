@@ -66,6 +66,7 @@ pub enum ConnectionEvent {
 
 pub(crate) async fn handle_connection(
     http_client: &reqwest::Client,
+    coordinator_url: &str,
     connection_type: ConnectionType<'_>,
     info_mutex: &std::sync::Mutex<ConnectionState>,
     mut game_msg_recv: futures_channel::mpsc::UnboundedReceiver<ConnectionMessage>,
@@ -78,7 +79,7 @@ pub(crate) async fn handle_connection(
             let resp = http_client
                 .post(format!(
                     "{}servers:pick_for_new_game?protocol_version={}&min_protocol_version={}",
-                    crate::COORDINATOR_URL,
+                    coordinator_url,
                     ni_ty::protocol::PROTOCOL_VERSION,
                     ni_ty::protocol::PROTOCOL_VERSION,
                 ))
@@ -93,7 +94,7 @@ pub(crate) async fn handle_connection(
         ConnectionType::JoinPublicGame { server, game_id } => (server, Some(game_id), None),
         ConnectionType::JoinPrivateGame { server_id, game_id } => {
             let resp = http_client
-                .get(format!("{}servers/{}", crate::COORDINATOR_URL, server_id))
+                .get(format!("{}servers/{}", coordinator_url, server_id))
                 .send()
                 .await?
                 .error_for_status()?;

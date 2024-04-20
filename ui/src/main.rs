@@ -38,9 +38,6 @@ const PLAYER_COLORS: [mq::Color; 16] = [
     mq::Color::new(1.0, 0.0, 0.7, 1.0),
 ];
 
-const COORDINATOR_URL: &str = "https://coordinator.nerts.io/";
-// const COORDINATOR_URL: &str = "http://localhost:6462/";
-
 const MAX_INTERPOLATION_TIME: f32 = 0.3;
 
 pub enum ConnectionState {
@@ -217,6 +214,28 @@ async fn main() {
         wasm_logger::init(wasm_logger::Config::default());
     }
 
+    let mut coordinator_url = "https://coordinator.nerts.io/".to_owned();
+
+    {
+        let mut args = std::env::args();
+        let _ = args.next();
+
+        if let Some(arg) = args.next() {
+            if arg == "--coordinator-url" {
+                coordinator_url = args.next().expect("Missing value for coordinator-url");
+                if !coordinator_url.ends_with('/') {
+                    coordinator_url.push('/');
+                }
+            } else {
+                panic!("unknown argument");
+            }
+        }
+
+        if args.next().is_some() {
+            panic!("unknown argument");
+        }
+    }
+
     #[cfg(not(target_family = "wasm"))]
     let async_rt = tokio::runtime::Runtime::new().unwrap();
 
@@ -300,6 +319,7 @@ async fn main() {
         async_rt: async_rt.handle().clone(),
         game_info_mutex: game_info_mutex.clone(),
         http_client,
+        coordinator_url: &coordinator_url,
         settings_mutex: settings_mutex.clone(),
         events_send,
         game_msg_send,
