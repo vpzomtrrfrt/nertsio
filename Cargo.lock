@@ -3297,11 +3297,11 @@ checksum = "e1bcdd74c20ad5d95aacd60ef9ba40fdf77f767051040541df557b7a9b2a2121"
 
 [[package]]
 name = "nertsio_common"
-version = "0.1.0"
+version = "0.0.0-dev"
 
 [[package]]
 name = "nertsio_coordinator"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3321,7 +3321,7 @@ dependencies = [
 
 [[package]]
 name = "nertsio_gameserver"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3349,7 +3349,7 @@ dependencies = [
 
 [[package]]
 name = "nertsio_server_common"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "iref",
  "redis-async",
@@ -3357,7 +3357,7 @@ dependencies = [
 
 [[package]]
 name = "nertsio_textures"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "resvg",
  "tiny-skia",
@@ -3366,7 +3366,7 @@ dependencies = [
 
 [[package]]
 name = "nertsio_types"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "bincode",
  "itertools 0.10.5",
@@ -3424,7 +3424,7 @@ dependencies = [
 
 [[package]]
 name = "nertsio_ui_metrics"
-version = "0.1.0"
+version = "0.0.0-dev"
 dependencies = [
  "nertsio_types",
 ]
