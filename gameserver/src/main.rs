@@ -335,7 +335,8 @@ async fn main() {
                 .expect("Invalid value for MY_HOST_ADDRESS"),
             std::env::var("MY_HOSTNAME").ok(),
             {
-                let conn = redis_async::client::paired_connect(value)
+                let conn = nertsio_server_common::redis_connection_builder_from_uri(&value)
+                    .paired_connect()
                     .await
                     .expect("Failed to connnect to Redis");
 
