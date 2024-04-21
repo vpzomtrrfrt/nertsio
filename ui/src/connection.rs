@@ -12,6 +12,7 @@ use async_bincode::futures as async_bincode_current;
 #[cfg(not(target_family = "wasm"))]
 use async_bincode::tokio as async_bincode_current;
 
+#[allow(clippy::enum_variant_names)]
 pub enum ConnectionType<'a> {
     CreateGame {
         public: bool,
@@ -184,7 +185,7 @@ pub(crate) async fn handle_connection(
     log::debug!("connected");
 
     let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
-        name: (*settings_mutex.lock().unwrap()).name.clone(),
+        name: settings_mutex.lock().unwrap().name.clone(),
         game_id,
         new_game_public,
         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
@@ -230,6 +231,8 @@ pub(crate) async fn handle_connection(
 
     let (send_leave, recv_leave) = futures_channel::oneshot::channel();
 
+    // required to make this compile
+    #[allow(clippy::let_and_return)]
     let x = if let futures_util::future::Either::Left((Err(err), _)) = futures_util::future::select(
         Box::pin(futures_util::future::try_join4(
             async move {

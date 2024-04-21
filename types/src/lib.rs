@@ -55,7 +55,7 @@ impl Rank {
     }
 
     pub fn try_new(src: u8) -> Option<Self> {
-        if src >= 1 && src <= 13 {
+        if (1..=13).contains(&src) {
             Some(Rank(src))
         } else {
             None
@@ -160,6 +160,10 @@ impl Stack {
         self.cards.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.cards.is_empty()
+    }
+
     pub fn can_add(&self, card: CardInstance) -> bool {
         match self.cards.last() {
             None => {
@@ -189,17 +193,15 @@ impl Stack {
     }
 
     pub fn pop_many(&mut self, count: usize) -> Option<Vec<CardInstance>> {
-        if self.len() < count {
-            None
-        } else if self.len() == count {
-            Some(self.take_all())
-        } else {
-            Some(self.cards.split_off(self.len() - count))
+        match self.len().cmp(&count) {
+            std::cmp::Ordering::Less => None,
+            std::cmp::Ordering::Equal => Some(self.take_all()),
+            std::cmp::Ordering::Greater => Some(self.cards.split_off(self.len() - count)),
         }
     }
 
     pub fn take_all(&mut self) -> Vec<CardInstance> {
-        std::mem::replace(&mut self.cards, Vec::new())
+        std::mem::take(&mut self.cards)
     }
 
     pub fn cards(&self) -> &[CardInstance] {
@@ -336,13 +338,8 @@ impl HandAction {
             HandAction::FlipStock | HandAction::ReturnStock => false,
             HandAction::ShuffleStock { .. } => true,
             HandAction::Move { from, count: _, to } => {
-                if matches!(from, StackLocation::Player(_, PlayerStackLocation::Nerts)) {
-                    true
-                } else if matches!(to, StackLocation::Lake(_)) {
-                    true
-                } else {
-                    false
-                }
+                matches!(from, StackLocation::Player(_, PlayerStackLocation::Nerts))
+                    || matches!(to, StackLocation::Lake(_))
             }
         }
     }

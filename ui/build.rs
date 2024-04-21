@@ -40,11 +40,7 @@ fn main() {
     ))
     .unwrap();
 
-    write!(
-        mod_output,
-        "pub const LICENSES: &[(&'static str, &'static str)] = &["
-    )
-    .unwrap();
+    write!(mod_output, "pub const LICENSES: &[(&str, &str)] = &[").unwrap();
 
     for license in licenses {
         write!(

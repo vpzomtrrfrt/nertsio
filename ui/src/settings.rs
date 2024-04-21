@@ -18,16 +18,11 @@ pub enum DragMode {
     Hybrid,
 }
 
-#[derive(Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Deserialize, Serialize, Default)]
 pub enum CardTheme {
+    #[default]
     Standard,
     HighVisibility,
-}
-
-impl Default for CardTheme {
-    fn default() -> Self {
-        CardTheme::Standard
-    }
 }
 
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
@@ -132,7 +127,7 @@ async fn run_settings_save_loop(
     loop {
         interval.tick().await;
 
-        if {
+        let changed = {
             let lock = mutex.lock().unwrap();
             if saved_value != *lock {
                 saved_value = (*lock).clone();
@@ -140,7 +135,9 @@ async fn run_settings_save_loop(
             } else {
                 false
             }
-        } {
+        };
+
+        if changed {
             // value changed, need to save it
 
             if let Err(err) = async {

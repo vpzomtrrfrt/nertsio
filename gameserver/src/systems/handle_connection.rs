@@ -170,19 +170,18 @@ where
 
         let player_id = loop {
             let player_id = rand::thread_rng().gen();
-            if !server_game_state.players.contains_key(&player_id) {
-                server_game_state.players.insert(
-                    player_id,
-                    ServerGamePlayerState {
-                        name,
-                        ready: false,
-                        score: 0,
-                        controller: PlayerController::Network {
-                            game_stream_send_channel: game_stream_send_channel_send,
-                            connection: Box::new(handle.clone()),
-                        },
+            if let std::collections::hash_map::Entry::Vacant(entry) =
+                server_game_state.players.entry(player_id)
+            {
+                entry.insert(ServerGamePlayerState {
+                    name,
+                    ready: false,
+                    score: 0,
+                    controller: PlayerController::Network {
+                        game_stream_send_channel: game_stream_send_channel_send,
+                        connection: Box::new(handle.clone()),
                     },
-                );
+                });
 
                 break player_id;
             }
@@ -463,11 +462,10 @@ where
                                     if server_game_state.master_player == Some(player_id) {
                                         let bot_id = loop {
                                             let bot_id = rand::thread_rng().gen();
-                                            if !server_game_state.players.contains_key(&bot_id) {
+                                            if let std::collections::hash_map::Entry::Vacant(entry) = server_game_state.players.entry(bot_id) {
                                                 let bot_name = format!("Bot {}", bot_id);
 
-                                                server_game_state.players.insert(
-                                                    bot_id,
+                                                entry.insert(
                                                     ServerGamePlayerState {
                                                         name: bot_name,
                                                         ready: true,
@@ -528,8 +526,8 @@ where
                     })
                     .await?;
 
-                if let Err(_) = leave_send.send(()) {
-                    eprintln!("Failed to send leave event");
+                if let Err(err) = leave_send.send(()) {
+                    eprintln!("Failed to send leave event: {:?}", err);
                 }
 
                 Ok(())

@@ -1,3 +1,6 @@
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::collapsible_else_if)]
+
 use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
@@ -363,39 +366,36 @@ async fn main() {
                     let settings = &mut *settings_lock;
 
                     if settings.suit_callouts {
-                        match action {
-                            ni_ty::HandAction::Move { to, .. } => {
-                                if matches!(to, ni_ty::StackLocation::Lake(_)) {
-                                    let mut lock = game_info_mutex.lock().unwrap();
-                                    if let Some(shared) = (*lock).as_info_mut() {
-                                        if let Some(hand) = &shared.game.hand {
-                                            if let Some(stack) = hand.stack_at(to) {
-                                                if let Some(top) = stack.last() {
-                                                    if top.card.rank == ni_ty::Rank::ACE {
-                                                        macroquad::audio::play_sound_once(
-                                                            match top.card.suit {
-                                                                ni_ty::Suit::Spades => {
-                                                                    &suit_callout_spades
-                                                                }
-                                                                ni_ty::Suit::Diamonds => {
-                                                                    &suit_callout_diamonds
-                                                                }
-                                                                ni_ty::Suit::Clubs => {
-                                                                    &suit_callout_clubs
-                                                                }
-                                                                ni_ty::Suit::Hearts => {
-                                                                    &suit_callout_hearts
-                                                                }
-                                                            },
-                                                        );
-                                                    }
+                        if let ni_ty::HandAction::Move { to, .. } = action {
+                            if matches!(to, ni_ty::StackLocation::Lake(_)) {
+                                let mut lock = game_info_mutex.lock().unwrap();
+                                if let Some(shared) = (*lock).as_info_mut() {
+                                    if let Some(hand) = &shared.game.hand {
+                                        if let Some(stack) = hand.stack_at(to) {
+                                            if let Some(top) = stack.last() {
+                                                if top.card.rank == ni_ty::Rank::ACE {
+                                                    macroquad::audio::play_sound_once(
+                                                        match top.card.suit {
+                                                            ni_ty::Suit::Spades => {
+                                                                &suit_callout_spades
+                                                            }
+                                                            ni_ty::Suit::Diamonds => {
+                                                                &suit_callout_diamonds
+                                                            }
+                                                            ni_ty::Suit::Clubs => {
+                                                                &suit_callout_clubs
+                                                            }
+                                                            ni_ty::Suit::Hearts => {
+                                                                &suit_callout_hearts
+                                                            }
+                                                        },
+                                                    );
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            _ => {}
                         }
                     }
                 }

@@ -61,8 +61,7 @@ impl super::ViewImpl for IngameHandView {
 
                 let scale = real_screen_size.0 / screen_size.0;
 
-                let camera_rect =
-                    mq::Rect::new(0.0, screen_size.1, screen_size.0, -screen_size.1).into();
+                let camera_rect = mq::Rect::new(0.0, screen_size.1, screen_size.0, -screen_size.1);
 
                 let normal_camera = mq::Camera2D {
                     ..mq::Camera2D::from_display_rect(camera_rect)
@@ -137,10 +136,10 @@ impl super::ViewImpl for IngameHandView {
                             .contains(mouse_pos)
                             {
                                 if mouse_pressed {
-                                    let action = if player_state.stock_stack().len() > 0 {
-                                        ni_ty::HandAction::FlipStock
-                                    } else {
+                                    let action = if player_state.stock_stack().is_empty() {
                                         ni_ty::HandAction::ReturnStock
+                                    } else {
+                                        ni_ty::HandAction::FlipStock
                                     };
 
                                     if pred_hand_state
@@ -164,10 +163,16 @@ impl super::ViewImpl for IngameHandView {
                                     }
                                 }
                             } else {
+                                #[derive(Debug)]
+                                struct CandidateStack {
+                                    location: ni_ty::StackLocation,
+                                    distance: f32,
+                                    pickup_details: Option<(usize, mq::Vec2)>,
+                                }
+
                                 // oof this is complicated
                                 struct FoundChecker {
-                                    found:
-                                        Vec<(ni_ty::StackLocation, f32, Option<(usize, mq::Vec2)>)>,
+                                    found: Vec<CandidateStack>,
                                     mouse_pos: mq::Vec2,
                                     held_rect: Option<mq::Rect>,
                                 }
@@ -186,7 +191,11 @@ impl super::ViewImpl for IngameHandView {
                                         );
 
                                         if rect.contains(self.mouse_pos) {
-                                            self.found.push((loc, 0.0, Some(f())));
+                                            self.found.push(CandidateStack {
+                                                location: loc,
+                                                distance: 0.0,
+                                                pickup_details: Some(f()),
+                                            });
                                         } else if let Some(held_rect) = self.held_rect {
                                             if rect.overlaps(&held_rect) {
                                                 // from https://stackoverflow.com/a/18157551/2533397
@@ -197,7 +206,11 @@ impl super::ViewImpl for IngameHandView {
                                                     .max(0.0)
                                                     .max(self.mouse_pos.y - (rect.y + rect.h));
 
-                                                self.found.push((loc, dx * dx + dy * dy, None));
+                                                self.found.push(CandidateStack {
+                                                    location: loc,
+                                                    distance: dx * dx + dy * dy,
+                                                    pickup_details: None,
+                                                });
                                             }
                                         }
                                     }
@@ -216,7 +229,7 @@ impl super::ViewImpl for IngameHandView {
                                     }),
                                 };
 
-                                if player_state.nerts_stack().len() > 0 {
+                                if !player_state.nerts_stack().is_empty() {
                                     checker.check_stack(
                                         mq::Rect::new(
                                             nerts_stack_pos[0]
@@ -273,7 +286,7 @@ impl super::ViewImpl for IngameHandView {
                                     );
                                 }
 
-                                if player_state.waste_stack().len() > 0 {
+                                if !player_state.waste_stack().is_empty() {
                                     let top_pos = mq::Vec2::new(
                                         waste_stack_pos[0]
                                             + (metrics::HORIZONTAL_STACK_SPACING
@@ -318,7 +331,12 @@ impl super::ViewImpl for IngameHandView {
                                             ni_ty::PlayerStackLocation::Tableau(i as u8),
                                         ),
                                         || {
-                                            if stack.len() > 0 {
+                                            if stack.is_empty() {
+                                                (
+                                                    0,
+                                                    mouse_pos - stack_pos,
+                                                )
+                                            } else {
                                                 let found_idx = (((mouse_pos[1]
                                                     - stack_pos[1])
                                                     / metrics::VERTICAL_STACK_SPACING)
@@ -334,11 +352,6 @@ impl super::ViewImpl for IngameHandView {
                                                                 + ((found_idx as f32)
                                                                     * metrics::VERTICAL_STACK_SPACING),
                                                         ),
-                                                )
-                                            } else {
-                                                (
-                                                    0,
-                                                    mouse_pos - mq::Vec2::from(stack_pos),
                                                 )
                                             }
                                         },
@@ -361,12 +374,14 @@ impl super::ViewImpl for IngameHandView {
 
                                             if let Some(found) = found.first() {
                                                 if let ni_ty::StackLocation::Player(_, src) =
-                                                    found.0
+                                                    found.location
                                                 {
-                                                    let stack =
-                                                        pred_hand_state.stack_at(found.0).unwrap();
-                                                    if stack.len() > 0 {
-                                                        let (count, offset) = found.2.unwrap();
+                                                    let stack = pred_hand_state
+                                                        .stack_at(found.location)
+                                                        .unwrap();
+                                                    if !stack.is_empty() {
+                                                        let (count, offset) =
+                                                            found.pickup_details.unwrap();
 
                                                         let top_card = stack.cards()
                                                             [stack.cards().len() - count]
@@ -399,7 +414,9 @@ impl super::ViewImpl for IngameHandView {
 
                                         let found = {
                                             let mut found = found;
-                                            found.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+                                            found.sort_by(|a, b| {
+                                                a.distance.partial_cmp(&b.distance).unwrap()
+                                            });
                                             found
                                         };
 
@@ -407,7 +424,7 @@ impl super::ViewImpl for IngameHandView {
                                         let mut maybe_start_nondrag = false;
 
                                         for found in found {
-                                            let (target_loc, ..) = found;
+                                            let target_loc = found.location;
                                             if target_loc == src_loc {
                                                 any_success = true;
                                                 maybe_start_nondrag = true;
@@ -503,10 +520,10 @@ impl super::ViewImpl for IngameHandView {
                             || mq::is_key_pressed(mq::KeyCode::Z)
                             || mq::is_key_pressed(mq::KeyCode::X)
                         {
-                            let action = if player_state.stock_stack().len() > 0 {
-                                ni_ty::HandAction::FlipStock
-                            } else {
+                            let action = if player_state.stock_stack().is_empty() {
                                 ni_ty::HandAction::ReturnStock
+                            } else {
+                                ni_ty::HandAction::FlipStock
                             };
 
                             if pred_hand_state
@@ -618,13 +635,13 @@ impl super::ViewImpl for IngameHandView {
                         metrics.player_stack_pos(ni_ty::PlayerStackLocation::Stock, location),
                     ) + mq::Vec2::from(screen_center);
 
-                    if player_state.stock_stack().len() > 0 {
-                        ctx.draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
-                    } else {
+                    if player_state.stock_stack().is_empty() {
                         ctx.draw_placeholder(stock_pos[0], stock_pos[1]);
+                    } else {
+                        ctx.draw_back(stock_pos[0], stock_pos[1], player_state.player_id());
                     }
 
-                    if player_state.nerts_stack().len() > 0 {
+                    if !player_state.nerts_stack().is_empty() {
                         let nerts_stack_pos = mq::Vec2::from(
                             metrics.player_stack_pos(ni_ty::PlayerStackLocation::Nerts, location),
                         ) + mq::Vec2::from(screen_center);
@@ -755,7 +772,7 @@ impl super::ViewImpl for IngameHandView {
                         waste_cards
                     };
 
-                    if waste_cards.len() > 0 {
+                    if !waste_cards.is_empty() {
                         let waste_pos = mq::Vec2::from(
                             metrics.player_stack_pos(ni_ty::PlayerStackLocation::Waste, location),
                         ) + mq::Vec2::from(screen_center);
@@ -948,7 +965,7 @@ impl super::ViewImpl for IngameHandView {
                             if let Some(my_player_idx) = self.my_player_idx {
                                 let my_player_state = &pred_hand_state.players()[my_player_idx];
 
-                                if my_player_state.nerts_stack().len() < 1 {
+                                if my_player_state.nerts_stack().is_empty() {
                                     let location = metrics.player_loc(my_player_idx);
                                     let position = mq::Vec2::from(location.pos()) + mq::Vec2::from(screen_center);
 
@@ -977,7 +994,7 @@ impl super::ViewImpl for IngameHandView {
                                                     let settings = &mut *settings_lock;
 
                                                     if settings.nerts_callout {
-                                                        macroquad::audio::play_sound_once(&ctx.nerts_callout);
+                                                        macroquad::audio::play_sound_once(ctx.nerts_callout);
                                                     }
                                                 }
                                             });
@@ -988,7 +1005,7 @@ impl super::ViewImpl for IngameHandView {
                         });
 
                     if self.show_settings {
-                        if !super::render_settings_window(&egui_ctx, &ctx.settings_mutex) {
+                        if !super::render_settings_window(egui_ctx, &ctx.settings_mutex) {
                             self.show_settings = false;
                         }
                     }
@@ -1008,7 +1025,7 @@ impl super::ViewImpl for IngameHandView {
                 .into()
             }
         } else {
-            super::View::from_connection_state(&*lock)
+            super::View::from_connection_state(&lock)
         }
     }
 }

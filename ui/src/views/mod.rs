@@ -24,6 +24,7 @@ const CARD_SIZE: mq::Vec2 = mq::Vec2 {
 
 const CAN_QUIT: bool = cfg!(not(any(target_family = "wasm", target_os = "android")));
 
+#[allow(clippy::enum_variant_names)]
 #[enum_dispatch::enum_dispatch]
 pub enum View {
     CreditsView,
@@ -239,7 +240,7 @@ impl<'a> GameContext<'a> {
 
     fn draw_card(&self, card: ni_ty::Card, x: f32, y: f32) {
         mq::draw_texture_ex(
-            &self.cards_texture,
+            self.cards_texture,
             x,
             y,
             mq::WHITE,
@@ -465,12 +466,12 @@ impl ViewImpl for MainMenuView {
                                 ctx.do_connection(crate::connection::ConnectionType::CreateGame {
                                     public: true,
                                 });
-                                new_state = Some(ConnectingView::default().into());
+                                new_state = Some(ConnectingView.into());
                             } else if menu_button(ui, "Create Private Game") {
                                 ctx.do_connection(crate::connection::ConnectionType::CreateGame {
                                     public: false,
                                 });
-                                new_state = Some(ConnectingView::default().into());
+                                new_state = Some(ConnectingView.into());
                             } else if menu_button(ui, "Join Public Game") {
                                 let channel = ctx.start_loading_public_games();
                                 new_state = Some(PublicGameListLoadingView { channel }.into());
@@ -495,7 +496,7 @@ impl ViewImpl for MainMenuView {
                 });
 
             if self.show_settings {
-                if !render_settings_window(&egui_ctx, &ctx.settings_mutex) {
+                if !render_settings_window(egui_ctx, &ctx.settings_mutex) {
                     self.show_settings = false;
                 }
             }
@@ -595,7 +596,7 @@ impl ViewImpl for JoinGameFormView {
                     server_id,
                     game_id,
                 });
-                ConnectingView::default().into()
+                ConnectingView.into()
             } else {
                 self.into()
             }
@@ -765,7 +766,7 @@ impl ViewImpl for IngameNeutralView {
                             });
 
                             if self.show_settings {
-                                if !render_settings_window(&egui_ctx, &ctx.settings_mutex) {
+                                if !render_settings_window(egui_ctx, &ctx.settings_mutex) {
                                     self.show_settings = false;
                                 }
                             }
@@ -785,7 +786,7 @@ impl ViewImpl for IngameNeutralView {
                 .into(),
             }
         } else {
-            View::from_connection_state(&*lock)
+            View::from_connection_state(&lock)
         }
     }
 }
@@ -834,7 +835,7 @@ impl ViewImpl for IngameEndView {
                                                     ui.label(score.to_string());
 
                                                     if let Some(player) =
-                                                        shared.game.players.get(&player_id)
+                                                        shared.game.players.get(player_id)
                                                     {
                                                         ui.label(&player.name);
                                                     }
@@ -870,7 +871,7 @@ impl ViewImpl for IngameEndView {
                 .into(),
             }
         } else {
-            View::from_connection_state(&*lock)
+            View::from_connection_state(&lock)
         }
     }
 }
@@ -1068,7 +1069,7 @@ impl ViewImpl for PublicGameListView {
                     server: game.server.clone(),
                     game_id: game.game_id,
                 });
-                ConnectingView::default().into()
+                ConnectingView.into()
             }
         }
     }

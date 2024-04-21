@@ -111,7 +111,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                                                 let mut new_plan = None;
 
-                                                if hand_player.nerts_stack().len() == 0 {
+                                                if hand_player.nerts_stack().is_empty() {
                                                     new_plan = Some(BotPlan::CallNerts);
                                                 }
 
@@ -166,7 +166,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                         let dest = ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8));
                                                                         if dest_stack.can_add(back)
                                                                             && (!src_is_tableau
-                                                                                || dest_stack.len() > 0)
+                                                                                || !dest_stack.is_empty())
                                                                         {
                                                                             new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: dest, count: count as u8 }.into());
                                                                             break;
@@ -180,11 +180,12 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                 }
 
                                                 if new_plan.is_none() {
-                                                    if hand_player.stock_stack().len() > 0 {
+                                                    if !hand_player.stock_stack().is_empty() {
                                                         new_plan = Some(
                                                             ni_ty::HandAction::FlipStock.into(),
                                                         );
-                                                    } else if hand_player.waste_stack().len() > 0 {
+                                                    } else if !hand_player.waste_stack().is_empty()
+                                                    {
                                                         new_plan = Some(
                                                             ni_ty::HandAction::ReturnStock.into(),
                                                         );

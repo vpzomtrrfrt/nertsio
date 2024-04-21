@@ -1,3 +1,7 @@
+#![allow(clippy::collapsible_else_if)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::manual_map)]
+
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::collections::HashMap;
@@ -123,12 +127,14 @@ impl ServerGameState {
                 .iter()
                 .position(|player| player.player_id() == player_id)
             {
-                if hand_state.hand.players()[player_idx].nerts_stack().len() == 0
+                if hand_state.hand.players()[player_idx]
+                    .nerts_stack()
+                    .is_empty()
                     && !hand_state.hand.nerts_called
                 {
                     hand_state.hand.nerts_called = true;
                     send_to_others(
-                        &self,
+                        self,
                         ni_ty::protocol::GameMessageS2C::NertsCalled {
                             player: player_idx as u8,
                         },
@@ -181,7 +187,7 @@ impl ServerGameState {
                                 );
 
                                 if now_won {
-                                    for (_, player) in &mut server_game_state.players {
+                                    for player in server_game_state.players.values_mut() {
                                         player.score = 0;
                                     }
 
@@ -263,13 +269,13 @@ async fn main() {
             let mut certfile = tempfile::NamedTempFile::new().unwrap();
 
             let status = std::process::Command::new("openssl")
-                .args(&[
+                .args([
                     "req", "-x509", "-outform", "DER", "-newkey", "rsa:4096", "-keyout",
                 ])
                 .arg(keyfile.path())
                 .arg("-out")
                 .arg(certfile.path())
-                .args(&["-nodes", "-batch"])
+                .args(["-nodes", "-batch"])
                 .status()
                 .unwrap();
 
