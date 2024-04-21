@@ -132,7 +132,12 @@ pub(crate) async fn handle_connection(
             ))
             .await
             .map_err(error_send)?;
-        Arc::new(connecting.wait_connect().await?)
+        Arc::new(
+            connecting
+                .wait_connect()
+                .await
+                .map_err(|err| anyhow::anyhow!("Error in connection: {:?}", err))?,
+        )
     };
 
     let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {

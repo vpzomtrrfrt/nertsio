@@ -36,8 +36,8 @@ nertsio_ui_metrics = { path = "../ui_metrics" }
 futures-channel = "0.3.21"
 splines = { version = "4.0.3", features = ["glam"] }
 env_logger = "0.9.0"
-xwt = "0.4.2"
-xwt-core = "0.2.1"
+xwt = "0.11.0"
+xwt-core = "0.3.0"
 futures-io = "0.3.30"
 futures-ticker = "0.0.3"
 futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
@@ -52,7 +52,7 @@ bureau = "0.2.0"
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }
 wtransport = { version = "0.1.10", features = ["dangerous-configuration"] }
-xwt-wtransport = "0.2.3"
+xwt-wtransport = "0.6.0"
 atomicwrites = "0.3.1"
 async-bincode = { version = "0.7.2" }
 
@@ -63,7 +63,7 @@ wasm-bindgen-futures = "0.4.29"
 console_error_panic_hook = "0.1.7"
 web-sys = { version = "0.3.56", features = ["Window", "Storage"] }
 wasm-logger = "0.2.0"
-xwt-web-sys = "0.4.3"
+xwt-web-sys = "0.10.0"
 async-bincode = { version = "0.7.2", features = ["futures"], default-features = false }
 tokio-util = { version = "0.7.10", features = ["compat"] }
 
