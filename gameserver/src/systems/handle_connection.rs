@@ -70,12 +70,12 @@ where
 
     let handle = connection.create_handle();
 
-    let handshake_stream_res = connection.accept_bi_stream().await;
-    let handshake_stream =
-        handshake_stream_res.ok_or(anyhow::anyhow!("Stream closed without handshake"))??;
+    let maintenance_stream_res = connection.accept_bi_stream().await;
+    let maintenance_stream =
+        maintenance_stream_res.ok_or(anyhow::anyhow!("Stream closed without handshake"))??;
 
-    let mut handshake_stream_send = Box::pin(
-        handshake_stream
+    let mut maintenance_stream_send = Box::pin(
+        maintenance_stream
             .0
             .sink_map_err(anyhow::Error::from)
             .with(|msg| async move {
@@ -92,7 +92,7 @@ where
                 Result::<_, anyhow::Error>::Ok(dest.into_inner().freeze())
             }),
     );
-    let handshake_stream_recv = Box::pin(handshake_stream.1.map_err(Into::into).and_then(
+    let maintenance_stream_recv = Box::pin(maintenance_stream.1.map_err(Into::into).and_then(
         |data| async move {
             use bincode::Options;
 
@@ -106,7 +106,7 @@ where
 
     println!("init");
 
-    let (first_message, handshake_stream_recv) = handshake_stream_recv.into_future().await;
+    let (first_message, mut maintenance_stream_recv) = maintenance_stream_recv.into_future().await;
 
     println!("hmm {:?}", first_message);
 
@@ -114,10 +114,7 @@ where
 
     println!("first: {:?}", first_message);
 
-    let _ = handshake_stream_recv;
-
-    #[allow(irrefutable_let_patterns)]
-    let (name, game_id, new_game_public) = if let ni_ty::protocol::HandshakeMessageC2S::Hello {
+    let (name, game_id, new_game_public) = if let ni_ty::protocol::MaintenanceMessageC2S::Hello {
         name,
         game_id,
         new_game_public,
@@ -252,8 +249,8 @@ where
             );
         }
 
-        handshake_stream_send
-            .send(ni_ty::protocol::HandshakeMessageS2C::Hello)
+        maintenance_stream_send
+            .send(ni_ty::protocol::MaintenanceMessageS2C::Hello)
             .await?;
 
         let game_stream = connection.start_bi_stream().await?;
@@ -532,6 +529,22 @@ where
 
                 Ok(())
             },
+            async move {
+                while let Some(msg) = maintenance_stream_recv.try_next().await? {
+                    use ni_ty::protocol::MaintenanceMessageC2S;
+
+                    match msg {
+                        MaintenanceMessageC2S::Ping => {
+                            maintenance_stream_send.send(ni_ty::protocol::MaintenanceMessageS2C::Pong).await?;
+                        }
+                        _ => {
+                            anyhow::bail!("Unexpected maintenance message");
+                        }
+                    }
+                }
+
+                Ok(())
+            }
         )?;
 
         Ok(())

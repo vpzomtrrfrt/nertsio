@@ -955,6 +955,10 @@ impl super::ViewImpl for IngameHandView {
                                 if ui.button("Settings").clicked() {
                                     self.show_settings = true;
                                 }
+
+                                if let Some(ping) = shared.ping {
+                                    ui.label(format!("Ping: {}ms", ping.as_millis()));
+                                }
                             });
 
                             ui.label(format!(

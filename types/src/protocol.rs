@@ -18,7 +18,7 @@ pub fn get_close_message(code: u8) -> &'static str {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum HandshakeMessageC2S {
+pub enum MaintenanceMessageC2S {
     Hello {
         name: String,
         game_id: Option<u32>,
@@ -26,11 +26,13 @@ pub enum HandshakeMessageC2S {
         protocol_version: u16,
         min_protocol_version: u16,
     },
+    Ping,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub enum HandshakeMessageS2C {
+pub enum MaintenanceMessageS2C {
     Hello,
+    Pong,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

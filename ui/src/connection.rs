@@ -12,6 +12,9 @@ use async_bincode::futures as async_bincode_current;
 #[cfg(not(target_family = "wasm"))]
 use async_bincode::tokio as async_bincode_current;
 
+const PING_LOOP_DELAY_MINIMUM: std::time::Duration = std::time::Duration::from_secs(1);
+const PING_LOOP_DELAY_STANDARD: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[allow(clippy::enum_variant_names)]
 pub enum ConnectionType<'a> {
     CreateGame {
@@ -135,73 +138,73 @@ pub(crate) async fn handle_connection(
         Arc::new(connecting.wait_connect().await?)
     };
 
-    let (datagrams_recv, send_datagram, mut handshake_stream_send, handshake_stream_recv) = {
-        use xwt_core::datagram::{Receive, Send};
-
-        let handshake_stream = conn.open_bi().await.map_err(error_send)?.wait_bi().await?;
-
-        log::debug!("opened stream");
-
-        let handshake_stream_send = async_bincode_current::AsyncBincodeWriter::<
-            _,
-            ni_ty::protocol::HandshakeMessageC2S,
-            _,
-        >::from(hack_send_stream(Box::new(handshake_stream.0)))
-        .for_async();
-        let handshake_stream_recv = async_bincode_current::AsyncBincodeReader::<
-            _,
-            ni_ty::protocol::HandshakeMessageS2C,
-        >::from(hack_recv_stream(Box::new(handshake_stream.1)));
-
-        let (datagrams_out_tx, datagrams_out_rx) = futures_channel::mpsc::unbounded();
-
+    let (datagrams_recv, send_datagram, mut maintenance_stream_send, maintenance_stream_recv) =
         {
-            let conn = conn.clone();
-            async_rt.spawn(async move {
-                datagrams_out_rx
-                    .for_each(|bytes| async {
-                        if let Err(err) = conn.send_datagram(bytes).await {
-                            eprintln!("Failed to send datagram: {:?}", err);
-                        }
-                    })
-                    .await;
+            use xwt_core::datagram::{Receive, Send};
+
+            let maintenance_stream = conn.open_bi().await.map_err(error_send)?.wait_bi().await?;
+
+            log::debug!("opened stream");
+
+            let maintenance_stream_send =
+                async_bincode_current::AsyncBincodeWriter::<
+                    _,
+                    ni_ty::protocol::MaintenanceMessageC2S,
+                    _,
+                >::from(hack_send_stream(Box::new(maintenance_stream.0)))
+                .for_async();
+            let maintenance_stream_recv =
+                async_bincode_current::AsyncBincodeReader::<
+                    _,
+                    ni_ty::protocol::MaintenanceMessageS2C,
+                >::from(hack_recv_stream(Box::new(maintenance_stream.1)));
+
+            let (datagrams_out_tx, datagrams_out_rx) = futures_channel::mpsc::unbounded();
+
+            {
+                let conn = conn.clone();
+                async_rt.spawn(async move {
+                    datagrams_out_rx
+                        .for_each(|bytes| async {
+                            if let Err(err) = conn.send_datagram(bytes).await {
+                                eprintln!("Failed to send datagram: {:?}", err);
+                            }
+                        })
+                        .await;
+                });
+            }
+
+            let send_datagram = move |data| datagrams_out_tx.unbounded_send(data);
+
+            let datagrams_recv = futures_util::stream::unfold((), |()| async {
+                Some((conn.receive_datagram().await, ()))
             });
-        }
 
-        let send_datagram = move |data| datagrams_out_tx.unbounded_send(data);
-
-        let datagrams_recv = futures_util::stream::unfold((), |()| async {
-            Some((conn.receive_datagram().await, ()))
-        });
-
-        (
-            datagrams_recv,
-            send_datagram,
-            handshake_stream_send,
-            handshake_stream_recv,
-        )
-    };
+            (
+                datagrams_recv,
+                send_datagram,
+                maintenance_stream_send,
+                maintenance_stream_recv,
+            )
+        };
 
     log::debug!("connected");
 
-    let hello_msg = ni_ty::protocol::HandshakeMessageC2S::Hello {
+    let hello_msg = ni_ty::protocol::MaintenanceMessageC2S::Hello {
         name: settings_mutex.lock().unwrap().name.clone(),
         game_id,
         new_game_public,
         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
         min_protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
     };
-    handshake_stream_send.send(hello_msg).await?;
+    maintenance_stream_send.send(hello_msg).await?;
 
     log::debug!("sent hello");
 
-    let (first_message, handshake_stream_recv) = handshake_stream_recv.into_future().await;
+    let (first_message, mut maintenance_stream_recv) = maintenance_stream_recv.into_future().await;
     let first_message = first_message.ok_or(anyhow::anyhow!("Failed to complete handshake"))??;
 
-    let _ = (handshake_stream_recv, handshake_stream_send);
-
-    #[allow(irrefutable_let_patterns)]
-    if let ni_ty::protocol::HandshakeMessageS2C::Hello = first_message {
+    if let ni_ty::protocol::MaintenanceMessageS2C::Hello = first_message {
     } else {
         anyhow::bail!("Unknown handshake response");
     }
@@ -234,7 +237,7 @@ pub(crate) async fn handle_connection(
     // required to make this compile
     #[allow(clippy::let_and_return)]
     let x = if let futures_util::future::Either::Left((Err(err), _)) = futures_util::future::select(
-        Box::pin(futures_util::future::try_join4(
+        Box::pin(futures_util::future::try_join5(
             async move {
                 while let Some(msg) = game_msg_recv.next().await {
                     match msg {
@@ -352,6 +355,7 @@ pub(crate) async fn handle_connection(
                                             my_player_id: your_player_id,
                                             server_id,
                                             new_end_scores: None,
+                                            ping: None,
                                         });
                                 }
                                 GameMessageS2C::PlayerJoin { id, info } => {
@@ -526,6 +530,42 @@ pub(crate) async fn handle_connection(
                         }
                     })
                     .await
+            },
+            async move {
+                loop {
+                    let start_time = web_time::Instant::now();
+                    maintenance_stream_send
+                        .send(ni_ty::protocol::MaintenanceMessageC2S::Ping)
+                        .await?;
+
+                    let msg = maintenance_stream_recv
+                        .try_next()
+                        .await?
+                        .ok_or(anyhow::anyhow!("maintenance stream ended"))?;
+
+                    if let ni_ty::protocol::MaintenanceMessageS2C::Pong = msg {
+                        let end_time = web_time::Instant::now();
+
+                        let ping = end_time - start_time;
+
+                        info_mutex.lock().unwrap().as_info_mut().unwrap().ping = Some(ping);
+
+                        let delay = if ping >= (PING_LOOP_DELAY_STANDARD - PING_LOOP_DELAY_MINIMUM)
+                        {
+                            PING_LOOP_DELAY_MINIMUM
+                        } else {
+                            PING_LOOP_DELAY_STANDARD - ping
+                        };
+
+                        tokio::time::sleep(delay).await;
+                    } else {
+                        anyhow::bail!("unexpected maintenance message");
+                    }
+                }
+
+                // allows inferring return type
+                #[allow(unreachable_code)]
+                Ok(())
             },
         )),
         recv_leave,

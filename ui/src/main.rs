@@ -64,6 +64,7 @@ pub struct SharedInfo {
     server_id: u8,
     hand_extra: Option<HandExtra>,
     new_end_scores: Option<Vec<(u8, i32)>>,
+    ping: Option<std::time::Duration>,
 }
 
 #[derive(Clone)]
