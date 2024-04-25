@@ -557,7 +557,7 @@ pub(crate) async fn handle_connection(
                             PING_LOOP_DELAY_STANDARD - ping
                         };
 
-                        tokio::time::sleep(delay).await;
+                        futures_timer::Delay::new(delay).await;
                     } else {
                         anyhow::bail!("unexpected maintenance message");
                     }
