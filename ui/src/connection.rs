@@ -42,25 +42,6 @@ impl From<ni_ty::protocol::GameMessageC2S> for ConnectionMessage {
     }
 }
 
-#[derive(Debug)]
-pub struct CloseError {
-    code: u16,
-}
-
-impl CloseError {
-    pub fn code(&self) -> u16 {
-        self.code
-    }
-}
-
-impl std::fmt::Display for CloseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "WebSocket closed with code {}", self.code())
-    }
-}
-
-impl std::error::Error for CloseError {}
-
 /// Used to trigger sounds
 pub enum ConnectionEvent {
     HandInit,
