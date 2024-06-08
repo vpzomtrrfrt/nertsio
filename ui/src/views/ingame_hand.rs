@@ -44,7 +44,7 @@ impl super::ViewImpl for IngameHandView {
                 );
 
                 let needed_screen_width = metrics.needed_screen_width();
-                let needed_screen_height = metrics.needed_screen_height() + super::SCREEN_MARGIN;
+                let needed_screen_height = metrics.needed_screen_height();
 
                 let real_screen_size = (mq::screen_width(), mq::screen_height());
                 let screen_size = {
@@ -784,8 +784,11 @@ impl super::ViewImpl for IngameHandView {
                         ctx.draw_text(
                             "Shuffling soon if game remains stalled...",
                             stock_pos[0],
-                            stock_pos[1] + metrics::CARD_HEIGHT + 30.0,
-                            30,
+                            stock_pos[1]
+                                + metrics::CARD_HEIGHT
+                                + 15.0
+                                + metrics::NOTICE_HEIGHT / 2.0,
+                            metrics::NOTICE_FONT_SIZE,
                             mq::BLACK,
                         );
                     }
@@ -864,6 +867,31 @@ impl super::ViewImpl for IngameHandView {
                 }
 
                 mq::set_camera(&normal_camera);
+
+                {
+                    let mut pending_players_iter = shared.game.players.iter().filter(|(id, _)| {
+                        !pred_hand_state
+                            .players()
+                            .iter()
+                            .any(|x| x.player_id() == **id)
+                    });
+                    if let Some(first_pending_player) = pending_players_iter.next() {
+                        let count = pending_players_iter.count() + 1;
+                        let msg = if count == 1 {
+                            format!("1 player waiting to join: {}", first_pending_player.1.name)
+                        } else {
+                            format!("{} players waiting to join", count)
+                        };
+
+                        ctx.draw_text_centered(
+                            &msg,
+                            screen_center.0,
+                            metrics::NOTICE_HEIGHT / 2.0,
+                            metrics::NOTICE_FONT_SIZE,
+                            mq::BLACK,
+                        );
+                    }
+                }
 
                 if let Some(my_player_idx) = self.my_player_idx {
                     let my_player_state = &pred_hand_state.players()[my_player_idx];

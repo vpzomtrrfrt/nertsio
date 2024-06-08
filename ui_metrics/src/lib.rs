@@ -9,6 +9,9 @@ pub const VERTICAL_STACK_SPACING: f32 = 25.0;
 pub const PLAYER_SPACING: f32 = 20.0;
 pub const PLAYER_Y: f32 = 200.0;
 
+pub const NOTICE_FONT_SIZE: u16 = 25;
+pub const NOTICE_HEIGHT: f32 = 30.0;
+
 #[derive(Clone, Copy)]
 pub struct PlayerLocation {
     pub x: f32,
@@ -71,7 +74,7 @@ impl HandMetrics {
     }
 
     pub fn needed_screen_height(&self) -> f32 {
-        (PLAYER_Y + CARD_HEIGHT + 10.0 + CARD_HEIGHT) * 2.0
+        (PLAYER_Y + CARD_HEIGHT + 10.0 + CARD_HEIGHT + NOTICE_HEIGHT) * 2.0
     }
 
     pub fn lake_start_x(&self) -> f32 {
