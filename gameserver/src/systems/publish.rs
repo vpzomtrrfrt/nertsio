@@ -37,6 +37,17 @@ pub(crate) async fn run(
                             .map(|entry| ni_ty::protocol::PublicGameInfo {
                                 game_id: *entry.key(),
                                 players: entry.value().players.len() as u8,
+                                real_players: entry
+                                    .value()
+                                    .players
+                                    .values()
+                                    .filter(|x| {
+                                        matches!(
+                                            x.controller,
+                                            crate::PlayerController::Network { .. }
+                                        )
+                                    })
+                                    .count() as u8,
                                 waiting: entry.value().hand.is_none(),
                             })
                             .collect(),

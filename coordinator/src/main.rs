@@ -85,6 +85,7 @@ async fn handler_public_games_list(
                 .map(move |game| ni_ty::protocol::PublicGameInfoExpanded {
                     game_id: game.game_id,
                     players: game.players,
+                    real_players: game.real_players,
                     waiting: game.waiting,
                     server: ni_ty::protocol::ServerConnectionInfo {
                         server_id: *server_id,

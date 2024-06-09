@@ -106,6 +106,7 @@ pub enum DatagramMessageS2C {
 pub struct PublicGameInfo {
     pub game_id: u32,
     pub players: u8,
+    pub real_players: u8,
     pub waiting: bool,
 }
 
@@ -138,6 +139,7 @@ pub struct RespList<T> {
 pub struct PublicGameInfoExpanded<'a> {
     pub game_id: u32,
     pub players: u8,
+    pub real_players: u8,
     pub waiting: bool,
     pub server: ServerConnectionInfo<'a>,
 }
