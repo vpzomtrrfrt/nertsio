@@ -65,7 +65,7 @@ pub(crate) async fn run(
                         .send::<i64>(redis_async::resp_array!(
                             "PUBLISH",
                             ni_ty::protocol::COORDINATOR_CHANNEL,
-                            bincode::serialize(&status).unwrap()
+                            serde_json::to_vec(&status).unwrap()
                         ))
                         .await
                     {
