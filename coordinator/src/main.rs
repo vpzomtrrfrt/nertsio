@@ -307,7 +307,7 @@ async fn main() {
                 sub_stream
                     .try_for_each(|value| {
                         if let redis_async::resp::RespValue::BulkString(bytes) = value {
-                            match bincode::deserialize::<ni_ty::protocol::ServerStatusMessage>(
+                            match serde_json::from_slice::<ni_ty::protocol::ServerStatusMessage>(
                                 &bytes,
                             ) {
                                 Ok(message) => {
