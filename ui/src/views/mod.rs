@@ -645,6 +645,7 @@ impl ViewImpl for ConnectingView {
 #[derive(Default)]
 pub struct IngameNeutralView {
     show_settings: bool,
+    editing_game_settings: Option<ni_ty::GameSettings>,
 }
 
 impl ViewImpl for IngameNeutralView {
@@ -665,8 +666,41 @@ impl ViewImpl for IngameNeutralView {
                         };
 
                         egui_macroquad::ui(|egui_ctx| {
+                            egui::SidePanel::right("game_settings_panel")
+                                .frame(
+                                    egui::Frame::none()
+                                        .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                                )
+                                .resizable(false)
+                                .show(egui_ctx, |ui| {
+                                    ui.set_enabled(
+                                        !self.show_settings && self.editing_game_settings.is_none(),
+                                    );
+
+                                    ui.with_layout(
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.horizontal(|ui| {
+                                                ui.heading("Game Settings");
+
+                                                if shared.game.master_player == shared.my_player_id
+                                                {
+                                                    if ui.button("Edit").clicked() {
+                                                        self.editing_game_settings =
+                                                            Some(shared.game.settings.clone());
+                                                    }
+                                                }
+                                            });
+                                            ui.label(format!(
+                                                "Nerts Card Penalty: {}",
+                                                shared.game.settings.nerts_card_penalty
+                                            ));
+                                        },
+                                    );
+                                });
+
                             egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
-                                ui.set_enabled(!self.show_settings);
+                                ui.set_enabled(!self.show_settings && self.editing_game_settings.is_none());
 
                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                                     if ui.button("Leave").clicked() {
@@ -764,6 +798,49 @@ impl ViewImpl for IngameNeutralView {
                                 }
 
                             });
+
+                            if let Some(ref mut new_settings) = self.editing_game_settings {
+                                let menu_width = 300.0;
+
+                                let mut close = false;
+
+                                egui::containers::Window::new("Edit Game Settings")
+                                    .collapsible(false)
+                                    .resizable(false)
+                                    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                                    .show(egui_ctx, |ui| {
+                                        ui.vertical_centered(|ui| {
+                                            ui.allocate_ui_with_layout(
+                                                egui::Vec2::new(menu_width, 0.0),
+                                                egui::Layout::top_down(egui::Align::Min),
+                                                |ui| {
+                                                    ui.label("Nerts Card Penalty");
+                                                    ui.indent(hash!(), |ui| {
+                                                        for value in 0..=3 {
+                                                            ui.radio_value(&mut new_settings.nerts_card_penalty, value, value.to_string());
+                                                        }
+                                                    });
+
+                                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
+                                                        if ui.button("Save").clicked() {
+                                                            ctx.game_msg_send.borrow().as_ref().unwrap().unbounded_send(ni_ty::protocol::GameMessageC2S::SetSettings { settings: new_settings.clone() }.into()).unwrap();
+
+                                                            close = true;
+                                                        }
+
+                                                        if ui.button("Cancel").clicked() {
+                                                            close = true;
+                                                        }
+                                                    });
+                                                }
+                                            );
+                                        });
+                                    });
+
+                                if close {
+                                    self.editing_game_settings = None;
+                                }
+                            }
 
                             if self.show_settings {
                                 if !render_settings_window(egui_ctx, &ctx.settings_mutex) {

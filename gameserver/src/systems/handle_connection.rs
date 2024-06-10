@@ -206,6 +206,7 @@ where
                 .as_ref()
                 .map(|hand| hand.hand.clone()),
             master_player,
+            settings: server_game_state.settings.clone(),
         };
 
         (player_id, game_state, game_id)
@@ -515,6 +516,19 @@ where
                                                 }
                                             }
                                         }
+                                    }
+                                }
+                                GameMessageC2S::SetSettings { settings } => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if server_game_state.master_player == Some(player_id) && server_game_state.hand.is_none() {
+                                        server_game_state.settings = settings.clone();
+                                        server_game_state.send_to_all(
+                                            ni_ty::protocol::GameMessageS2C::SettingsChanged { settings }
+                                        );
                                     }
                                 }
                             }

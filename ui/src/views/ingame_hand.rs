@@ -1053,6 +1053,7 @@ impl super::ViewImpl for IngameHandView {
             } else {
                 super::IngameNeutralView {
                     show_settings: self.show_settings,
+                    editing_game_settings: None,
                 }
                 .into()
             }

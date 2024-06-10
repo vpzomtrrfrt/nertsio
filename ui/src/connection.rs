@@ -505,6 +505,12 @@ pub(crate) async fn handle_connection(
 
                                     hand.started = true;
                                 }
+                                GameMessageS2C::SettingsChanged { settings } => {
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    shared.game.settings = settings;
+                                }
                             }
 
                             Ok(())

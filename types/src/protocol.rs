@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 7;
+pub const PROTOCOL_VERSION: u16 = 8;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
@@ -43,6 +43,7 @@ pub enum GameMessageC2S {
     CallNerts,
     AddBot,
     KickPlayer { player: u8 },
+    SetSettings { settings: crate::GameSettings },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -86,6 +87,9 @@ pub enum GameMessageS2C {
         player: u8,
     },
     HandStart,
+    SettingsChanged {
+        settings: crate::GameSettings,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

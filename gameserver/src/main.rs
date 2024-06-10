@@ -13,7 +13,7 @@ mod systems;
 
 const MAX_PLAYERS: usize = 6;
 const WIN_SCORE: i32 = 100;
-const MIN_PROTOCOL_VERSION: u16 = 4;
+const MIN_PROTOCOL_VERSION: u16 = 8;
 
 #[derive(Clone)]
 enum BotPlan {
@@ -71,6 +71,7 @@ struct ServerGameState {
     hand: Option<ServerHandState>,
     public: bool,
     master_player: Option<u8>,
+    settings: ni_ty::GameSettings,
 }
 
 impl ServerGameState {
@@ -81,6 +82,7 @@ impl ServerGameState {
             hand: None,
             public,
             master_player: None,
+            settings: Default::default(),
         }
     }
 
@@ -151,7 +153,10 @@ impl ServerGameState {
                                     .hand
                                     .players()
                                     .iter()
-                                    .map(|player| (player.nerts_stack().len() as i32) * (-2))
+                                    .map(|player| {
+                                        -1 * (player.nerts_stack().len() as i32)
+                                            * (server_game_state.settings.nerts_card_penalty as i32)
+                                    })
                                     .collect();
                                 for stack in hand_state.hand.lake_stacks() {
                                     for card in stack.cards() {

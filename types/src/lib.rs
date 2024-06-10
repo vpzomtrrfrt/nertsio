@@ -533,11 +533,25 @@ pub struct GamePlayerState {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GameSettings {
+    pub nerts_card_penalty: u8,
+}
+
+impl Default for GameSettings {
+    fn default() -> Self {
+        Self {
+            nerts_card_penalty: 2,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameState {
     pub id: u32,
     pub players: BTreeMap<u8, GamePlayerState>,
     pub hand: Option<HandState>,
     pub master_player: u8,
+    pub settings: GameSettings,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
