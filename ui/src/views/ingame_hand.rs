@@ -878,9 +878,9 @@ impl super::ViewImpl for IngameHandView {
                     if let Some(first_pending_player) = pending_players_iter.next() {
                         let count = pending_players_iter.count() + 1;
                         let msg = if count == 1 {
-                            format!("1 player waiting to join: {}", first_pending_player.1.name)
+                            format!("1 spectator: {}", first_pending_player.1.name)
                         } else {
-                            format!("{} players waiting to join", count)
+                            format!("{} spectators", count)
                         };
 
                         ctx.draw_text_centered(

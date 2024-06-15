@@ -44,6 +44,7 @@ pub enum GameMessageC2S {
     AddBot,
     KickPlayer { player: u8 },
     SetSettings { settings: crate::GameSettings },
+    UpdateSelfSpectating { value: bool },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -89,6 +90,10 @@ pub enum GameMessageS2C {
     HandStart,
     SettingsChanged {
         settings: crate::GameSettings,
+    },
+    PlayerUpdateSpectating {
+        id: u8,
+        value: bool,
     },
 }
 

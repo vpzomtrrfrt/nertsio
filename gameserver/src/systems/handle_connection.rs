@@ -10,7 +10,13 @@ use std::sync::Arc;
 const HAND_START_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
 fn start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<GlobalState>) {
-    let new_hand = ni_ty::HandState::generate(server_game_state.players.keys().copied());
+    let new_hand = ni_ty::HandState::generate(
+        server_game_state
+            .players
+            .iter()
+            .filter(|(_, state)| !state.spectating)
+            .map(|(id, _)| *id),
+    );
     server_game_state.hand = Some(ServerHandState {
         hand: new_hand.clone(),
         mouse_states: vec![None; new_hand.players().len()],
@@ -48,12 +54,39 @@ fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<
         && server_game_state
             .players
             .values()
-            .all(|player| player.ready)
+            .all(|player| player.ready || player.spectating)
+        && server_game_state
+            .players
+            .values()
+            .any(|player| !player.spectating)
     {
         // all ready, start hand
 
         start_hand(server_game_state, global_state);
     }
+}
+
+fn on_player_leave(
+    server_game_state: &mut ServerGameState,
+    global_state: &Arc<GlobalState>,
+    player_id: u8,
+) {
+    server_game_state.players.remove(&player_id);
+    server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player_id });
+
+    if Some(player_id) == server_game_state.master_player {
+        // master left, need to assign a new one
+
+        let new_master = server_game_state.players.keys().next().copied();
+        server_game_state.master_player = new_master;
+        if let Some(new_master) = new_master {
+            server_game_state.send_to_all(ni_ty::protocol::GameMessageS2C::NewMasterPlayer {
+                player: new_master,
+            });
+        }
+    }
+
+    maybe_start_hand(server_game_state, &global_state);
 }
 
 async fn handle_connection<
@@ -173,6 +206,7 @@ where
                 entry.insert(ServerGamePlayerState {
                     name,
                     ready: false,
+                    spectating: false,
                     score: 0,
                     controller: PlayerController::Network {
                         game_stream_send_channel: game_stream_send_channel_send,
@@ -401,6 +435,58 @@ where
                                         maybe_start_hand(&mut server_game_state, &global_state);
                                     }
                                 }
+                                GameMessageC2S::UpdateSelfSpectating { value } => {
+                                    let mut server_game_state = global_state
+                                        .games
+                                        .get_mut(&game_id)
+                                        .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if server_game_state.hand.is_none() {
+                                        let server_player_state =
+                                            server_game_state.players.get_mut(&player_id).unwrap();
+
+                                        let change_spectating = if server_player_state.spectating != value {
+                                            Some(value)
+                                        } else {
+                                            None
+                                        };
+
+                                        let change_ready = if value && server_player_state.ready {
+                                            Some(false)
+                                        } else {
+                                            None
+                                        };
+
+                                        if let Some(new_value) = change_spectating {
+                                            server_player_state.spectating = new_value;
+                                        }
+                                        if let Some(new_value) = change_ready {
+                                            server_player_state.ready = new_value;
+                                        }
+
+                                        if let Some(new_value) = change_spectating {
+                                            send_to_others(
+                                                &server_game_state,
+                                                ni_ty::protocol::GameMessageS2C::PlayerUpdateSpectating {
+                                                    id: player_id,
+                                                    value: new_value,
+                                                },
+                                            );
+                                        }
+
+                                        if let Some(new_value) = change_ready {
+                                            send_to_others(
+                                                &server_game_state,
+                                                ni_ty::protocol::GameMessageS2C::PlayerUpdateReady {
+                                                    id: player_id,
+                                                    value: new_value,
+                                                },
+                                            );
+                                        }
+
+                                        maybe_start_hand(&mut server_game_state, &global_state);
+                                    }
+                                }
                                 GameMessageC2S::ForceStart => {
                                     let mut server_game_state = global_state
                                         .games
@@ -467,6 +553,7 @@ where
                                                     ServerGamePlayerState {
                                                         name: bot_name,
                                                         ready: true,
+                                                        spectating: false,
                                                         score: 0,
                                                         controller: PlayerController::Bot {
                                                             mouse_state: ni_ty::MouseState {
@@ -509,10 +596,7 @@ where
                                                     connection.close(ni_ty::protocol::CLOSE_KICK);
                                                 }
                                                 PlayerController::Bot { .. } => {
-                                                    server_game_state.players.remove(&player);
-                                                    server_game_state.send_to_all(
-                                                        ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player },
-                                                    );
+                                                    on_player_leave(&mut server_game_state, &global_state, player);
                                                 }
                                             }
                                         }
@@ -570,26 +654,7 @@ where
         .get_mut(&game_id)
         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-    server_game_state.players.remove(&player_id);
-    send_to_others(
-        &server_game_state,
-        ni_ty::protocol::GameMessageS2C::PlayerLeave { id: player_id },
-    );
-
-    if Some(player_id) == server_game_state.master_player {
-        // master left, need to assign a new one
-
-        let new_master = server_game_state.players.keys().next().copied();
-        server_game_state.master_player = new_master;
-        if let Some(new_master) = new_master {
-            send_to_others(
-                &server_game_state,
-                ni_ty::protocol::GameMessageS2C::NewMasterPlayer { player: new_master },
-            );
-        }
-    }
-
-    maybe_start_hand(&mut server_game_state, &global_state);
+    on_player_leave(&mut server_game_state, &global_state, player_id);
 
     res
 }

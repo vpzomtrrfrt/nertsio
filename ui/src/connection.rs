@@ -365,6 +365,16 @@ pub(crate) async fn handle_connection(
                                         .unwrap()
                                         .ready = value;
                                 }
+                                GameMessageS2C::PlayerUpdateSpectating { id, value } => {
+                                    (*info_mutex.lock().unwrap())
+                                        .as_info_mut()
+                                        .unwrap()
+                                        .game
+                                        .players
+                                        .get_mut(&id)
+                                        .unwrap()
+                                        .spectating = value;
+                                }
                                 GameMessageS2C::HandInit { info, delay } => {
                                     let mut lock = info_mutex.lock().unwrap();
                                     let shared = (*lock).as_info_mut().unwrap();

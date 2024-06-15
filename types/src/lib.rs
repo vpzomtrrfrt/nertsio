@@ -530,6 +530,7 @@ pub struct GamePlayerState {
     pub name: String,
     pub ready: bool,
     pub score: i32,
+    pub spectating: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

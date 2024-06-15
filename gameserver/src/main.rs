@@ -44,6 +44,7 @@ enum PlayerController {
 struct ServerGamePlayerState {
     name: String,
     ready: bool,
+    spectating: bool,
     score: i32,
     controller: PlayerController,
 }
@@ -61,6 +62,7 @@ impl ServerGamePlayerState {
             name: self.name.clone(),
             ready: self.ready,
             score: self.score,
+            spectating: self.spectating,
         }
     }
 }

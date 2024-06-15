@@ -726,24 +726,60 @@ impl ViewImpl for IngameNeutralView {
                                         ui.label(player.score.to_string());
 
                                         if *key == shared.my_player_id {
-                                            if ui.button(if player.ready { "Unready" } else { "Ready" }).clicked() {
-                                                let new_value = !player.ready;
-                                                player.ready = new_value;
+                                            if player.spectating {
+                                                if ui.button("Stop Spectating").clicked() {
+                                                    player.spectating = false;
 
-                                                ctx.game_msg_send
-                                                    .borrow()
-                                                    .as_ref()
-                                                    .unwrap()
-                                                    .unbounded_send(
-                                                        ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
-                                                            value: new_value,
-                                                        }
-                                                        .into(),
-                                                    )
-                                                    .unwrap();
+                                                    ctx.game_msg_send
+                                                        .borrow()
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .unbounded_send(
+                                                            ni_ty::protocol::GameMessageC2S::UpdateSelfSpectating {
+                                                                value: false,
+                                                            }
+                                                            .into(),
+                                                        )
+                                                        .unwrap();
+                                                }
+                                            } else {
+                                                ui.horizontal(|ui| {
+                                                    if ui.button(if player.ready { "Unready" } else { "Ready" }).clicked() {
+                                                        let new_value = !player.ready;
+                                                        player.ready = new_value;
+
+                                                        ctx.game_msg_send
+                                                            .borrow()
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .unbounded_send(
+                                                                ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                                                    value: new_value,
+                                                                }
+                                                                .into(),
+                                                            )
+                                                            .unwrap();
+                                                    }
+
+                                                    if ui.button("Spectate").clicked() {
+                                                        player.spectating = true;
+
+                                                        ctx.game_msg_send
+                                                            .borrow()
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .unbounded_send(
+                                                                ni_ty::protocol::GameMessageC2S::UpdateSelfSpectating {
+                                                                    value: true,
+                                                                }
+                                                                .into(),
+                                                            )
+                                                            .unwrap();
+                                                    }
+                                                });
                                             }
                                         } else {
-                                            ui.label(if player.ready { "Ready" } else { "Not Ready" });
+                                            ui.label(if player.spectating { "Spectating" } else if player.ready { "Ready" } else { "Not Ready" });
                                         }
 
                                         ui.horizontal(|ui| {
@@ -783,7 +819,9 @@ impl ViewImpl for IngameNeutralView {
                                             .unwrap();
                                     }
 
-                                    if shared.game.players.get(&shared.my_player_id).unwrap().ready {
+                                    let my_player_state = shared.game.players.get(&shared.my_player_id).unwrap();
+
+                                    if my_player_state.ready || my_player_state.spectating {
                                         if ui.button("Force Start").clicked() {
                                             ctx.game_msg_send
                                                 .borrow()
