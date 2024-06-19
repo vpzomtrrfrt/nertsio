@@ -37,25 +37,29 @@ pub(crate) async fn run(
                             .map(|entry| ni_ty::protocol::PublicGameInfo {
                                 game_id: *entry.key(),
                                 players: entry.value().players.len() as u8,
-                                real_players: entry
-                                    .value()
-                                    .players
-                                    .values()
-                                    .filter(|x| {
-                                        matches!(
-                                            x.controller,
-                                            crate::PlayerController::Network { .. }
-                                        )
-                                    })
-                                    .count() as u8,
+                                real_players: Some(
+                                    entry
+                                        .value()
+                                        .players
+                                        .values()
+                                        .filter(|x| {
+                                            matches!(
+                                                x.controller,
+                                                crate::PlayerController::Network { .. }
+                                            )
+                                        })
+                                        .count() as u8,
+                                ),
                                 waiting: entry.value().hand.is_none(),
-                                active_players: entry
-                                    .value()
-                                    .players
-                                    .values()
-                                    .filter(|x| !x.spectating)
-                                    .count() as u8,
-                                max_players: entry.value().settings.max_players,
+                                active_players: Some(
+                                    entry
+                                        .value()
+                                        .players
+                                        .values()
+                                        .filter(|x| !x.spectating)
+                                        .count() as u8,
+                                ),
+                                max_players: Some(entry.value().settings.max_players),
                             })
                             .collect(),
                         stats: global_state.games.iter().fold(

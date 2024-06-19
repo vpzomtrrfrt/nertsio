@@ -115,10 +115,10 @@ pub enum DatagramMessageS2C {
 pub struct PublicGameInfo {
     pub game_id: u32,
     pub players: u8,
-    pub real_players: u8,
+    pub real_players: Option<u8>,
     pub waiting: bool,
-    pub active_players: u8,
-    pub max_players: u8,
+    pub active_players: Option<u8>,
+    pub max_players: Option<u8>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -150,9 +150,9 @@ pub struct RespList<T> {
 pub struct PublicGameInfoExpanded<'a> {
     pub game_id: u32,
     pub players: u8,
-    pub real_players: u8,
-    pub active_players: u8,
-    pub max_players: u8,
+    pub real_players: Option<u8>,
+    pub active_players: Option<u8>,
+    pub max_players: Option<u8>,
     pub waiting: bool,
     pub server: ServerConnectionInfo<'a>,
 }
