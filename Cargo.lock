@@ -3328,6 +3328,7 @@ dependencies = [
  "bytes 1.5.0",
  "dashmap",
  "futures-util",
+ "nertsio_common",
  "nertsio_server_common",
  "nertsio_types",
  "nertsio_ui_metrics",

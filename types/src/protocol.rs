@@ -7,12 +7,14 @@ pub const PROTOCOL_VERSION: u16 = 9;
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
 pub const CLOSE_TOO_NEW: u8 = 3;
+pub const CLOSE_AUTH_FAILED: u8 = 4;
 
 pub fn get_close_message(code: u8) -> &'static str {
     match code {
         CLOSE_KICK => "Kicked",
         CLOSE_TOO_OLD => "Version Too Old",
         CLOSE_TOO_NEW => "Version Too New",
+        CLOSE_AUTH_FAILED => "Authentication Failed",
         _ => "Unknown Close Reason",
     }
 }

@@ -2,6 +2,7 @@ use crate::{
     GlobalState, PlayerController, ServerGamePlayerState, ServerGameState, ServerHandState,
 };
 use futures_util::{SinkExt, Stream, StreamExt, TryStreamExt};
+use nertsio_common as common;
 use nertsio_types as ni_ty;
 use rand::Rng;
 use std::future::Future;
@@ -166,6 +167,12 @@ where
             handle.close(ni_ty::protocol::CLOSE_TOO_OLD);
             anyhow::bail!("Mismatched protocol");
         }
+
+        if name.len() > common::MAX_NAME_LENGTH {
+            handle.close(ni_ty::protocol::CLOSE_AUTH_FAILED);
+            anyhow::bail!("Auth failed");
+        }
+
         (name, game_id, new_game_public == Some(true))
     } else {
         anyhow::bail!("Wrong first handshake message");
