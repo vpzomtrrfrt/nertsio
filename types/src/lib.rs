@@ -536,12 +536,14 @@ pub struct GamePlayerState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameSettings {
     pub nerts_card_penalty: u8,
+    pub max_players: u8,
 }
 
 impl Default for GameSettings {
     fn default() -> Self {
         Self {
             nerts_card_penalty: 2,
+            max_players: 6,
         }
     }
 }

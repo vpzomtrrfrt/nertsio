@@ -86,6 +86,8 @@ async fn handler_public_games_list(
                     game_id: game.game_id,
                     players: game.players,
                     real_players: game.real_players,
+                    active_players: game.active_players,
+                    max_players: game.max_players,
                     waiting: game.waiting,
                     server: ni_ty::protocol::ServerConnectionInfo {
                         server_id: *server_id,

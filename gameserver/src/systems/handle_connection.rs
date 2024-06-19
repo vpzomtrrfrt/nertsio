@@ -49,6 +49,7 @@ fn start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<Global
 }
 
 fn maybe_start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<GlobalState>) {
+    println!("maybe_start_hand");
     if server_game_state.hand.is_none()
         && !server_game_state.players.is_empty()
         && server_game_state
@@ -198,6 +199,13 @@ where
             }
         };
 
+        let spectating = server_game_state
+            .players
+            .values()
+            .filter(|x| !x.spectating)
+            .count()
+            >= server_game_state.settings.max_players.into();
+
         let player_id = loop {
             let player_id = rand::thread_rng().gen();
             if let std::collections::hash_map::Entry::Vacant(entry) =
@@ -206,7 +214,7 @@ where
                 entry.insert(ServerGamePlayerState {
                     name,
                     ready: false,
-                    spectating: false,
+                    spectating,
                     score: 0,
                     controller: PlayerController::Network {
                         game_stream_send_channel: game_stream_send_channel_send,
@@ -441,7 +449,17 @@ where
                                         .get_mut(&game_id)
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-                                    if server_game_state.hand.is_none() {
+                                    let allowed = if value {
+                                        true
+                                    } else {
+                                        server_game_state.players.values().filter(|x| !x.spectating).count() < server_game_state.settings.max_players.into()
+                                    };
+
+                                    if !allowed {
+                                        println!("disallowed, {} already playing", server_game_state.players.values().filter(|x| !x.spectating).count());
+                                    }
+
+                                    if allowed && server_game_state.hand.is_none() {
                                         let server_player_state =
                                             server_game_state.players.get_mut(&player_id).unwrap();
 
@@ -543,7 +561,7 @@ where
                                         .get_mut(&game_id)
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
 
-                                    if server_game_state.master_player == Some(player_id) {
+                                    if server_game_state.master_player == Some(player_id) && server_game_state.players.values().filter(|x| !x.spectating).count() < server_game_state.settings.max_players.into() {
                                         let bot_id = loop {
                                             let bot_id = rand::thread_rng().gen();
                                             if let std::collections::hash_map::Entry::Vacant(entry) = server_game_state.players.entry(bot_id) {

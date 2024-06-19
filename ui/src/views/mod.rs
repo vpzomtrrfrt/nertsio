@@ -659,6 +659,14 @@ impl ViewImpl for IngameNeutralView {
                     if let Some(scores) = shared.new_end_scores.take() {
                         IngameEndView { scores }.into()
                     } else {
+                        let can_add_player = shared
+                            .game
+                            .players
+                            .values()
+                            .filter(|x| !x.spectating)
+                            .count()
+                            < shared.game.settings.max_players.into();
+
                         let sorted = {
                             let mut result: Vec<u8> = shared.game.players.keys().copied().collect();
                             result.sort_by_key(|key| -shared.game.players[key].score);
@@ -691,6 +699,12 @@ impl ViewImpl for IngameNeutralView {
                                                     }
                                                 }
                                             });
+
+                                            ui.label(format!(
+                                                "Max Players: {}",
+                                                shared.game.settings.max_players
+                                            ));
+
                                             ui.label(format!(
                                                 "Nerts Card Penalty: {}",
                                                 shared.game.settings.nerts_card_penalty
@@ -727,7 +741,7 @@ impl ViewImpl for IngameNeutralView {
 
                                         if *key == shared.my_player_id {
                                             if player.spectating {
-                                                if ui.button("Stop Spectating").clicked() {
+                                                if ui.add_enabled(can_add_player, egui::Button::new("Stop Spectating")).clicked() {
                                                     player.spectating = false;
 
                                                     ctx.game_msg_send
@@ -808,7 +822,7 @@ impl ViewImpl for IngameNeutralView {
                                 });
 
                                 if shared.game.master_player == shared.my_player_id {
-                                    if ui.button("Add Bot").clicked() {
+                                    if ui.add_enabled(can_add_player, egui::Button::new("Add Bot")).clicked() {
                                         ctx.game_msg_send
                                             .borrow()
                                             .as_ref()
@@ -852,6 +866,11 @@ impl ViewImpl for IngameNeutralView {
                                                 egui::Vec2::new(menu_width, 0.0),
                                                 egui::Layout::top_down(egui::Align::Min),
                                                 |ui| {
+                                                    ui.label("Max Players");
+                                                    ui.indent(hash!(), |ui| {
+                                                        ui.add(egui::Slider::new(&mut new_settings.max_players, 1..=12));
+                                                    });
+
                                                     ui.label("Nerts Card Penalty");
                                                     ui.indent(hash!(), |ui| {
                                                         for value in 0..=3 {

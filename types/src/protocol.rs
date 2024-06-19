@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 8;
+pub const PROTOCOL_VERSION: u16 = 9;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
@@ -117,6 +117,8 @@ pub struct PublicGameInfo {
     pub players: u8,
     pub real_players: u8,
     pub waiting: bool,
+    pub active_players: u8,
+    pub max_players: u8,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -149,6 +151,8 @@ pub struct PublicGameInfoExpanded<'a> {
     pub game_id: u32,
     pub players: u8,
     pub real_players: u8,
+    pub active_players: u8,
+    pub max_players: u8,
     pub waiting: bool,
     pub server: ServerConnectionInfo<'a>,
 }
