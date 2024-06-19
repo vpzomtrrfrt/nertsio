@@ -4,8 +4,9 @@ RUN apk add --no-cache cargo pkgconf openssl-dev
 
 WORKDIR /usr/src/nertsio
 
-RUN sh -c "echo -e '[workspace]\nmembers = [\"types\", \"gameserver\", \"ui_metrics\", \"server_common\"]' > Cargo.toml"
+RUN sh -c "echo -e '[workspace]\nmembers = [\"types\", \"gameserver\", \"ui_metrics\", \"server_common\", \"common\"]' > Cargo.toml"
 COPY Cargo.lock ./
+COPY common ./common
 COPY gameserver ./gameserver
 COPY server_common ./server_common
 COPY types ./types
