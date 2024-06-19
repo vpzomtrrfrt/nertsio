@@ -126,7 +126,7 @@ pub struct ServerStatusMessage<'a> {
     pub server_id: u8,
     pub protocol_version: u16,
     pub min_protocol_version: u16,
-    pub address_ipv4: std::net::SocketAddrV4,
+    pub address_ipv4: Option<std::net::SocketAddrV4>,
     pub open_public_games: Vec<PublicGameInfo>,
     pub stats: ServerStats,
     pub hostname: Option<Cow<'a, str>>,
@@ -136,7 +136,10 @@ pub struct ServerStatusMessage<'a> {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ServerConnectionInfo<'a> {
     pub server_id: u8,
-    pub address_ipv4: std::net::SocketAddrV4,
+
+    #[deprecated(note = "For legacy protocol, no longer used")]
+    pub address_ipv4: Option<std::net::SocketAddrV4>,
+
     pub hostname: Option<Cow<'a, str>>,
     pub web_port: Option<u16>,
 }

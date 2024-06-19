@@ -109,7 +109,7 @@ pub(crate) async fn handle_connection(
                 "https://{}:{}",
                 server
                     .hostname
-                    .unwrap_or_else(|| server.address_ipv4.ip().to_string().into()),
+                    .ok_or(anyhow::anyhow!("No hostname for server"))?,
                 server
                     .web_port
                     .ok_or(anyhow::anyhow!("No web_port for server"))?

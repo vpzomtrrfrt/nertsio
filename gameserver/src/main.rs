@@ -236,12 +236,6 @@ struct GlobalState {
 
 #[tokio::main]
 async fn main() {
-    let port: u16 = std::env::var("PORT")
-        .as_deref()
-        .unwrap_or("6465")
-        .parse()
-        .unwrap();
-
     let web_port: u16 = std::env::var("WEB_PORT")
         .as_deref()
         .unwrap_or("6466")
@@ -342,11 +336,10 @@ async fn main() {
 
     let redis_conn_details = match std::env::var("REDIS_URI") {
         Ok(value) => Some((
-            std::env::var("MY_HOST_ADDRESS")
-                .expect("Missing MY_HOST_ADDRESS")
+            std::env::var("MY_HOSTNAME")
+                .expect("Missing MY_HOSTNAME")
                 .parse()
-                .expect("Invalid value for MY_HOST_ADDRESS"),
-            std::env::var("MY_HOSTNAME").ok(),
+                .expect("Invalid value for MY_HOSTNAME"),
             {
                 let conn = nertsio_server_common::redis_connection_builder_from_uri(&value)
                     .paired_connect()
@@ -389,14 +382,6 @@ async fn main() {
         Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
     };
 
-    let quic_endpoint =
-        quinn::Endpoint::server(quic_server_config, ([0, 0, 0, 0], port).into()).unwrap();
-    let quic_incoming = futures_util::stream::unfold((), |()| async {
-        let conn = quic_endpoint.accept().await;
-
-        conn.map(|conn| (conn, ()))
-    });
-
     let web_quic_endpoint =
         quinn::Endpoint::server(web_quic_server_config, ([0, 0, 0, 0], web_port).into()).unwrap();
     let web_incoming = futures_util::stream::unfold((), |()| async {
@@ -418,19 +403,15 @@ async fn main() {
     });
 
     futures_util::join!(
-        systems::handle_connection::run(global_state.clone(), quic_incoming),
         systems::handle_connection::run(global_state.clone(), web_incoming),
         systems::cleanup::run(global_state.clone()),
         {
             let global_state = global_state.clone();
             let redis_conn_details = redis_conn_details.clone();
             async move {
-                if let Some((my_address_ipv4, my_hostname, (server_id, redis_conn))) =
-                    redis_conn_details
-                {
+                if let Some((my_hostname, (server_id, redis_conn))) = redis_conn_details {
                     systems::publish::run(
                         global_state,
-                        my_address_ipv4,
                         my_hostname,
                         web_port,
                         server_id,

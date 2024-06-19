@@ -127,58 +127,6 @@ fn add_read_framing<S: tokio::io::AsyncRead>(
 }
 
 #[async_trait::async_trait]
-impl Connection for quinn::Connection {
-    type BiOut = MapErrAnyhowSink<
-        bytes::Bytes,
-        std::io::Error,
-        tokio_util::codec::FramedWrite<quinn::SendStream, tokio_util::codec::LengthDelimitedCodec>,
-    >;
-    type BiIn = MapErrAnyhowStream<
-        bytes::BytesMut,
-        std::io::Error,
-        tokio_util::codec::FramedRead<quinn::RecvStream, tokio_util::codec::LengthDelimitedCodec>,
-    >;
-    type Handle = quinn::Connection;
-
-    async fn accept_bi_stream(
-        &mut self,
-    ) -> Option<Result<(Self::BiOut, Self::BiIn), anyhow::Error>> {
-        match self.accept_bi().await {
-            Err(err) => Some(Err(err.into())),
-            Ok((send, recv)) => Some(Ok((add_write_framing(send), add_read_framing(recv)))),
-        }
-    }
-
-    async fn start_bi_stream(&mut self) -> Result<(Self::BiOut, Self::BiIn), anyhow::Error> {
-        let (send, recv) = self.open_bi().await?;
-
-        Ok((add_write_framing(send), add_read_framing(recv)))
-    }
-
-    async fn read_datagram(&self) -> Result<bytes::Bytes, anyhow::Error> {
-        self.read_datagram().await.map_err(Into::into)
-    }
-
-    fn create_handle(&self) -> Self::Handle {
-        self.clone()
-    }
-}
-
-#[async_trait::async_trait]
-impl ConnectionHandle for quinn::Connection {
-    fn send_datagram(&self, data: bytes::Bytes) -> Result<(), anyhow::Error> {
-        self.send_datagram(data).map_err(Into::into)
-    }
-
-    fn close(&self, code: u8) {
-        self.close(
-            code.into(),
-            ni_ty::protocol::get_close_message(code).as_bytes(),
-        );
-    }
-}
-
-#[async_trait::async_trait]
 impl Connection for webtransport_quinn::Session {
     type BiOut = MapErrAnyhowSink<
         bytes::Bytes,

@@ -89,6 +89,7 @@ async fn handler_public_games_list(
                     active_players: game.active_players,
                     max_players: game.max_players,
                     waiting: game.waiting,
+                    #[allow(deprecated)]
                     server: ni_ty::protocol::ServerConnectionInfo {
                         server_id: *server_id,
                         address_ipv4: server_address_ipv4,
@@ -137,6 +138,7 @@ async fn handler_servers_pick_for_new_game(
         .ok_or(Error::InternalStrStatic("no available servers"))?;
     let value = &value.1 .1;
 
+    #[allow(deprecated)]
     let info = ni_ty::protocol::ServerConnectionInfo {
         server_id: value.server_id,
         address_ipv4: value.address_ipv4,
@@ -157,6 +159,7 @@ async fn handler_servers_get(
     if let Some(value) = ctx.gameservers.read().unwrap().get(&server_id) {
         let value = &value.1;
 
+        #[allow(deprecated)]
         let info = ni_ty::protocol::ServerConnectionInfo {
             server_id: value.server_id,
             address_ipv4: value.address_ipv4,
