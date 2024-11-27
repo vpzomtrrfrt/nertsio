@@ -42,8 +42,8 @@ futures-io = "0.3.30"
 futures-ticker = "0.0.3"
 futures-timer = { version = "3.0.2", features = ["wasm-bindgen"] }
 web-time = "1.0.0"
-egui-macroquad = { git = "https://github.com/optozorax/egui-macroquad" }
-egui = "0.25.0"
+egui-macroquad = { git = "https://github.com/vpzomtrrfrt/egui-macroquad", branch = "egui-miniquad-0.15" }
+egui = "0.28.1"
 enum_dispatch = "0.3.12"
 
 [build-dependencies]

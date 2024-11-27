@@ -965,10 +965,12 @@ impl super::ViewImpl for IngameHandView {
                     egui::CentralPanel::default()
                         .frame(
                             egui::Frame::none()
-                                .inner_margin(egui::style::Margin::same(super::SCREEN_MARGIN)),
+                                .inner_margin(egui::Margin::same(super::SCREEN_MARGIN)),
                         )
                         .show(egui_ctx, |ui| {
-                            ui.set_enabled(interaction_enabled);
+                            if !interaction_enabled {
+                                ui.disable();
+                            }
 
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                                 if ui.button("Leave").clicked() {

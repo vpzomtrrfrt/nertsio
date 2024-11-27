@@ -418,7 +418,9 @@ impl ViewImpl for MainMenuView {
             egui::CentralPanel::default()
                 .frame(egui::Frame::none())
                 .show(egui_ctx, |ui| {
-                    ui.set_enabled(!self.show_settings);
+                    if self.show_settings {
+                        ui.disable();
+                    }
 
                     let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
                     let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
@@ -488,7 +490,7 @@ impl ViewImpl for MainMenuView {
 
             egui::TopBottomPanel::bottom("main_menu_bottom")
                 .show_separator_line(false)
-                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     if ui.button("Credits").clicked() {
                         new_state = Some(CreditsView.into());
@@ -536,7 +538,7 @@ impl ViewImpl for JoinGameFormView {
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
                     let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
@@ -677,13 +679,13 @@ impl ViewImpl for IngameNeutralView {
                             egui::SidePanel::right("game_settings_panel")
                                 .frame(
                                     egui::Frame::none()
-                                        .inner_margin(egui::style::Margin::same(SCREEN_MARGIN)),
+                                        .inner_margin(egui::Margin::same(SCREEN_MARGIN)),
                                 )
                                 .resizable(false)
                                 .show(egui_ctx, |ui| {
-                                    ui.set_enabled(
-                                        !self.show_settings && self.editing_game_settings.is_none(),
-                                    );
+                                    if self.show_settings || self.editing_game_settings.is_some() {
+                                        ui.disable();
+                                    }
 
                                     ui.with_layout(
                                         egui::Layout::top_down(egui::Align::Min),
@@ -713,8 +715,11 @@ impl ViewImpl for IngameNeutralView {
                                     );
                                 });
 
-                            egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
-                                ui.set_enabled(!self.show_settings && self.editing_game_settings.is_none());
+                            egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
+                                if self.show_settings || self.editing_game_settings.is_some() {
+                                    ui.disable();
+                                }
+
 
                                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                                     if ui.button("Leave").clicked() {
@@ -1137,7 +1142,7 @@ impl ViewImpl for PublicGameListView {
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     if ui.button("Back").clicked() {
                         go_back = true;
@@ -1219,7 +1224,7 @@ impl ViewImpl for CreditsView {
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::style::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     if ui.button("Back").clicked() {
                         go_back = true;
