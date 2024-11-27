@@ -341,10 +341,15 @@ async fn main() {
 
     egui_macroquad::cfg(|egui_ctx| {
         egui_ctx.set_visuals(egui::style::Visuals::light());
-        egui_ctx.set_zoom_factor(3.0);
     });
 
     while !ctx.quit {
+        let ui_scale = (mq::screen_width() / 1.5).min(mq::screen_height()) / 1080.0 * 3.0;
+
+        egui_macroquad::cfg(|egui_ctx| {
+            egui_ctx.set_zoom_factor(ui_scale);
+        });
+
         mq::set_default_camera();
 
         ctx.cards_texture = get_cards_texture();
