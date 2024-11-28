@@ -174,6 +174,8 @@ impl HandExtra {
 fn get_window_conf() -> mq::Conf {
     mq::Conf {
         window_title: "nertsio".to_owned(),
+        window_width: 1600,
+        window_height: 1000,
         icon: Some(macroquad::miniquad::conf::Icon {
             small: nertsio_textures::ICON_PIXELS_16.try_into().unwrap(),
             medium: nertsio_textures::ICON_PIXELS_32.try_into().unwrap(),
