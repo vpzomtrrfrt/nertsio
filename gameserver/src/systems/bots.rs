@@ -2,15 +2,13 @@ use crate::{BotPlan, GlobalState, PlayerController};
 use nertsio_types as ni_ty;
 use std::sync::Arc;
 
-const BOT_CURSOR_SPEED: f32 = 10.0;
-
 pub(crate) async fn run(global_state: Arc<GlobalState>) {
     futures_util::join!(
         {
             let global_state = global_state.clone();
 
             async move {
-                let mut interval = tokio::time::interval(std::time::Duration::from_millis(500));
+                let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
 
                 loop {
                     use nertsio_ui_metrics::{
@@ -405,6 +403,8 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                     interval.tick().await;
 
                     for mut game in global_state.games.iter_mut() {
+                        let speed = game.settings.bot_difficulty * 60.0 + 5.0;
+
                         if let Some(hand) = &game.hand {
                             let player_count = hand.hand.players().len();
 
@@ -425,17 +425,21 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                 + (mouse_state.position.1 - target.1).powf(2.0))
                                             .sqrt();
 
-                                            if dist > BOT_CURSOR_SPEED {
-                                                mouse_state.position = (
-                                                    mouse_state.position.0
-                                                        + (target.0 - mouse_state.position.0)
-                                                            / dist
-                                                            * BOT_CURSOR_SPEED,
-                                                    mouse_state.position.1
-                                                        + (target.1 - mouse_state.position.1)
-                                                            / dist
-                                                            * BOT_CURSOR_SPEED,
-                                                );
+                                            if dist > 0.0 {
+                                                if dist > speed {
+                                                    mouse_state.position = (
+                                                        mouse_state.position.0
+                                                            + (target.0 - mouse_state.position.0)
+                                                                / dist
+                                                                * speed,
+                                                        mouse_state.position.1
+                                                            + (target.1 - mouse_state.position.1)
+                                                                / dist
+                                                                * speed,
+                                                    );
+                                                } else {
+                                                    mouse_state.position = *target;
+                                                }
 
                                                 *seq += 1;
 

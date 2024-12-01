@@ -711,6 +711,12 @@ impl ViewImpl for IngameNeutralView {
                                                 "Nerts Card Penalty: {}",
                                                 shared.game.settings.nerts_card_penalty
                                             ));
+
+                                            ui.label(format!(
+                                                "Bot Difficulty: {}%",
+                                                (shared.game.settings.bot_difficulty * 100.0)
+                                                    .round()
+                                            ));
                                         },
                                     );
                                 });
@@ -882,6 +888,18 @@ impl ViewImpl for IngameNeutralView {
                                                             ui.radio_value(&mut new_settings.nerts_card_penalty, value, value.to_string());
                                                         }
                                                     });
+
+                                                    let mut bot_difficulty_pct = new_settings.bot_difficulty * 100.0;
+
+                                                    ui.label("Bot Difficulty");
+                                                    ui.indent(hash!(), |ui| {
+                                                        ui.add(egui::widgets::Slider::new(
+                                                            &mut bot_difficulty_pct,
+                                                            0.0..=100.0,
+                                                        ).max_decimals(0));
+                                                    });
+
+                                                    new_settings.bot_difficulty = bot_difficulty_pct / 100.0;
 
                                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
                                                         if ui.button("Save").clicked() {
