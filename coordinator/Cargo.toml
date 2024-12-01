@@ -13,8 +13,7 @@ futures-util = "0.3.18"
 trout = "0.2.0"
 anyhow = "1.0.51"
 http = "0.2.5"
-redis-async = "0.17.1"
-nertsio_server_common = { path = "../server_common" }
+redis = { version = "0.27.5", features = ["tokio-comp"] }
 nertsio_types = { path = "../types" }
 rand = "0.8.4"
 serde_json = "1.0.72"

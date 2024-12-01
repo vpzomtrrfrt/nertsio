@@ -4,6 +4,7 @@
 
 use nertsio_types as ni_ty;
 use rand::Rng;
+use redis::AsyncCommands;
 use std::collections::HashMap;
 use std::io::Read;
 use std::sync::Arc;
@@ -341,8 +342,9 @@ async fn main() {
                 .parse()
                 .expect("Invalid value for MY_HOSTNAME"),
             {
-                let conn = nertsio_server_common::redis_connection_builder_from_uri(&value)
-                    .paired_connect()
+                let mut conn = redis::Client::open(value)
+                    .expect("Failed to connect to Redis")
+                    .get_multiplexed_async_connection()
                     .await
                     .expect("Failed to connnect to Redis");
 
@@ -350,22 +352,21 @@ async fn main() {
                     let server_id: u8 = rand::thread_rng().gen();
 
                     let res = conn
-                        .send::<redis_async::resp::RespValue>(redis_async::resp_array!(
-                            "SET",
+                        .set_options(
                             format!("server_ids/{}", server_id),
                             "yes",
-                            "EX",
-                            "120",
-                            "NX",
-                        ))
+                            redis::SetOptions::default()
+                                .with_expiration(redis::SetExpiry::EX(120))
+                                .conditional_set(redis::ExistenceCheck::NX),
+                        )
                         .await
                         .expect("Failed to reserve server ID");
 
                     match res {
-                        redis_async::resp::RespValue::Nil => {
+                        redis::Value::Nil => {
                             // try again
                         }
-                        redis_async::resp::RespValue::SimpleString(_) => {
+                        redis::Value::Okay => {
                             // success
                             break server_id;
                         }

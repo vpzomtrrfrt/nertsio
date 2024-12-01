@@ -1,4 +1,4 @@
-use futures_util::{TryFutureExt, TryStreamExt};
+use futures_util::{StreamExt, TryFutureExt};
 use nertsio_types as ni_ty;
 use serde::Deserialize;
 use std::borrow::Cow;
@@ -293,13 +293,14 @@ async fn main() {
         })
     });
 
-    let redis_conn = nertsio_server_common::redis_connection_builder_from_uri(
-        &std::env::var("REDIS_URI").expect("Missing REDIS_URI"),
-    )
-    .pubsub_connect()
-    .await
-    .expect("Failed to connect to Redis");
-    let sub_stream = redis_conn
+    let mut redis_conn =
+        redis::Client::open(std::env::var("REDIS_URI").expect("Missing REDIS_URI"))
+            .expect("Failed to connect to Redis")
+            .get_async_pubsub()
+            .await
+            .expect("Failed to connect to Redis");
+
+    redis_conn
         .subscribe(ni_ty::protocol::COORDINATOR_CHANNEL)
         .await
         .expect("Failed to subscribe to channel");
@@ -309,31 +310,33 @@ async fn main() {
         {
             let global_state = global_state.clone();
             async move {
-                sub_stream
-                    .try_for_each(|value| {
-                        if let redis_async::resp::RespValue::BulkString(bytes) = value {
-                            match serde_json::from_slice::<ni_ty::protocol::ServerStatusMessage>(
-                                &bytes,
-                            ) {
-                                Ok(message) => {
-                                    println!("message = {:?}", message);
+                redis_conn
+                    .on_message()
+                    .for_each(|value| {
+                        match value.get_payload::<String>() {
+                            Ok(content) => {
+                                match serde_json::from_str::<ni_ty::protocol::ServerStatusMessage>(
+                                    &content,
+                                ) {
+                                    Ok(message) => {
+                                        println!("message = {:?}", message);
 
-                                    global_state.gameservers.write().unwrap().insert(
-                                        message.server_id,
-                                        (std::time::Instant::now(), message),
-                                    );
-                                }
-                                Err(err) => {
-                                    eprintln!("failed to parse message: {:?}", err);
+                                        global_state.gameservers.write().unwrap().insert(
+                                            message.server_id,
+                                            (std::time::Instant::now(), message),
+                                        );
+                                    }
+                                    Err(err) => {
+                                        eprintln!("failed to parse message: {:?}", err);
+                                    }
                                 }
                             }
-                        } else {
-                            eprintln!("received unknown message {:?}", value);
+                            Err(err) => eprintln!("failed to parse message: {:?}", err),
                         }
 
-                        futures_util::future::ok(())
+                        futures_util::future::ready(())
                     })
-                    .await?;
+                    .await;
                 Result::<(), _>::Err(anyhow::anyhow!("subscription stream ended"))
             }
         },
