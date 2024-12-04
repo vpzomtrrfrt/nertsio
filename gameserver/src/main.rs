@@ -243,6 +243,12 @@ async fn main() {
         .parse()
         .unwrap();
 
+    let my_region = match std::env::var("MY_REGION") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => panic!("MY_REGION is not valid unicode"),
+    };
+
     let (certs, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
         Some(certfile) => {
             let keyfile =
@@ -416,6 +422,7 @@ async fn main() {
                         my_hostname,
                         web_port,
                         server_id,
+                        my_region,
                         redis_conn,
                     )
                     .await;

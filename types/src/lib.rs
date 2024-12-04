@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use strum::IntoEnumIterator;
 
@@ -571,4 +572,9 @@ pub struct HeldInfo {
 pub struct MouseState {
     pub position: (f32, f32),
     pub held: Option<HeldInfo>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RegionInfo<'a> {
+    pub id: Cow<'a, str>,
 }

@@ -16,12 +16,12 @@ const PING_LOOP_DELAY_MINIMUM: std::time::Duration = std::time::Duration::from_s
 const PING_LOOP_DELAY_STANDARD: std::time::Duration = std::time::Duration::from_secs(10);
 
 #[allow(clippy::enum_variant_names)]
-pub enum ConnectionType<'a> {
+pub enum ConnectionType {
     CreateGame {
         public: bool,
     },
     JoinPublicGame {
-        server: ni_ty::protocol::ServerConnectionInfo<'a>,
+        server: ni_ty::protocol::ServerConnectionInfo<'static>,
         game_id: u32,
     },
     JoinPrivateGame {
@@ -52,7 +52,7 @@ pub enum ConnectionEvent {
 pub(crate) async fn handle_connection(
     http_client: &reqwest::Client,
     coordinator_url: &str,
-    connection_type: ConnectionType<'_>,
+    connection_type: ConnectionType,
     info_mutex: &std::sync::Mutex<ConnectionState>,
     mut game_msg_recv: futures_channel::mpsc::UnboundedReceiver<ConnectionMessage>,
     settings_mutex: Arc<Mutex<crate::Settings>>,
@@ -91,6 +91,7 @@ pub(crate) async fn handle_connection(
     };
 
     let server_id = server.server_id;
+    let region = server.region;
 
     let conn = {
         #[cfg(target_family = "wasm")]
@@ -317,6 +318,7 @@ pub(crate) async fn handle_connection(
                     .map_err(Into::into)
                     .try_for_each(|msg| {
                         let events_send = &events_send;
+                        let region = region.clone();
                         async move {
                             use ni_ty::protocol::GameMessageS2C;
 
@@ -335,6 +337,7 @@ pub(crate) async fn handle_connection(
                                             game: info,
                                             my_player_id: your_player_id,
                                             server_id,
+                                            region,
                                             new_end_scores: None,
                                             ping: None,
                                         });

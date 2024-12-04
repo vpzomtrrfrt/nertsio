@@ -133,6 +133,7 @@ pub struct ServerStatusMessage<'a> {
     pub stats: ServerStats,
     pub hostname: Option<Cow<'a, str>>,
     pub web_port: Option<u16>,
+    pub region: Option<Cow<'a, str>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -144,6 +145,8 @@ pub struct ServerConnectionInfo<'a> {
 
     pub hostname: Option<Cow<'a, str>>,
     pub web_port: Option<u16>,
+
+    pub region: Option<crate::RegionInfo<'a>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -109,7 +109,7 @@ pub struct GameContext<'a> {
 }
 
 impl<'a> GameContext<'a> {
-    fn do_connection(&self, connection_type: crate::connection::ConnectionType<'static>) {
+    fn do_connection(&self, connection_type: crate::connection::ConnectionType) {
         let (new_game_msg_send, game_msg_recv) = futures_channel::mpsc::unbounded();
         *self.game_msg_send.borrow_mut() = Some(new_game_msg_send);
 
@@ -717,6 +717,21 @@ impl ViewImpl for IngameNeutralView {
                                                 (shared.game.settings.bot_difficulty * 100.0)
                                                     .round()
                                             ));
+                                        },
+                                    );
+
+                                    ui.with_layout(
+                                        egui::Layout::top_down(egui::Align::Min),
+                                        |ui| {
+                                            ui.heading("Server Info");
+
+                                            if let Some(region) = &shared.region {
+                                                ui.label(format!("Region: {}", region.id));
+                                            }
+
+                                            if let Some(ping) = &shared.ping {
+                                                ui.label(format!("Ping: {}ms", ping.as_millis()));
+                                            }
                                         },
                                     );
                                 });

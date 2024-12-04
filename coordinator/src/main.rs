@@ -80,6 +80,9 @@ async fn handler_public_games_list(
             let server_address_ipv4 = info.address_ipv4;
             let server_hostname = info.hostname.as_deref();
             let server_web_port = info.web_port;
+            let server_region = info.region.as_deref().map(|id| ni_ty::RegionInfo {
+                id: Cow::Borrowed(id),
+            });
             info.open_public_games
                 .iter()
                 .map(move |game| ni_ty::protocol::PublicGameInfoExpanded {
@@ -95,6 +98,7 @@ async fn handler_public_games_list(
                         address_ipv4: server_address_ipv4,
                         hostname: server_hostname.map(Cow::Borrowed),
                         web_port: server_web_port,
+                        region: server_region.clone(),
                     },
                 })
         })
@@ -144,6 +148,9 @@ async fn handler_servers_pick_for_new_game(
         address_ipv4: value.address_ipv4,
         hostname: value.hostname.as_deref().map(Cow::Borrowed),
         web_port: value.web_port,
+        region: value.region.as_deref().map(|id| ni_ty::RegionInfo {
+            id: Cow::Borrowed(id),
+        }),
     };
 
     json_response(&info)
@@ -165,6 +172,9 @@ async fn handler_servers_get(
             address_ipv4: value.address_ipv4,
             hostname: value.hostname.as_deref().map(Cow::Borrowed),
             web_port: value.web_port,
+            region: value.region.as_deref().map(|id| ni_ty::RegionInfo {
+                id: Cow::Borrowed(id),
+            }),
         };
 
         json_response(&info)

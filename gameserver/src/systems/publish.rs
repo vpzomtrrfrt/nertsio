@@ -9,6 +9,7 @@ pub(crate) async fn run(
     my_hostname: String,
     web_port: u16,
     server_id: u8,
+    my_region: Option<String>,
     redis_conn: redis::aio::MultiplexedConnection,
 ) {
     futures_util::join!(
@@ -28,6 +29,7 @@ pub(crate) async fn run(
                         min_protocol_version: crate::MIN_PROTOCOL_VERSION,
                         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
                         web_port: Some(web_port),
+                        region: my_region.as_deref().map(Cow::Borrowed),
                         open_public_games: global_state
                             .games
                             .iter()

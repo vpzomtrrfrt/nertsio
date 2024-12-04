@@ -62,6 +62,7 @@ pub struct SharedInfo {
     game: ni_ty::GameState,
     my_player_id: u8,
     server_id: u8,
+    region: Option<ni_ty::RegionInfo<'static>>,
     hand_extra: Option<HandExtra>,
     new_end_scores: Option<Vec<(u8, i32)>>,
     ping: Option<std::time::Duration>,
