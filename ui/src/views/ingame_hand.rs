@@ -1083,7 +1083,7 @@ impl super::ViewImpl for IngameHandView {
                 .into()
             }
         } else {
-            super::View::from_connection_state(&lock)
+            super::View::from_connection_state(&lock, ctx)
         }
     }
 }

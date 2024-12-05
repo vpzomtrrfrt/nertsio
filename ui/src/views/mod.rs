@@ -24,14 +24,14 @@ const CARD_SIZE: mq::Vec2 = mq::Vec2 {
 
 const CAN_QUIT: bool = cfg!(not(any(target_family = "wasm", target_os = "android")));
 
+const PUBLIC_GAMES_REFRESH_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
+
 #[allow(clippy::enum_variant_names)]
 #[enum_dispatch::enum_dispatch]
 pub enum View {
     CreditsView,
     MainMenuView,
     JoinGameFormView,
-    PublicGameListLoadingView,
-    PublicGameListView,
     ConnectingView,
     IngameNeutralView,
     IngameHandView,
@@ -45,12 +45,12 @@ pub trait ViewImpl {
 }
 
 impl View {
-    pub fn from_connection_state(src: &ConnectionState) -> Self {
+    pub fn from_connection_state(src: &ConnectionState, ctx: &GameContext) -> Self {
         match src {
             ConnectionState::NotConnected {
                 expected: true,
                 code: _,
-            } => MainMenuView::default().into(),
+            } => MainMenuView::init(ctx).into(),
             ConnectionState::NotConnected {
                 expected: false,
                 code,
@@ -158,8 +158,9 @@ impl<'a> GameContext<'a> {
 
     fn start_loading_public_games(
         &self,
-    ) -> futures_channel::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>>
-    {
+    ) -> futures_channel::oneshot::Receiver<
+        Result<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>, anyhow::Error>,
+    > {
         let (send, recv) = futures_channel::oneshot::channel();
 
         let req_fut = self
@@ -173,14 +174,14 @@ impl<'a> GameContext<'a> {
                 let resp: ni_ty::protocol::RespList<ni_ty::protocol::PublicGameInfoExpanded> =
                     resp.json().await?;
 
-                let _ = send.send(resp.items); // if this fails, then we didn't need it anyway
-
-                Result::<_, anyhow::Error>::Ok(())
+                Result::<_, anyhow::Error>::Ok(resp.items)
             })
             .then(|res| {
-                if let Err(err) = res {
+                if let Err(ref err) = res {
                     log::error!("Failed to list public games: {:?}", err);
                 }
+
+                let _ = send.send(res); // if this fails, then we didn't need it anyway
 
                 futures_util::future::ready(())
             }),
@@ -397,13 +398,64 @@ pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<S
     open
 }
 
-#[derive(Default)]
 pub struct MainMenuView {
     show_settings: bool,
+
+    public_games_state: crate::LoadState<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>>,
+    public_games_done_at: Option<web_time::Instant>,
+    public_games_reload_channel: Option<
+        futures_channel::oneshot::Receiver<
+            Result<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>, anyhow::Error>,
+        >,
+    >,
+}
+
+impl MainMenuView {
+    pub fn init(ctx: &GameContext) -> MainMenuView {
+        Self {
+            show_settings: false,
+            public_games_state: ctx.start_loading_public_games().into(),
+            public_games_done_at: None,
+            public_games_reload_channel: None,
+        }
+    }
 }
 
 impl ViewImpl for MainMenuView {
     fn tick(mut self, ctx: &mut GameContext) -> View {
+        if self.public_games_state.is_done() {
+            match self.public_games_reload_channel.take() {
+                Some(channel) => {
+                    let new_state = crate::LoadState::from(channel).tick();
+                    match new_state {
+                        crate::LoadState::Pending(channel) => {
+                            self.public_games_reload_channel = Some(channel);
+                        }
+                        crate::LoadState::Done(value) => {
+                            self.public_games_state = crate::LoadState::Done(value);
+                            self.public_games_done_at = Some(web_time::Instant::now());
+                        }
+                    }
+                }
+                None => {
+                    let done_at = self
+                        .public_games_done_at
+                        .expect("Missing public_games_done_at, but it is done");
+                    if web_time::Instant::now().duration_since(done_at)
+                        >= PUBLIC_GAMES_REFRESH_DELAY
+                    {
+                        self.public_games_reload_channel = Some(ctx.start_loading_public_games());
+                    }
+                }
+            }
+        } else {
+            self.public_games_state = self.public_games_state.tick();
+
+            if self.public_games_state.is_done() {
+                self.public_games_done_at = Some(web_time::Instant::now());
+            }
+        }
+
         mq::clear_background(BACKGROUND_COLOR);
 
         let button_height = 20.0;
@@ -415,30 +467,29 @@ impl ViewImpl for MainMenuView {
         let mut new_state: Option<View> = None;
 
         egui_macroquad::ui(|egui_ctx| {
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none())
+            egui::SidePanel::left("main_menu")
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     if self.show_settings {
                         ui.disable();
                     }
 
-                    let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
-                    let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
-
                     let menu_height = button_height * (button_count as f32)
-                        + ((button_count - 1) as f32) * ui.spacing().item_spacing.y;
+                        + ((button_count - 1) as f32) * ui.spacing().item_spacing.y
+                        + 60.0;
 
-                    let menu_x = ui_screen_width / 2.0 - menu_width / 2.0;
-                    let menu_y = ui_screen_height / 2.0 - menu_height / 2.0;
+                    let menu_y = ui.max_rect().height() / 2.0 - menu_height / 2.0;
 
-                    ui.allocate_ui_at_rect(
-                        egui::Rect {
-                            min: egui::Pos2::new(menu_x, menu_y),
-                            max: egui::Pos2::new(menu_x + menu_width, menu_y + menu_height),
+                    ui.allocate_space(egui::Vec2 { x: 0.0, y: menu_y });
+
+                    ui.allocate_ui(
+                        egui::Vec2 {
+                            x: menu_width,
+                            y: menu_height,
                         },
                         |ui| {
                             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                                ui.heading("nertsio");
+                                ui.label(egui::RichText::new("nertsio").size(40.0));
                             });
 
                             let menu_button = |ui: &mut egui::Ui, label| {
@@ -467,13 +518,12 @@ impl ViewImpl for MainMenuView {
                             if menu_button(ui, "Create New Game") {
                                 ctx.do_connection(crate::connection::ConnectionType::CreateGame {});
                                 new_state = Some(ConnectingView.into());
-                            } else if menu_button(ui, "Join Public Game") {
-                                let channel = ctx.start_loading_public_games();
-                                new_state = Some(PublicGameListLoadingView { channel }.into());
                             } else if menu_button(ui, "Join Private Game") {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
+                            } else if menu_button(ui, "Credits") {
+                                new_state = Some(CreditsView.into());
                             } else if CAN_QUIT && menu_button(ui, "Quit") {
                                 ctx.quit();
                             }
@@ -481,12 +531,45 @@ impl ViewImpl for MainMenuView {
                     );
                 });
 
-            egui::TopBottomPanel::bottom("main_menu_bottom")
-                .show_separator_line(false)
+            egui::CentralPanel::default()
                 .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
-                    if ui.button("Credits").clicked() {
-                        new_state = Some(CreditsView.into());
+                    ui.heading("Public Games");
+
+                    match &self.public_games_state {
+                        crate::LoadState::Pending(_) => {
+                            ui.label("Loading...");
+                        }
+                        crate::LoadState::Done(Err(err)) => {
+                            ui.label(format!("Failed to load: {:?}", err));
+                        }
+                        crate::LoadState::Done(Ok(list)) => {
+                            egui::Grid::new("public_game_list").show(ui, |ui| {
+                                if list.is_empty() {
+                                    ui.label("No games found.");
+                                } else {
+                                    for game in list {
+                                        ui.label(crate::util::to_full_game_id_str(
+                                            game.server.server_id,
+                                            game.game_id,
+                                        ));
+                                        ui.label(format!("{} players", game.players));
+                                        ui.label(if game.waiting { "waiting" } else { "playing" });
+                                        if ui.button("Join").clicked() {
+                                            ctx.do_connection(
+                                                crate::connection::ConnectionType::JoinPublicGame {
+                                                    server: game.server.clone(),
+                                                    game_id: game.game_id,
+                                                },
+                                            );
+                                            new_state = Some(ConnectingView.into());
+                                        }
+
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                        }
                     }
                 });
 
@@ -596,7 +679,7 @@ impl ViewImpl for JoinGameFormView {
                 self.into()
             }
         } else if go_back {
-            MainMenuView::default().into()
+            MainMenuView::init(ctx).into()
         } else {
             self.into()
         }
@@ -624,7 +707,7 @@ impl ViewImpl for ConnectingView {
             ConnectionState::Connected(_) => IngameNeutralView::default().into(),
             ConnectionState::NotConnected { expected, code } => {
                 if expected {
-                    MainMenuView::default().into()
+                    MainMenuView::init(ctx).into()
                 } else {
                     LostConnectionView {
                         was_connected: false,
@@ -962,7 +1045,7 @@ impl ViewImpl for IngameNeutralView {
                 .into(),
             }
         } else {
-            View::from_connection_state(&lock)
+            View::from_connection_state(&lock, ctx)
         }
     }
 }
@@ -1047,7 +1130,7 @@ impl ViewImpl for IngameEndView {
                 .into(),
             }
         } else {
-            View::from_connection_state(&lock)
+            View::from_connection_state(&lock, ctx)
         }
     }
 }
@@ -1123,130 +1206,9 @@ impl ViewImpl for LostConnectionView {
         egui_macroquad::draw();
 
         if go_back {
-            MainMenuView::default().into()
+            MainMenuView::init(ctx).into()
         } else {
             self.into()
-        }
-    }
-}
-
-pub struct PublicGameListLoadingView {
-    channel:
-        futures_channel::oneshot::Receiver<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>>,
-}
-
-impl ViewImpl for PublicGameListLoadingView {
-    fn tick(mut self, ctx: &mut GameContext) -> View {
-        mq::clear_background(BACKGROUND_COLOR);
-
-        let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
-
-        ctx.draw_text_centered(
-            "Loading...",
-            screen_center.0,
-            screen_center.1,
-            60,
-            mq::BLACK,
-        );
-
-        if mq::is_key_pressed(mq::KeyCode::Escape) {
-            MainMenuView::default().into()
-        } else {
-            match self.channel.try_recv() {
-                Ok(Some(list)) => PublicGameListView { list }.into(),
-                Ok(None) => self.into(),
-                Err(futures_channel::oneshot::Canceled) => MainMenuView::default().into(),
-            }
-        }
-    }
-}
-
-pub struct PublicGameListView {
-    list: Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>,
-}
-
-impl ViewImpl for PublicGameListView {
-    fn tick(self, ctx: &mut GameContext) -> View {
-        mq::clear_background(BACKGROUND_COLOR);
-
-        let screen_center = (mq::screen_width() / 2.0, mq::screen_height() / 2.0);
-
-        let menu_width = 250.0;
-
-        let mut go_back = false;
-
-        let mut joining = None;
-
-        egui_macroquad::ui(|egui_ctx| {
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
-                .show(egui_ctx, |ui| {
-                    if ui.button("Back").clicked() {
-                        go_back = true;
-                    }
-
-                    if !self.list.is_empty() {
-                        ui.vertical_centered(|ui| {
-                            ui.heading("Public Games");
-                            ui.allocate_ui_with_layout(
-                                egui::Vec2::new(menu_width, 0.0),
-                                egui::Layout::top_down(egui::Align::Min),
-                                |ui| {
-                                    egui::Grid::new("public_game_list").show(ui, |ui| {
-                                        for game in &self.list {
-                                            ui.label(crate::util::to_full_game_id_str(
-                                                game.server.server_id,
-                                                game.game_id,
-                                            ));
-                                            ui.label(format!("{} players", game.players));
-                                            ui.label(if game.waiting {
-                                                "waiting"
-                                            } else {
-                                                "playing"
-                                            });
-                                            if ui.button("Join").clicked() {
-                                                joining = Some(game);
-                                            }
-
-                                            ui.end_row();
-                                        }
-                                    });
-                                },
-                            );
-                        });
-                    }
-                });
-        });
-
-        egui_macroquad::draw();
-
-        if self.list.is_empty() {
-            ctx.draw_text_centered(
-                "No games found.",
-                screen_center.0,
-                screen_center.1,
-                50,
-                mq::BLACK,
-            );
-        }
-
-        go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
-
-        match joining {
-            None => {
-                if go_back {
-                    MainMenuView::default().into()
-                } else {
-                    self.into()
-                }
-            }
-            Some(game) => {
-                ctx.do_connection(crate::connection::ConnectionType::JoinPublicGame {
-                    server: game.server.clone(),
-                    game_id: game.game_id,
-                });
-                ConnectingView.into()
-            }
         }
     }
 }
@@ -1254,7 +1216,7 @@ impl ViewImpl for PublicGameListView {
 pub struct CreditsView;
 
 impl ViewImpl for CreditsView {
-    fn tick(self, _ctx: &mut GameContext) -> View {
+    fn tick(self, ctx: &mut GameContext) -> View {
         let mut go_back = false;
 
         mq::clear_background(BACKGROUND_COLOR);
@@ -1289,7 +1251,7 @@ impl ViewImpl for CreditsView {
         go_back = go_back || mq::is_key_pressed(mq::KeyCode::Escape);
 
         if go_back {
-            MainMenuView::default().into()
+            MainMenuView::init(ctx).into()
         } else {
             self.into()
         }

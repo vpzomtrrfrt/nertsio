@@ -206,6 +206,39 @@ impl WasmAsyncRt {
     }
 }
 
+pub enum LoadState<T> {
+    Pending(futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>),
+    Done(Result<T, anyhow::Error>),
+}
+
+impl<T> LoadState<T> {
+    pub fn tick(self) -> Self {
+        match self {
+            LoadState::Pending(mut channel) => match channel.try_recv() {
+                Ok(None) => LoadState::Pending(channel),
+                Ok(Some(value)) => LoadState::Done(value),
+                Err(futures_channel::oneshot::Canceled) => {
+                    LoadState::Done(Err(anyhow::anyhow!("Canceled")))
+                }
+            },
+            LoadState::Done(value) => LoadState::Done(value),
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        match self {
+            LoadState::Done(_) => true,
+            _ => false,
+        }
+    }
+}
+
+impl<T> From<futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>> for LoadState<T> {
+    fn from(src: futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>) -> Self {
+        LoadState::Pending(src)
+    }
+}
+
 #[macroquad::main(get_window_conf)]
 async fn main() {
     #[cfg(not(target_family = "wasm"))]
@@ -340,7 +373,7 @@ async fn main() {
         nerts_callout: &nerts_callout,
     };
 
-    let mut view: views::View = views::MainMenuView::default().into();
+    let mut view: views::View = views::MainMenuView::init(&ctx).into();
 
     egui_macroquad::cfg(|egui_ctx| {
         egui_ctx.set_visuals(egui::style::Visuals::light());
