@@ -559,7 +559,11 @@ impl super::ViewImpl for IngameHandView {
 
                 mq::clear_background(super::BACKGROUND_COLOR);
 
+                let hand_scores = pred_hand_state.calculate_hand_scores(&shared.game.settings);
+
                 for (idx, player_state) in pred_hand_state.players().iter().enumerate() {
+                    let hand_score = hand_scores[idx];
+
                     let player = match shared.game.players.get(&player_state.player_id()) {
                         Some(player) => player,
                         None => continue,
@@ -573,13 +577,19 @@ impl super::ViewImpl for IngameHandView {
                     let name_pos = if location.inverted == self_inverted {
                         (
                             position[0] + metrics.player_hand_width() / 2.0,
-                            position[1] - 20.0,
+                            position[1] - 50.0,
                         )
                     } else {
                         (
                             screen_center.0 - location.x - metrics.player_hand_width() / 2.0,
-                            screen_center.1 - metrics::PLAYER_Y + 20.0,
+                            screen_center.1 - metrics::PLAYER_Y + 50.0,
                         )
+                    };
+
+                    let score_pos = if location.inverted == self_inverted {
+                        (name_pos.0, name_pos.1 + 35.0)
+                    } else {
+                        (name_pos.0, name_pos.1 - 35.0)
                     };
 
                     if shared.game.master_player == player_state.player_id() {
@@ -596,7 +606,20 @@ impl super::ViewImpl for IngameHandView {
                             mq::YELLOW,
                         );
                     }
+
                     ctx.draw_text_centered(&player.name, name_pos.0, name_pos.1, 40, mq::BLACK);
+
+                    ctx.draw_text_centered(
+                        &if hand_score < 0 {
+                            format!("{} - {}", player.score, -hand_score)
+                        } else {
+                            format!("{} + {}", player.score, hand_score)
+                        },
+                        score_pos.0,
+                        score_pos.1,
+                        30,
+                        mq::BLACK,
+                    );
 
                     if location.inverted != self_inverted {
                         mq::set_camera(&inverted_camera);

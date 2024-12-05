@@ -210,7 +210,7 @@ impl<'a> GameContext<'a> {
     fn draw_text_centered(&self, text: &str, x: f32, y: f32, font_size: u16, color: mq::Color) {
         let metrics = mq::measure_text(
             text,
-            None,
+            Some(&self.font),
             font_size,
             mq::camera_font_scale(font_size.into()).1,
         );

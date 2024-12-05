@@ -152,20 +152,9 @@ impl ServerGameState {
 
                         if let Some(mut server_game_state) = global_state.games.get_mut(&game_id) {
                             if let Some(hand_state) = server_game_state.hand.take() {
-                                let mut scores: Vec<_> = hand_state
+                                let scores = hand_state
                                     .hand
-                                    .players()
-                                    .iter()
-                                    .map(|player| {
-                                        -1 * (player.nerts_stack().len() as i32)
-                                            * (server_game_state.settings.nerts_card_penalty as i32)
-                                    })
-                                    .collect();
-                                for stack in hand_state.hand.lake_stacks() {
-                                    for card in stack.cards() {
-                                        scores[card.owner_id as usize] += 1;
-                                    }
-                                }
+                                    .calculate_hand_scores(&server_game_state.settings);
 
                                 let mut now_won = false;
 

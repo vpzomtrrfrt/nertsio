@@ -524,6 +524,24 @@ impl HandState {
                 .and_then(|player| player.mut_stack_at(loc)),
         }
     }
+
+    pub fn calculate_hand_scores(&self, settings: &GameSettings) -> Vec<i32> {
+        let mut scores: Vec<_> = self
+            .players()
+            .iter()
+            .map(|player| {
+                -1 * (player.nerts_stack().len() as i32) * (settings.nerts_card_penalty as i32)
+            })
+            .collect();
+
+        for stack in self.lake_stacks() {
+            for card in stack.cards() {
+                scores[card.owner_id as usize] += 1;
+            }
+        }
+
+        scores
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
