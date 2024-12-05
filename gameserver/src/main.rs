@@ -14,7 +14,7 @@ mod systems;
 
 const MAX_PLAYERS: usize = 6;
 const WIN_SCORE: i32 = 100;
-const MIN_PROTOCOL_VERSION: u16 = 10;
+const MIN_PROTOCOL_VERSION: u16 = 11;
 
 #[derive(Clone)]
 enum BotPlan {
@@ -72,18 +72,16 @@ struct ServerGameState {
     game_id: u32,
     players: HashMap<u8, ServerGamePlayerState>,
     hand: Option<ServerHandState>,
-    public: bool,
     master_player: Option<u8>,
     settings: ni_ty::GameSettings,
 }
 
 impl ServerGameState {
-    pub fn new(game_id: u32, public: bool) -> Self {
+    pub fn new(game_id: u32) -> Self {
         Self {
             game_id,
             players: Default::default(),
             hand: None,
-            public,
             master_player: None,
             settings: Default::default(),
         }

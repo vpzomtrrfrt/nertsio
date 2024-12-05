@@ -2,7 +2,10 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
-pub const PROTOCOL_VERSION: u16 = 10;
+
+/// Current version of protocol. If this is incompatible with previous versions,
+/// MIN_PROTOCOL_VERSION in gameserver may also need to be updated.
+pub const PROTOCOL_VERSION: u16 = 11;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
@@ -22,11 +25,10 @@ pub fn get_close_message(code: u8) -> &'static str {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum MaintenanceMessageC2S {
     Hello {
-        name: String,
-        game_id: Option<u32>,
-        new_game_public: Option<bool>,
         protocol_version: u16,
         min_protocol_version: u16,
+        name: String,
+        game_id: Option<u32>,
     },
     Ping,
 }

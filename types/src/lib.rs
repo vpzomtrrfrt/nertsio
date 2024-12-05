@@ -557,6 +557,7 @@ pub struct GameSettings {
     pub nerts_card_penalty: u8,
     pub max_players: u8,
     pub bot_difficulty: f32,
+    pub public: bool,
 }
 
 impl Default for GameSettings {
@@ -565,6 +566,7 @@ impl Default for GameSettings {
             nerts_card_penalty: 2,
             max_players: 6,
             bot_difficulty: 0.1,
+            public: false,
         }
     }
 }

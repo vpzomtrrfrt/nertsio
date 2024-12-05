@@ -149,10 +149,9 @@ where
 
     println!("first: {:?}", first_message);
 
-    let (name, game_id, new_game_public) = if let ni_ty::protocol::MaintenanceMessageC2S::Hello {
+    let (name, game_id) = if let ni_ty::protocol::MaintenanceMessageC2S::Hello {
         name,
         game_id,
-        new_game_public,
         protocol_version,
         min_protocol_version,
     } = first_message
@@ -173,7 +172,7 @@ where
             anyhow::bail!("Auth failed");
         }
 
-        (name, game_id, new_game_public == Some(true))
+        (name, game_id)
     } else {
         anyhow::bail!("Wrong first handshake message");
     };
@@ -197,10 +196,7 @@ where
                     if let dashmap::mapref::entry::Entry::Vacant(entry) =
                         global_state.games.entry(game_id)
                     {
-                        break (
-                            entry.insert(ServerGameState::new(game_id, new_game_public)),
-                            game_id,
-                        );
+                        break (entry.insert(ServerGameState::new(game_id)), game_id);
                     }
                 }
             }

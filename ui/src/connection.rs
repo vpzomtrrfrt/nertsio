@@ -17,9 +17,7 @@ const PING_LOOP_DELAY_STANDARD: std::time::Duration = std::time::Duration::from_
 
 #[allow(clippy::enum_variant_names)]
 pub enum ConnectionType {
-    CreateGame {
-        public: bool,
-    },
+    CreateGame {},
     JoinPublicGame {
         server: ni_ty::protocol::ServerConnectionInfo<'static>,
         game_id: u32,
@@ -59,8 +57,8 @@ pub(crate) async fn handle_connection(
     events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
     async_rt: crate::AsyncRt,
 ) -> Result<(), anyhow::Error> {
-    let (server, game_id, new_game_public) = match connection_type {
-        ConnectionType::CreateGame { public } => {
+    let (server, game_id) = match connection_type {
+        ConnectionType::CreateGame {} => {
             let resp = http_client
                 .post(format!(
                     "{}servers:pick_for_new_game?protocol_version={}&min_protocol_version={}",
@@ -74,9 +72,9 @@ pub(crate) async fn handle_connection(
 
             let resp: ni_ty::protocol::ServerConnectionInfo = resp.json().await?;
 
-            (resp, None, Some(public))
+            (resp, None)
         }
-        ConnectionType::JoinPublicGame { server, game_id } => (server, Some(game_id), None),
+        ConnectionType::JoinPublicGame { server, game_id } => (server, Some(game_id)),
         ConnectionType::JoinPrivateGame { server_id, game_id } => {
             let resp = http_client
                 .get(format!("{}servers/{}", coordinator_url, server_id))
@@ -86,7 +84,7 @@ pub(crate) async fn handle_connection(
 
             let resp: ni_ty::protocol::ServerConnectionInfo = resp.json().await?;
 
-            (resp, Some(game_id), None)
+            (resp, Some(game_id))
         }
     };
 
@@ -173,11 +171,10 @@ pub(crate) async fn handle_connection(
     log::debug!("connected");
 
     let hello_msg = ni_ty::protocol::MaintenanceMessageC2S::Hello {
-        name: settings_mutex.lock().unwrap().name.clone(),
-        game_id,
-        new_game_public,
         protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
         min_protocol_version: ni_ty::protocol::PROTOCOL_VERSION,
+        name: settings_mutex.lock().unwrap().name.clone(),
+        game_id,
     };
     maintenance_stream_send.send(hello_msg).await?;
 

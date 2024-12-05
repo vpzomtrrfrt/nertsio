@@ -408,7 +408,7 @@ impl ViewImpl for MainMenuView {
 
         let button_height = 20.0;
 
-        let button_count = 7;
+        let button_count = 6;
 
         let menu_width = 150.0;
 
@@ -464,15 +464,8 @@ impl ViewImpl for MainMenuView {
                                 });
                             }
 
-                            if menu_button(ui, "Create Public Game") {
-                                ctx.do_connection(crate::connection::ConnectionType::CreateGame {
-                                    public: true,
-                                });
-                                new_state = Some(ConnectingView.into());
-                            } else if menu_button(ui, "Create Private Game") {
-                                ctx.do_connection(crate::connection::ConnectionType::CreateGame {
-                                    public: false,
-                                });
+                            if menu_button(ui, "Create New Game") {
+                                ctx.do_connection(crate::connection::ConnectionType::CreateGame {});
                                 new_state = Some(ConnectingView.into());
                             } else if menu_button(ui, "Join Public Game") {
                                 let channel = ctx.start_loading_public_games();
@@ -702,6 +695,13 @@ impl ViewImpl for IngameNeutralView {
                                                 }
                                             });
 
+                                            ui.label(if shared.game.settings.public {
+                                                egui::RichText::new("Public")
+                                            } else {
+                                                egui::RichText::new("Private")
+                                                    .color(egui::Color32::YELLOW)
+                                            });
+
                                             ui.label(format!(
                                                 "Max Players: {}",
                                                 shared.game.settings.max_players
@@ -892,6 +892,10 @@ impl ViewImpl for IngameNeutralView {
                                                 egui::Vec2::new(menu_width, 0.0),
                                                 egui::Layout::top_down(egui::Align::Min),
                                                 |ui| {
+                                                    // the server is fine with reverting to private
+                                                    // but it's probably misleading to allow it
+                                                    ui.add_enabled(!shared.game.settings.public, egui::Checkbox::new(&mut new_settings.public, "Public"));
+
                                                     ui.label("Max Players");
                                                     ui.indent(hash!(), |ui| {
                                                         ui.add(egui::Slider::new(&mut new_settings.max_players, 1..=12));

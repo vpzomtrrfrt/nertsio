@@ -34,7 +34,8 @@ pub(crate) async fn run(
                             .games
                             .iter()
                             .filter(|entry| {
-                                entry.value().public && entry.value().players.len() < MAX_PLAYERS
+                                entry.value().settings.public
+                                    && entry.value().players.len() < MAX_PLAYERS
                             })
                             .map(|entry| ni_ty::protocol::PublicGameInfo {
                                 game_id: *entry.key(),
@@ -72,7 +73,7 @@ pub(crate) async fn run(
                                 private_game_players: 0,
                             },
                             |mut acc, entry| {
-                                if entry.value().public {
+                                if entry.value().settings.public {
                                     acc.public_games += 1;
                                     acc.public_game_players += entry.value().players.len() as u32;
                                 } else {
