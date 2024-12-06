@@ -597,4 +597,5 @@ pub struct MouseState {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RegionInfo<'a> {
     pub id: Cow<'a, str>,
+    pub name: Cow<'a, str>,
 }

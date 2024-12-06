@@ -812,7 +812,7 @@ impl ViewImpl for IngameNeutralView {
                                             ui.heading("Server Info");
 
                                             if let Some(region) = &shared.region {
-                                                ui.label(format!("Region: {}", region.id));
+                                                ui.label(format!("Region: {}", region.name));
                                             }
 
                                             if let Some(ping) = &shared.ping {

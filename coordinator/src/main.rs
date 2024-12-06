@@ -33,6 +33,31 @@ struct GlobalState {
             ),
         >,
     >,
+
+    regions: HashMap<String, RegionConfig>,
+}
+
+impl GlobalState {
+    pub fn get_region_for_output<'a>(&'a self, id: &'a str) -> ni_ty::RegionInfo {
+        match self.regions.get(id) {
+            None => ni_ty::RegionInfo {
+                id: id.into(),
+                name: id.into(),
+            },
+            Some(info) => ni_ty::RegionInfo {
+                id: (&info.id).into(),
+                name: (&info.name).into(),
+            },
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct RegionConfig {
+    id: String,
+    name: String,
+    lat: f64,
+    lon: f64,
 }
 
 type RouteNode<P> = trout::Node<
@@ -80,9 +105,10 @@ async fn handler_public_games_list(
             let server_address_ipv4 = info.address_ipv4;
             let server_hostname = info.hostname.as_deref();
             let server_web_port = info.web_port;
-            let server_region = info.region.as_deref().map(|id| ni_ty::RegionInfo {
-                id: Cow::Borrowed(id),
-            });
+            let server_region = info
+                .region
+                .as_deref()
+                .map(|id| ctx.get_region_for_output(id));
             info.open_public_games
                 .iter()
                 .map(move |game| ni_ty::protocol::PublicGameInfoExpanded {
@@ -148,9 +174,10 @@ async fn handler_servers_pick_for_new_game(
         address_ipv4: value.address_ipv4,
         hostname: value.hostname.as_deref().map(Cow::Borrowed),
         web_port: value.web_port,
-        region: value.region.as_deref().map(|id| ni_ty::RegionInfo {
-            id: Cow::Borrowed(id),
-        }),
+        region: value
+            .region
+            .as_deref()
+            .map(|id| ctx.get_region_for_output(id)),
     };
 
     json_response(&info)
@@ -172,9 +199,10 @@ async fn handler_servers_get(
             address_ipv4: value.address_ipv4,
             hostname: value.hostname.as_deref().map(Cow::Borrowed),
             web_port: value.web_port,
-            region: value.region.as_deref().map(|id| ni_ty::RegionInfo {
-                id: Cow::Borrowed(id),
-            }),
+            region: value
+                .region
+                .as_deref()
+                .map(|id| ctx.get_region_for_output(id)),
         };
 
         json_response(&info)
@@ -238,8 +266,22 @@ async fn main() {
             ),
     );
 
+    let regions: HashMap<String, RegionConfig> = match std::env::var("REGIONS_CONFIG") {
+        Ok(value) => {
+            let list: Vec<RegionConfig> =
+                serde_json::from_str(&value).expect("Failed to parse REGIONS_CONFIG");
+
+            list.into_iter()
+                .map(|config| (config.id.clone(), config))
+                .collect()
+        }
+        Err(std::env::VarError::NotPresent) => Default::default(),
+        Err(std::env::VarError::NotUnicode(_)) => panic!("REGIONS_CONFIG is not valid unicode"),
+    };
+
     let global_state = Arc::new(GlobalState {
         gameservers: Default::default(),
+        regions,
     });
 
     let server = hyper::Server::bind(&addr).serve({
