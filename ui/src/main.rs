@@ -379,7 +379,11 @@ async fn main() {
     let mut view: views::View = views::MainMenuView::init(&ctx).into();
 
     egui_macroquad::cfg(|egui_ctx| {
-        egui_ctx.set_visuals(egui::style::Visuals::light());
+        let mut visuals = egui::Visuals::light();
+
+        visuals.widgets.noninteractive.fg_stroke.color = egui::Color32::from_gray(40);
+
+        egui_ctx.set_visuals(visuals);
     });
 
     while !ctx.quit {
