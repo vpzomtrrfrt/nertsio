@@ -1,4 +1,5 @@
 use futures_util::{StreamExt, TryFutureExt};
+use geo::Distance;
 use nertsio_types as ni_ty;
 use serde::Deserialize;
 use std::borrow::Cow;
@@ -35,6 +36,8 @@ struct GlobalState {
     >,
 
     regions: HashMap<String, RegionConfig>,
+
+    geoip_db: Option<geoip2::Reader<'static, geoip2::City<'static>>>,
 }
 
 impl GlobalState {
@@ -60,9 +63,30 @@ struct RegionConfig {
     lon: f64,
 }
 
+struct Request {
+    request: hyper::Request<hyper::Body>,
+    ip_address: std::net::IpAddr,
+}
+
+impl AsRef<hyper::Request<hyper::Body>> for Request {
+    fn as_ref(&self) -> &hyper::Request<hyper::Body> {
+        &self.request
+    }
+}
+
+impl trout::Request for Request {
+    fn path(&self) -> &str {
+        self.request.path()
+    }
+
+    fn method(&self) -> &str {
+        self.request.method().as_str()
+    }
+}
+
 type RouteNode<P> = trout::Node<
     P,
-    hyper::Request<hyper::Body>,
+    Request,
     std::pin::Pin<
         Box<dyn std::future::Future<Output = Result<hyper::Response<hyper::Body>, Error>> + Send>,
     >,
@@ -93,7 +117,7 @@ pub fn json_response(body: &impl serde::Serialize) -> Result<hyper::Response<hyp
 async fn handler_public_games_list(
     _: (),
     ctx: Arc<GlobalState>,
-    _req: hyper::Request<hyper::Body>,
+    _req: Request,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     use rand::seq::IteratorRandom;
 
@@ -142,10 +166,8 @@ fn default_protocol_version() -> u16 {
 async fn handler_servers_pick_for_new_game(
     _: (),
     ctx: Arc<GlobalState>,
-    req: hyper::Request<hyper::Body>,
+    req: Request,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
-    use rand::seq::IteratorRandom;
-
     #[derive(Deserialize, Debug)]
     struct Query {
         #[serde(default = "default_protocol_version")]
@@ -155,18 +177,85 @@ async fn handler_servers_pick_for_new_game(
         min_protocol_version: u16,
     }
 
-    let query: Query = serde_urlencoded::from_str(req.uri().query().unwrap_or(""))?;
+    let query: Query = serde_urlencoded::from_str(req.as_ref().uri().query().unwrap_or(""))?;
+
+    let user_loc = ctx
+        .geoip_db
+        .as_ref()
+        .and_then(|geoip_db| {
+            let res = geoip_db.lookup(req.ip_address);
+            if let Err(ref err) = res {
+                println!("Failed to look up IP address location: {:?}", err);
+            }
+
+            res.ok()
+        })
+        .and_then(|city| {
+            println!("city = {:?}", city);
+
+            city.location
+        })
+        .and_then(|location| match (location.latitude, location.longitude) {
+            (Some(lat), Some(lon)) => Some(geo::Point::new(lat, lon)),
+            _ => None,
+        });
+
+    let region_priority: Vec<&String> = match user_loc {
+        None => ctx.regions.keys().collect(),
+        Some(user_loc) => {
+            let mut result: Vec<_> = ctx
+                .regions
+                .values()
+                .map(|region| {
+                    let loc = geo::Point::new(region.lat, region.lon);
+                    (geo::Haversine::distance(loc, user_loc), &region.id)
+                })
+                .collect();
+            result.sort_unstable_by(|(a, _), (b, _)| a.total_cmp(b));
+            result.into_iter().map(|(_, id)| id).collect()
+        }
+    };
+
+    println!("region_priority = {:?}", region_priority);
 
     let lock = ctx.gameservers.read().unwrap();
-    let value = lock
+    let options: Vec<_> = lock
         .iter()
         .filter(|(_, (_, info))| {
             info.min_protocol_version <= query.protocol_version
                 && info.protocol_version >= query.min_protocol_version
         })
-        .choose(&mut rand::thread_rng())
-        .ok_or(Error::InternalStrStatic("no available servers"))?;
-    let value = &value.1 .1;
+        .collect();
+
+    if options.is_empty() {
+        return Err(Error::InternalStrStatic("no available servers"));
+    }
+
+    // eventually should make this less deterministic, but for now we don't have enough traffic
+    // that it matters
+
+    let best = &options.first().as_ref().unwrap().1 .1;
+    let mut best = (
+        region_priority
+            .iter()
+            .position(|x| Some(Cow::Borrowed(x.as_ref())) == best.region)
+            .unwrap_or(usize::MAX),
+        best,
+    );
+
+    for i in 1..options.len() {
+        let current = &options[i].1 .1;
+
+        let priority = region_priority
+            .iter()
+            .position(|x| Some(Cow::Borrowed(x.as_ref())) == current.region)
+            .unwrap_or(usize::MAX);
+        if priority < best.0 {
+            best = (priority, current);
+        }
+    }
+
+    let value = best.1;
 
     #[allow(deprecated)]
     let info = ni_ty::protocol::ServerConnectionInfo {
@@ -186,7 +275,7 @@ async fn handler_servers_pick_for_new_game(
 async fn handler_servers_get(
     params: (u8,),
     ctx: Arc<GlobalState>,
-    _req: hyper::Request<hyper::Body>,
+    _req: Request,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     let (server_id,) = params;
 
@@ -217,7 +306,7 @@ async fn handler_servers_get(
 async fn handler_stats_get(
     _: (),
     ctx: Arc<GlobalState>,
-    _req: hyper::Request<hyper::Body>,
+    _req: Request,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     let stats = ctx.gameservers.read().unwrap().iter().fold(
         ni_ty::protocol::ServerStats {
@@ -279,21 +368,57 @@ async fn main() {
         Err(std::env::VarError::NotUnicode(_)) => panic!("REGIONS_CONFIG is not valid unicode"),
     };
 
+    let geoip_db = std::env::var_os("GEOIP_DB_FILE").map(|path| {
+        let mut content = std::fs::read(path).expect("Failed to read geoip db");
+        content.shrink_to_fit();
+
+        // leak this because it will live for the entire runtime and otherwise we would have
+        // self-referencing structures to deal with
+        let content = content.leak();
+
+        geoip2::Reader::<geoip2::City>::from_bytes(content).expect("Failed to read geoip db")
+    });
+
     let global_state = Arc::new(GlobalState {
         gameservers: Default::default(),
         regions,
+        geoip_db,
     });
 
     let server = hyper::Server::bind(&addr).serve({
         let global_state = global_state.clone();
-        hyper::service::make_service_fn(move |_conn| {
+        hyper::service::make_service_fn(move |conn: &hyper::server::conn::AddrStream| {
             let global_state = global_state.clone();
             let routes = routes.clone();
+
+            let raw_ip = conn.remote_addr().ip();
 
             futures_util::future::ok::<_, std::convert::Infallible>(hyper::service::service_fn(
                 move |req| {
                     let global_state = global_state.clone();
                     let routes = routes.clone();
+
+                    let forwarded_ip: Option<std::net::IpAddr> = req
+                        .headers()
+                        .get("x-forwarded-for")
+                        .and_then(|value| match value.to_str() {
+                            Err(_) => None,
+                            Ok(value) => {
+                                let value = match value.find(',') {
+                                    None => value,
+                                    Some(idx) => &value[..idx],
+                                };
+
+                                value.parse().ok()
+                            }
+                        });
+
+                    let ip = forwarded_ip.unwrap_or(raw_ip);
+
+                    let req = Request {
+                        request: req,
+                        ip_address: ip,
+                    };
 
                     async move {
                         let result = match routes.route(req, global_state) {
