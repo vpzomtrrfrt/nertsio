@@ -49,19 +49,19 @@ impl View {
         match src {
             ConnectionState::NotConnected {
                 expected: true,
-                code: _,
+                error: _,
             } => MainMenuView::init(ctx).into(),
             ConnectionState::NotConnected {
                 expected: false,
-                code,
+                error,
             } => LostConnectionView {
                 was_connected: true,
-                code: *code,
+                error: error.clone(),
             }
             .into(),
             _ => LostConnectionView {
                 was_connected: true,
-                code: None,
+                error: None,
             }
             .into(),
         }
@@ -143,13 +143,13 @@ impl<'a> GameContext<'a> {
                 if let Err(err) = res {
                     (*lock) = ConnectionState::NotConnected {
                         expected: false,
-                        code: Some(0), // TODO?
+                        error: Some(err.to_string()),
                     };
                     log::error!("Failed to handle connection: {:?}", err);
                 } else {
                     (*lock) = ConnectionState::NotConnected {
                         expected: true,
-                        code: None,
+                        error: None,
                     };
                 }
             }
@@ -705,13 +705,16 @@ impl ViewImpl for ConnectingView {
         match *ctx.game_info_mutex.lock().unwrap() {
             ConnectionState::Connecting => self.into(),
             ConnectionState::Connected(_) => IngameNeutralView::default().into(),
-            ConnectionState::NotConnected { expected, code } => {
+            ConnectionState::NotConnected {
+                expected,
+                ref error,
+            } => {
                 if expected {
                     MainMenuView::init(ctx).into()
                 } else {
                     LostConnectionView {
                         was_connected: false,
-                        code,
+                        error: error.clone(),
                     }
                     .into()
                 }
@@ -1137,7 +1140,7 @@ impl ViewImpl for IngameEndView {
 
 pub struct LostConnectionView {
     was_connected: bool,
-    code: Option<u8>,
+    error: Option<String>,
 }
 
 impl ViewImpl for LostConnectionView {
@@ -1158,23 +1161,6 @@ impl ViewImpl for LostConnectionView {
             mq::BLACK,
         );
 
-        if let Some(details) = match self.code {
-            Some(ni_ty::protocol::CLOSE_KICK) => Some("Kicked by master"),
-            Some(ni_ty::protocol::CLOSE_TOO_NEW) => Some("Server is too old"),
-            Some(ni_ty::protocol::CLOSE_TOO_OLD) => {
-                Some("Your client is too old to connect to this server")
-            }
-            _ => None,
-        } {
-            ctx.draw_text_centered(
-                details,
-                screen_center.0,
-                screen_center.1 + 60.0,
-                50,
-                mq::BLACK,
-            );
-        }
-
         let mut go_back = false;
 
         egui_macroquad::ui(|egui_ctx| {
@@ -1184,15 +1170,19 @@ impl ViewImpl for LostConnectionView {
                     ui.allocate_ui_at_rect(
                         egui::Rect {
                             min: egui::Pos2::new(
-                                0.0,
-                                (screen_center.1 + 120.0) / egui_ctx.zoom_factor(),
+                                SCREEN_MARGIN,
+                                (screen_center.1 + 80.0) / egui_ctx.zoom_factor(),
                             ),
                             max: egui::Pos2::new(
-                                mq::screen_width() / egui_ctx.zoom_factor(),
+                                (mq::screen_width() - SCREEN_MARGIN) / egui_ctx.zoom_factor(),
                                 mq::screen_height() / egui_ctx.zoom_factor(),
                             ),
                         },
                         |ui| {
+                            if let Some(error) = &self.error {
+                                ui.label(error);
+                            }
+
                             ui.vertical_centered(|ui| {
                                 if ui.button("Main Menu").clicked() {
                                     go_back = true;

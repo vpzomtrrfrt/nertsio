@@ -44,7 +44,10 @@ const PLAYER_COLORS: [mq::Color; 16] = [
 const MAX_INTERPOLATION_TIME: f32 = 0.3;
 
 pub enum ConnectionState {
-    NotConnected { expected: bool, code: Option<u8> },
+    NotConnected {
+        expected: bool,
+        error: Option<String>,
+    },
     Connecting,
     Connected(SharedInfo),
 }
@@ -337,7 +340,7 @@ async fn main() {
 
     let game_info_mutex = Arc::new(std::sync::Mutex::new(ConnectionState::NotConnected {
         expected: true,
-        code: None,
+        error: None,
     }));
     let game_msg_send = RefCell::new(None);
 
