@@ -159,6 +159,25 @@ async fn handler_public_games_list(
     json_response(&info)
 }
 
+async fn handler_regions_list(
+    _: (),
+    ctx: Arc<GlobalState>,
+    _req: Request,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    let info = ni_ty::protocol::RespList {
+        items: ctx
+            .regions
+            .values()
+            .map(|x| ni_ty::RegionInfo {
+                id: (&x.id).into(),
+                name: (&x.name).into(),
+            })
+            .collect(),
+    };
+
+    json_response(&info)
+}
+
 fn default_protocol_version() -> u16 {
     3 // version before we started sending this
 }
@@ -169,38 +188,51 @@ async fn handler_servers_pick_for_new_game(
     req: Request,
 ) -> Result<hyper::Response<hyper::Body>, crate::Error> {
     #[derive(Deserialize, Debug)]
-    struct Query {
+    struct Query<'a> {
         #[serde(default = "default_protocol_version")]
         protocol_version: u16,
 
         #[serde(default = "default_protocol_version")]
         min_protocol_version: u16,
+
+        preferred_region: Option<Cow<'a, str>>,
     }
 
     let query: Query = serde_urlencoded::from_str(req.as_ref().uri().query().unwrap_or(""))?;
 
-    let user_loc = ctx
-        .geoip_db
-        .as_ref()
-        .and_then(|geoip_db| {
-            let res = geoip_db.lookup(req.ip_address);
-            if let Err(ref err) = res {
-                println!("Failed to look up IP address location: {:?}", err);
-            }
+    let preferred_region_loc = if let Some(region) = query.preferred_region {
+        if let Some(region) = ctx.regions.get(region.as_ref()) {
+            Some(geo::Point::new(region.lat, region.lon))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
 
-            res.ok()
-        })
-        .and_then(|city| {
-            println!("city = {:?}", city);
+    let target_loc = preferred_region_loc.or_else(|| {
+        ctx.geoip_db
+            .as_ref()
+            .and_then(|geoip_db| {
+                let res = geoip_db.lookup(req.ip_address);
+                if let Err(ref err) = res {
+                    println!("Failed to look up IP address location: {:?}", err);
+                }
 
-            city.location
-        })
-        .and_then(|location| match (location.latitude, location.longitude) {
-            (Some(lat), Some(lon)) => Some(geo::Point::new(lat, lon)),
-            _ => None,
-        });
+                res.ok()
+            })
+            .and_then(|city| {
+                println!("city = {:?}", city);
 
-    let region_priority: Vec<&String> = match user_loc {
+                city.location
+            })
+            .and_then(|location| match (location.latitude, location.longitude) {
+                (Some(lat), Some(lon)) => Some(geo::Point::new(lat, lon)),
+                _ => None,
+            })
+    });
+
+    let region_priority: Vec<&String> = match target_loc {
         None => ctx.regions.keys().collect(),
         Some(user_loc) => {
             let mut result: Vec<_> = ctx
@@ -338,6 +370,10 @@ async fn main() {
             .with_child(
                 "public_games",
                 RouteNode::new().with_handler_async("GET", handler_public_games_list),
+            )
+            .with_child(
+                "regions",
+                RouteNode::new().with_handler_async("GET", handler_regions_list),
             )
             .with_child(
                 "servers:pick_for_new_game",
