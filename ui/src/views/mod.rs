@@ -158,9 +158,7 @@ impl<'a> GameContext<'a> {
 
     fn start_loading_public_games(
         &self,
-    ) -> futures_channel::oneshot::Receiver<
-        Result<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>, anyhow::Error>,
-    > {
+    ) -> crate::LoadChannel<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>> {
         let (send, recv) = futures_channel::oneshot::channel();
 
         let req_fut = self
@@ -403,11 +401,8 @@ pub struct MainMenuView {
 
     public_games_state: crate::LoadState<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>>,
     public_games_done_at: Option<web_time::Instant>,
-    public_games_reload_channel: Option<
-        futures_channel::oneshot::Receiver<
-            Result<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>, anyhow::Error>,
-        >,
-    >,
+    public_games_reload_channel:
+        Option<crate::LoadChannel<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>>>,
 }
 
 impl MainMenuView {

@@ -209,8 +209,10 @@ impl WasmAsyncRt {
     }
 }
 
+pub type LoadChannel<T> = futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>;
+
 pub enum LoadState<T> {
-    Pending(futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>),
+    Pending(LoadChannel<T>),
     Done(Result<T, anyhow::Error>),
 }
 
@@ -236,8 +238,8 @@ impl<T> LoadState<T> {
     }
 }
 
-impl<T> From<futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>> for LoadState<T> {
-    fn from(src: futures_channel::oneshot::Receiver<Result<T, anyhow::Error>>) -> Self {
+impl<T> From<LoadChannel<T>> for LoadState<T> {
+    fn from(src: LoadChannel<T>) -> Self {
         LoadState::Pending(src)
     }
 }
