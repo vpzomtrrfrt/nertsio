@@ -1,6 +1,5 @@
 use crate::settings::DragMode;
 use crate::{ConnectionEvent, ConnectionMessage, ConnectionState, Settings};
-use futures_util::FutureExt;
 use macroquad::hash;
 use macroquad::logging as log;
 use macroquad::miniquad;
@@ -99,6 +98,7 @@ pub struct GameContext<'a> {
     pub events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
     pub game_msg_send: RefCell<Option<futures_channel::mpsc::UnboundedSender<ConnectionMessage>>>,
     pub quit: bool,
+    pub regions_list_state: crate::LoadState<Vec<ni_ty::RegionInfo<'static>>>,
 
     pub cards_texture: &'a mq::Texture2D,
     pub backs_texture: mq::Texture2D,
@@ -156,36 +156,29 @@ impl<'a> GameContext<'a> {
         });
     }
 
+    fn start_loading<T: Send + 'static>(
+        &self,
+        fut: impl std::future::Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+    ) -> crate::LoadChannel<T> {
+        crate::start_loading(&self.async_rt, fut)
+    }
+
     fn start_loading_public_games(
         &self,
     ) -> crate::LoadChannel<Vec<ni_ty::protocol::PublicGameInfoExpanded<'static>>> {
-        let (send, recv) = futures_channel::oneshot::channel();
-
         let req_fut = self
             .http_client
             .get(format!("{}public_games", self.coordinator_url))
             .send();
-        self.async_rt.spawn(
-            (async move {
-                let resp = req_fut.await?.error_for_status()?;
 
-                let resp: ni_ty::protocol::RespList<ni_ty::protocol::PublicGameInfoExpanded> =
-                    resp.json().await?;
+        self.start_loading(async move {
+            let resp = req_fut.await?.error_for_status()?;
 
-                Result::<_, anyhow::Error>::Ok(resp.items)
-            })
-            .then(|res| {
-                if let Err(ref err) = res {
-                    log::error!("Failed to list public games: {:?}", err);
-                }
+            let resp: ni_ty::protocol::RespList<ni_ty::protocol::PublicGameInfoExpanded> =
+                resp.json().await?;
 
-                let _ = send.send(res); // if this fails, then we didn't need it anyway
-
-                futures_util::future::ready(())
-            }),
-        );
-
-        recv
+            Result::<_, anyhow::Error>::Ok(resp.items)
+        })
     }
 
     pub fn quit(&mut self) {
@@ -339,7 +332,7 @@ impl<'a> GameContext<'a> {
     }
 }
 
-pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<Settings>) -> bool {
+pub fn render_settings_window(egui_ctx: &egui::Context, ctx: &GameContext) -> bool {
     let menu_width = 300.0;
 
     let mut open = true;
@@ -350,7 +343,7 @@ pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<S
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .open(&mut open)
         .show(egui_ctx, |ui| {
-            let mut settings_lock = settings_mutex.lock().unwrap();
+            let mut settings_lock = ctx.settings_mutex.lock().unwrap();
             let settings = &mut *settings_lock;
 
             ui.vertical_centered(|ui| {
@@ -385,9 +378,38 @@ pub fn render_settings_window(egui_ctx: &egui::Context, settings_mutex: &Mutex<S
                             );
                         });
 
-                        ui.checkbox(&mut settings.round_start_music, "Round Start Music");
-                        ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
-                        ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
+                        ui.label("Sound");
+                        ui.indent(hash!(), |ui| {
+                            ui.checkbox(&mut settings.round_start_music, "Round Start Music");
+                            ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
+                            ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
+                        });
+
+                        ui.label("Preferred Region");
+                        ui.indent(hash!(), |ui| match &ctx.regions_list_state {
+                            crate::LoadState::Pending(_) => {
+                                ui.label("Loading...");
+                            }
+                            crate::LoadState::Done(Err(err)) => {
+                                ui.label(format!("Failed to load: {:?}", err));
+                            }
+                            crate::LoadState::Done(Ok(list)) => {
+                                ui.radio_value(&mut settings.preferred_region, None, "Automatic");
+
+                                for region in list {
+                                    let selected = settings.preferred_region.as_deref()
+                                        == Some(region.id.as_ref());
+                                    let mut res = ui.radio(selected, &region.name[..]);
+                                    if res.clicked() {
+                                        if !selected {
+                                            settings.preferred_region =
+                                                Some(region.id.as_ref().to_owned());
+                                            res.mark_changed();
+                                        }
+                                    }
+                                }
+                            }
+                        });
                     },
                 );
             });
@@ -569,7 +591,7 @@ impl ViewImpl for MainMenuView {
                 });
 
             if self.show_settings {
-                if !render_settings_window(egui_ctx, &ctx.settings_mutex) {
+                if !render_settings_window(egui_ctx, &ctx) {
                     self.show_settings = false;
                 }
             }
@@ -1023,7 +1045,7 @@ impl ViewImpl for IngameNeutralView {
                             }
 
                             if self.show_settings {
-                                if !render_settings_window(egui_ctx, &ctx.settings_mutex) {
+                                if !render_settings_window(egui_ctx, &ctx) {
                                     self.show_settings = false;
                                 }
                             }

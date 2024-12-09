@@ -1,12 +1,12 @@
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::collapsible_else_if)]
 
+use futures_util::FutureExt;
 use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-#[cfg(target_family = "wasm")]
 use std::future::Future;
 use std::sync::Arc;
 
@@ -360,6 +360,21 @@ async fn main() {
         }
     };
 
+    let regions_list_state = {
+        let regions_list_req = http_client
+            .get(format!("{}regions", coordinator_url))
+            .send();
+
+        crate::start_loading(async_rt.handle(), async move {
+            let resp = regions_list_req.await?.error_for_status()?;
+
+            let resp: ni_ty::protocol::RespList<ni_ty::RegionInfo<'static>> = resp.json().await?;
+
+            Ok(resp.items)
+        })
+        .into()
+    };
+
     let mut ctx = views::GameContext {
         async_rt: async_rt.handle().clone(),
         game_info_mutex: game_info_mutex.clone(),
@@ -369,6 +384,7 @@ async fn main() {
         events_send,
         game_msg_send,
         quit: false,
+        regions_list_state,
 
         cards_texture: get_cards_texture(),
         backs_texture,
@@ -396,6 +412,8 @@ async fn main() {
         });
 
         mq::set_default_camera();
+
+        ctx.regions_list_state = ctx.regions_list_state.tick();
 
         ctx.cards_texture = get_cards_texture();
 
@@ -467,4 +485,23 @@ async fn main() {
 
         mq::next_frame().await
     }
+}
+
+fn start_loading<T: Send + 'static>(
+    async_rt: &crate::AsyncRt,
+    fut: impl Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+) -> crate::LoadChannel<T> {
+    let (send, recv) = futures_channel::oneshot::channel();
+
+    async_rt.spawn(fut.then(|res| {
+        if let Err(ref err) = res {
+            log::error!("Loading failed: {:?}", err);
+        }
+
+        let _ = send.send(res); // if this fails, then we didn't need it anyway
+
+        futures_util::future::ready(())
+    }));
+
+    recv
 }

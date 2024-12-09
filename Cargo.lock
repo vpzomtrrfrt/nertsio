@@ -3474,6 +3474,7 @@ dependencies = [
  "nertsio_textures",
  "nertsio_types",
  "nertsio_ui_metrics",
+ "percent-encoding",
  "reqwest",
  "serde",
  "serde_json",

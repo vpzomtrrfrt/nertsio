@@ -48,6 +48,8 @@ pub struct Settings {
     #[serde(rename = "drag")]
     #[serde(skip_serializing)]
     pub legacy_drag: Option<bool>,
+
+    pub preferred_region: Option<String>,
 }
 
 impl Default for Settings {
@@ -60,6 +62,7 @@ impl Default for Settings {
             suit_callouts: false,
             nerts_callout: false,
             legacy_drag: None,
+            preferred_region: None,
         }
     }
 }

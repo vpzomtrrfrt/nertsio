@@ -2,6 +2,7 @@ use futures_util::SinkExt;
 use futures_util::{StreamExt, TryStreamExt};
 use macroquad::logging as log;
 use nertsio_types as ni_ty;
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 use xwt_core::traits::*;
 
@@ -59,16 +60,26 @@ pub(crate) async fn handle_connection(
 ) -> Result<(), anyhow::Error> {
     let (server, game_id) = match connection_type {
         ConnectionType::CreateGame {} => {
-            let resp = http_client
-                .post(format!(
-                    "{}servers:pick_for_new_game?protocol_version={}&min_protocol_version={}",
-                    coordinator_url,
-                    ni_ty::protocol::PROTOCOL_VERSION,
-                    ni_ty::protocol::PROTOCOL_VERSION,
-                ))
-                .send()
-                .await?
-                .error_for_status()?;
+            let mut url = format!(
+                "{}servers:pick_for_new_game?protocol_version={}&min_protocol_version={}",
+                coordinator_url,
+                ni_ty::protocol::PROTOCOL_VERSION,
+                ni_ty::protocol::PROTOCOL_VERSION,
+            );
+
+            if let Some(ref region) = settings_mutex.lock().unwrap().preferred_region {
+                write!(
+                    url,
+                    "&preferred_region={}",
+                    percent_encoding::utf8_percent_encode(
+                        &region,
+                        percent_encoding::NON_ALPHANUMERIC
+                    )
+                )
+                .unwrap();
+            }
+
+            let resp = http_client.post(url).send().await?.error_for_status()?;
 
             let resp: ni_ty::protocol::ServerConnectionInfo = resp.json().await?;
 

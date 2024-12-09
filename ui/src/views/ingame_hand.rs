@@ -1062,7 +1062,7 @@ impl super::ViewImpl for IngameHandView {
                         });
 
                     if self.show_settings {
-                        if !super::render_settings_window(egui_ctx, &ctx.settings_mutex) {
+                        if !super::render_settings_window(egui_ctx, &ctx) {
                             self.show_settings = false;
                         }
                     }
