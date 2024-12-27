@@ -149,7 +149,7 @@ where
 
     println!("first: {:?}", first_message);
 
-    let (name, game_id) = if let ni_ty::protocol::MaintenanceMessageC2S::Hello {
+    let (name, game_id, protocol_version) = if let ni_ty::protocol::MaintenanceMessageC2S::Hello {
         name,
         game_id,
         protocol_version,
@@ -172,7 +172,7 @@ where
             anyhow::bail!("Auth failed");
         }
 
-        (name, game_id)
+        (name, game_id, protocol_version)
     } else {
         anyhow::bail!("Wrong first handshake message");
     };
@@ -222,6 +222,7 @@ where
                     controller: PlayerController::Network {
                         game_stream_send_channel: game_stream_send_channel_send,
                         connection: Box::new(handle.clone()),
+                        protocol_version,
                     },
                 });
 
@@ -399,6 +400,31 @@ where
                                                         eprintln!("Failed to queue update to player: {:?}", err);
                                                     }
                                                 }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        DatagramMessageC2S::UpdateMenuMouseState { seq, state } => {
+                            let server_game_state = global_state
+                                .games
+                                .get_mut(&game_id)
+                                .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                            let out_msg: bytes::Bytes = bincode::serialize(&ni_ty::protocol::DatagramMessageS2C::UpdateMenuMouseState {
+                                player_id,
+                                seq,
+                                state,
+                            }).unwrap().into();
+
+                            for (id, server_player_state) in &server_game_state.players {
+                                if *id != player_id {
+                                    if let PlayerController::Network { ref connection, protocol_version, .. } = server_player_state.controller {
+                                        if protocol_version >= 12 {
+                                            if let Err(err) = connection.send_datagram(out_msg.clone())
+                                            {
+                                                eprintln!("Failed to queue update to player: {:?}", err);
                                             }
                                         }
                                     }

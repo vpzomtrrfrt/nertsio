@@ -595,6 +595,11 @@ pub struct MouseState {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MenuMouseState {
+    pub position: (f32, f32),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RegionInfo<'a> {
     pub id: Cow<'a, str>,
     pub name: Cow<'a, str>,

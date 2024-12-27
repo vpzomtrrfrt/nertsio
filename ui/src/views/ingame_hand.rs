@@ -869,22 +869,10 @@ impl super::ViewImpl for IngameHandView {
                             }
                         }
 
-                        mq::draw_texture_ex(
-                            &ctx.cursors_texture,
+                        ctx.draw_cursor(
                             screen_center.0 + mouse_pos[0] - 1.0,
                             screen_center.1 + mouse_pos[1] - 1.0,
-                            crate::PLAYER_COLORS
-                                [(pred_hand_state.players()[idx].player_id() >> 4) as usize],
-                            mq::DrawTextureParams {
-                                source: Some(mq::Rect {
-                                    x: 0.0,
-                                    y: 0.0,
-                                    w: 40.0,
-                                    h: 80.0,
-                                }),
-                                dest_size: Some(mq::Vec2::new(20.0, 40.0)),
-                                ..Default::default()
-                            },
+                            pred_hand_state.players()[idx].player_id(),
                         );
                     }
                 }

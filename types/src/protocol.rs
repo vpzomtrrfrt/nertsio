@@ -5,7 +5,7 @@ pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
 
 /// Current version of protocol. If this is incompatible with previous versions,
 /// MIN_PROTOCOL_VERSION in gameserver may also need to be updated.
-pub const PROTOCOL_VERSION: u16 = 11;
+pub const PROTOCOL_VERSION: u16 = 12;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;
@@ -103,7 +103,14 @@ pub enum GameMessageS2C {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum DatagramMessageC2S {
-    UpdateMouseState { seq: u32, state: crate::MouseState },
+    UpdateMouseState {
+        seq: u32,
+        state: crate::MouseState,
+    },
+    UpdateMenuMouseState {
+        seq: u32,
+        state: crate::MenuMouseState,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -112,6 +119,11 @@ pub enum DatagramMessageS2C {
         player_idx: u8,
         seq: u32,
         state: crate::MouseState,
+    },
+    UpdateMenuMouseState {
+        player_id: u8,
+        seq: u32,
+        state: crate::MenuMouseState,
     },
 }
 

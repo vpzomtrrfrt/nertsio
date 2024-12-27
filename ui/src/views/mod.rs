@@ -41,6 +41,10 @@ pub enum View {
 #[enum_dispatch::enum_dispatch(View)]
 pub trait ViewImpl {
     fn tick(self, ctx: &mut GameContext) -> View;
+
+    fn should_clear_last_menu_mouse_position(&self) -> bool {
+        true
+    }
 }
 
 impl View {
@@ -326,6 +330,25 @@ impl<'a> GameContext<'a> {
                     h: 180.0,
                 }),
                 dest_size: Some(CARD_SIZE),
+                ..Default::default()
+            },
+        );
+    }
+
+    fn draw_cursor(&self, x: f32, y: f32, player_id: u8) {
+        mq::draw_texture_ex(
+            &self.cursors_texture,
+            x,
+            y,
+            crate::PLAYER_COLORS[(player_id >> 4) as usize],
+            mq::DrawTextureParams {
+                source: Some(mq::Rect {
+                    x: 0.0,
+                    y: 0.0,
+                    w: 40.0,
+                    h: 80.0,
+                }),
+                dest_size: Some(mq::Vec2::new(20.0, 40.0)),
                 ..Default::default()
             },
         );
@@ -748,9 +771,24 @@ pub struct IngameNeutralView {
 
 impl ViewImpl for IngameNeutralView {
     fn tick(mut self, ctx: &mut GameContext) -> View {
-        mq::clear_background(BACKGROUND_COLOR);
+        let mut ui_scale = None;
+        egui_macroquad::cfg(|egui_ctx| {
+            ui_scale = Some(egui_ctx.zoom_factor());
+        });
+        let ui_scale = ui_scale.unwrap();
 
         let mut lock = ctx.game_info_mutex.lock().unwrap();
+
+        if !self.should_clear_last_menu_mouse_position() {
+            if let Some(shared) = (*lock).as_info_mut() {
+                let mouse_pos = mq::mouse_position();
+                shared.my_last_menu_mouse_position =
+                    Some((mouse_pos.0 / ui_scale, mouse_pos.1 / ui_scale));
+            }
+        }
+
+        mq::clear_background(BACKGROUND_COLOR);
+
         if let Some(shared) = (*lock).as_info_mut() {
             match &shared.game.hand {
                 None => {
@@ -771,7 +809,10 @@ impl ViewImpl for IngameNeutralView {
                             result
                         };
 
+                        let mut ui_scale = None;
                         egui_macroquad::ui(|egui_ctx| {
+                            ui_scale = Some(egui_ctx.zoom_factor());
+
                             egui::SidePanel::right("game_settings_panel")
                                 .frame(
                                     egui::Frame::none()
@@ -1050,8 +1091,14 @@ impl ViewImpl for IngameNeutralView {
                                 }
                             }
                         });
+                        let ui_scale = ui_scale.unwrap();
 
                         egui_macroquad::draw();
+
+                        for (player_id, state) in &shared.menu_mouse_states {
+                            let pos = state.get_pos() * ui_scale;
+                            ctx.draw_cursor(pos[0], pos[1], *player_id);
+                        }
 
                         self.into()
                     }
@@ -1067,6 +1114,10 @@ impl ViewImpl for IngameNeutralView {
         } else {
             View::from_connection_state(&lock, ctx)
         }
+    }
+
+    fn should_clear_last_menu_mouse_position(&self) -> bool {
+        self.show_settings
     }
 }
 

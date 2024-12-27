@@ -275,6 +275,22 @@ pub(crate) async fn handle_connection(
 
                                 seq += 1;
                             }
+                        } else {
+                            if let Some(mouse_pos) = shared.my_last_menu_mouse_position {
+                                send_datagram(
+                                    bincode::serialize(
+                                        &ni_ty::protocol::DatagramMessageC2S::UpdateMenuMouseState {
+                                            seq,
+                                            state: ni_ty::MenuMouseState {
+                                                position: mouse_pos,
+                                            },
+                                        },
+                                    )
+                                    .unwrap(),
+                                )?;
+
+                                seq += 1;
+                            }
                         }
                     }
                 }
@@ -309,6 +325,23 @@ pub(crate) async fn handle_connection(
                                                 *mouse_state =
                                                     Some(crate::MouseState::new(seq, state));
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                            DatagramMessageS2C::UpdateMenuMouseState {
+                                player_id,
+                                seq,
+                                state,
+                            } => {
+                                let mut lock = info_mutex.lock().unwrap();
+                                if let Some(shared) = (*lock).as_info_mut() {
+                                    match shared.menu_mouse_states.entry(player_id) {
+                                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                                            entry.get_mut().receive(seq, state)
+                                        }
+                                        std::collections::hash_map::Entry::Vacant(entry) => {
+                                            entry.insert(crate::MenuMouseState::new(seq, state));
                                         }
                                     }
                                 }
@@ -348,6 +381,8 @@ pub(crate) async fn handle_connection(
                                             region,
                                             new_end_scores: None,
                                             ping: None,
+                                            menu_mouse_states: Default::default(),
+                                            my_last_menu_mouse_position: None,
                                         });
                                 }
                                 GameMessageS2C::PlayerJoin { id, info } => {
@@ -359,12 +394,12 @@ pub(crate) async fn handle_connection(
                                         .insert(id, info);
                                 }
                                 GameMessageS2C::PlayerLeave { id } => {
-                                    (*info_mutex.lock().unwrap())
-                                        .as_info_mut()
-                                        .unwrap()
-                                        .game
-                                        .players
-                                        .remove(&id);
+                                    let mut lock = info_mutex.lock().unwrap();
+                                    let shared = lock.as_info_mut().unwrap();
+
+                                    shared.game.players.remove(&id);
+
+                                    shared.menu_mouse_states.remove(&id);
                                 }
                                 GameMessageS2C::PlayerUpdateReady { id, value } => {
                                     (*info_mutex.lock().unwrap())

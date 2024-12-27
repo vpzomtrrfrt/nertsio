@@ -6,7 +6,7 @@ use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::sync::Arc;
 
@@ -69,18 +69,36 @@ pub struct SharedInfo {
     hand_extra: Option<HandExtra>,
     new_end_scores: Option<Vec<(u8, i32)>>,
     ping: Option<std::time::Duration>,
+    menu_mouse_states: HashMap<u8, MenuMouseState>,
+    my_last_menu_mouse_position: Option<(f32, f32)>,
+}
+
+trait RemotePosition: Clone {
+    fn pos(&self) -> mq::Vec2;
+}
+
+impl RemotePosition for ni_ty::MouseState {
+    fn pos(&self) -> mq::Vec2 {
+        self.position.into()
+    }
+}
+
+impl RemotePosition for ni_ty::MenuMouseState {
+    fn pos(&self) -> mq::Vec2 {
+        self.position.into()
+    }
 }
 
 #[derive(Clone)]
-struct MouseState {
+struct RemotePositionWrapper<T: RemotePosition> {
     seq: u32,
-    inner: ni_ty::MouseState,
+    inner: T,
     current_animation: Option<(splines::Spline<f32, mq::Vec2>, f32)>,
     time_since_update: f32,
 }
 
-impl MouseState {
-    pub fn new(seq: u32, inner: ni_ty::MouseState) -> Self {
+impl<T: RemotePosition> RemotePositionWrapper<T> {
+    pub fn new(seq: u32, inner: T) -> Self {
         Self {
             seq,
             inner,
@@ -93,7 +111,7 @@ impl MouseState {
         self.current_animation
             .as_ref()
             .and_then(|(spline, time)| spline.sample(*time))
-            .unwrap_or_else(|| self.inner.position.into())
+            .unwrap_or_else(|| self.inner.pos())
     }
 
     pub fn step(&mut self, delta: f32) {
@@ -107,7 +125,7 @@ impl MouseState {
         self.time_since_update += delta;
     }
 
-    pub fn receive(&mut self, seq: u32, inner: ni_ty::MouseState) {
+    pub fn receive(&mut self, seq: u32, inner: T) {
         if self.seq < seq {
             let duration = (self.time_since_update * 0.9).min(MAX_INTERPOLATION_TIME);
             match &mut self.current_animation {
@@ -116,7 +134,7 @@ impl MouseState {
                     log::debug!("adding new point at {} (current {})", t, time);
                     spline.add(splines::Key::new(
                         t,
-                        inner.position.into(),
+                        inner.pos(),
                         splines::Interpolation::Cosine,
                     ));
                 }
@@ -125,12 +143,12 @@ impl MouseState {
                         splines::Spline::from_vec(vec![
                             splines::Key::new(
                                 0.0,
-                                self.inner.position.into(),
+                                self.inner.pos(),
                                 splines::Interpolation::Cosine,
                             ),
                             splines::Key::new(
                                 duration,
-                                inner.position.into(),
+                                inner.pos(),
                                 splines::Interpolation::Cosine,
                             ),
                         ]),
@@ -145,6 +163,9 @@ impl MouseState {
         }
     }
 }
+
+type MouseState = RemotePositionWrapper<ni_ty::MouseState>;
+type MenuMouseState = RemotePositionWrapper<ni_ty::MenuMouseState>;
 
 struct HeldState {
     info: ni_ty::HeldInfo,
@@ -418,6 +439,13 @@ async fn main() {
         ctx.cards_texture = get_cards_texture();
 
         view = views::ViewImpl::tick(view, &mut ctx);
+
+        if views::ViewImpl::should_clear_last_menu_mouse_position(&view) {
+            let mut lock = ctx.game_info_mutex.lock().unwrap();
+            if let Some(shared) = (*lock).as_info_mut() {
+                shared.my_last_menu_mouse_position = None;
+            }
+        }
 
         match events_recv.try_next() {
             Ok(Some(evt)) => match evt {

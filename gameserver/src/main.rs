@@ -33,6 +33,7 @@ enum PlayerController {
         game_stream_send_channel:
             tokio::sync::mpsc::UnboundedSender<ni_ty::protocol::GameMessageS2C>,
         connection: Box<dyn connection::ConnectionHandle + Send + Sync>,
+        protocol_version: u16,
     },
     Bot {
         mouse_state: ni_ty::MouseState,
