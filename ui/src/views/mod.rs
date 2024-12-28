@@ -162,7 +162,7 @@ impl<'a> GameContext<'a> {
 
     fn start_loading<T: Send + 'static>(
         &self,
-        fut: impl std::future::Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+        fut: impl crate::LoadFut<T>,
     ) -> crate::LoadChannel<T> {
         crate::start_loading(&self.async_rt, fut)
     }

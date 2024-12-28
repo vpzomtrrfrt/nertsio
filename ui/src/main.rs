@@ -7,6 +7,7 @@ use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
+#[cfg(target_family = "wasm")]
 use std::future::Future;
 use std::sync::Arc;
 
@@ -515,9 +516,31 @@ async fn main() {
     }
 }
 
+// reqwest requests aren't Send on WASM
+// fortunately, we don't actually need them to be, since we don't do multithreading on WASM anyway
+// so start_loading can drop the constraint there
+
+#[cfg(target_family = "wasm")]
+mod load_fut {
+    use std::future::Future;
+
+    pub trait LoadFut<T>: Future<Output = Result<T, anyhow::Error>> + 'static {}
+    impl<T, F: Future<Output = Result<T, anyhow::Error>> + 'static> LoadFut<T> for F {}
+}
+
+#[cfg(not(target_family = "wasm"))]
+mod load_fut {
+    use std::future::Future;
+
+    pub trait LoadFut<T>: Future<Output = Result<T, anyhow::Error>> + Send + 'static {}
+    impl<T, F: Future<Output = Result<T, anyhow::Error>> + Send + 'static> LoadFut<T> for F {}
+}
+
+pub use load_fut::LoadFut;
+
 fn start_loading<T: Send + 'static>(
     async_rt: &crate::AsyncRt,
-    fut: impl Future<Output = Result<T, anyhow::Error>> + Send + 'static,
+    fut: impl LoadFut<T>,
 ) -> crate::LoadChannel<T> {
     let (send, recv) = futures_channel::oneshot::channel();
 

@@ -10,6 +10,7 @@ fn main() {
             "Apache-2.0",
             "BSL-1.0",
             "Unicode-DFS-2016",
+            "Unicode-3.0",
             "Zlib",
             "MPL-2.0",
             "AGPL-3.0-or-later",
