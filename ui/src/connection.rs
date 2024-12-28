@@ -4,7 +4,7 @@ use macroquad::logging as log;
 use nertsio_types as ni_ty;
 use std::fmt::Write;
 use std::sync::{Arc, Mutex};
-use xwt_core::traits::*;
+use xwt_core::prelude::*;
 
 use crate::{ConnectionState, SharedInfo};
 
@@ -104,10 +104,10 @@ pub(crate) async fn handle_connection(
 
     let conn = {
         #[cfg(target_family = "wasm")]
-        let endpoint = xwt::current::Endpoint::default();
+        let endpoint = xwt_web::Endpoint::default();
 
         #[cfg(not(target_family = "wasm"))]
-        let endpoint = xwt::current::Endpoint(wtransport::Endpoint::client(
+        let endpoint = xwt_wtransport::Endpoint(wtransport::Endpoint::client(
             wtransport::ClientConfig::builder()
                 .with_bind_default()
                 .with_no_cert_validation()
@@ -126,13 +126,11 @@ pub(crate) async fn handle_connection(
             ))
             .await
             .map_err(error_send)?;
-        Arc::new(connecting.wait_connect().await?)
+        Arc::new(connecting.wait_connect().await.map_err(error_send)?)
     };
 
     let (datagrams_recv, send_datagram, mut maintenance_stream_send, maintenance_stream_recv) =
         {
-            use xwt_core::datagram::{Receive, Send};
-
             let maintenance_stream = conn.open_bi().await.map_err(error_send)?.wait_bi().await?;
 
             log::debug!("opened stream");
@@ -636,18 +634,18 @@ pub fn hack_recv_stream(src: Box<dyn std::any::Any>) -> wtransport::RecvStream {
 #[cfg(target_family = "wasm")]
 pub fn hack_send_stream(
     src: Box<dyn std::any::Any>,
-) -> tokio_util::compat::Compat<xwt_web_sys::SendStream> {
+) -> tokio_util::compat::Compat<xwt_web::SendStream> {
     tokio_util::compat::TokioAsyncWriteCompatExt::compat_write(
-        *src.downcast::<xwt_web_sys::SendStream>().unwrap(),
+        *src.downcast::<xwt_web::SendStream>().unwrap(),
     )
 }
 
 #[cfg(target_family = "wasm")]
 pub fn hack_recv_stream(
     src: Box<dyn std::any::Any>,
-) -> tokio_util::compat::Compat<xwt_web_sys::RecvStream> {
+) -> tokio_util::compat::Compat<xwt_web::RecvStream> {
     tokio_util::compat::TokioAsyncReadCompatExt::compat(
-        *src.downcast::<xwt_web_sys::RecvStream>().unwrap(),
+        *src.downcast::<xwt_web::RecvStream>().unwrap(),
     )
 }
 
@@ -657,6 +655,6 @@ fn error_send<T: Into<anyhow::Error>>(src: T) -> anyhow::Error {
 }
 
 #[cfg(target_family = "wasm")]
-fn error_send(src: xwt_web_sys::Error) -> anyhow::Error {
+fn error_send(src: xwt_web::Error) -> anyhow::Error {
     anyhow::anyhow!("Error in connection: {:?}", src)
 }

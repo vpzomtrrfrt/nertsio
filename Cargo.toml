@@ -3,8 +3,6 @@ members = ["common", "types", "ui", "textures", "gameserver", "coordinator", "ui
 resolver = "2"
 
 [patch.crates-io]
-xwt-web-sys = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
-xwt-core = { git = "https://github.com/vpzomtrrfrt/xwt", branch = "all" }
 async-bincode = { git = "https://github.com/vpzomtrrfrt/async-bincode", branch = "constant-len" }
 egui = { git = "https://github.com/vpzomtrrfrt/egui", branch = "no-tab-start-0.28" }
 egui-miniquad = { git = "https://github.com/vpzomtrrfrt/egui-miniquad", branch = "miniquad-permissive" }
