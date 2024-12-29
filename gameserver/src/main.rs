@@ -223,6 +223,23 @@ struct GlobalState {
     games: dashmap::DashMap<u32, ServerGameState>,
 }
 
+struct CertReloader {
+    endpoint: quinn::Endpoint,
+    paths: Vec<std::path::PathBuf>,
+}
+
+impl notify::EventHandler for CertReloader {
+    fn handle_event(&mut self, evt: Result<notify::Event, notify::Error>) {
+        if let Ok(evt) = evt {
+            if evt.kind.is_modify() && evt.paths.iter().any(|x| self.paths.contains(&x)) {
+                println!("reloading certs");
+
+                self.endpoint.set_server_config(Some(load_server_config()));
+            }
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let web_port: u16 = std::env::var("WEB_PORT")
@@ -237,6 +254,138 @@ async fn main() {
         Err(std::env::VarError::NotUnicode(_)) => panic!("MY_REGION is not valid unicode"),
     };
 
+    let global_state = Arc::new(GlobalState {
+        games: Default::default(),
+    });
+
+    let redis_conn_details = match std::env::var("REDIS_URI") {
+        Ok(value) => Some((
+            std::env::var("MY_HOSTNAME")
+                .expect("Missing MY_HOSTNAME")
+                .parse()
+                .expect("Invalid value for MY_HOSTNAME"),
+            {
+                let mut conn = redis::Client::open(value)
+                    .expect("Failed to connect to Redis")
+                    .get_multiplexed_async_connection()
+                    .await
+                    .expect("Failed to connnect to Redis");
+
+                let server_id = loop {
+                    let server_id: u8 = rand::thread_rng().gen();
+
+                    let res = conn
+                        .set_options(
+                            format!("server_ids/{}", server_id),
+                            "yes",
+                            redis::SetOptions::default()
+                                .with_expiration(redis::SetExpiry::EX(120))
+                                .conditional_set(redis::ExistenceCheck::NX),
+                        )
+                        .await
+                        .expect("Failed to reserve server ID");
+
+                    match res {
+                        redis::Value::Nil => {
+                            // try again
+                        }
+                        redis::Value::Okay => {
+                            // success
+                            break server_id;
+                        }
+                        _ => {
+                            panic!("Unknown response from server ID reservation: {:?}", res);
+                        }
+                    }
+                };
+
+                (server_id, conn)
+            },
+        )),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
+    };
+
+    let web_quic_endpoint = quinn::Endpoint::server(
+        load_server_config(),
+        (std::net::Ipv6Addr::UNSPECIFIED, web_port).into(),
+    )
+    .unwrap();
+
+    let web_incoming = futures_util::stream::unfold((), |()| async {
+        if let Some(connecting) = web_quic_endpoint.accept().await {
+            Some((
+                async {
+                    let conn = connecting.await?;
+
+                    let req = webtransport_quinn::accept(conn).await?;
+                    let session = req.ok().await?;
+
+                    Result::<_, anyhow::Error>::Ok(session)
+                },
+                (),
+            ))
+        } else {
+            None
+        }
+    });
+
+    let mut cert_watcher = None;
+
+    if let Some(certfile) = std::env::var_os("CERTIFICATE_FILE") {
+        let keyfile = std::env::var_os("CERTIFICATE_KEY_FILE").unwrap();
+
+        let certfile = std::path::Path::new(&certfile);
+        let keyfile = std::path::Path::new(&keyfile);
+
+        let mut watcher = notify::recommended_watcher(CertReloader {
+            endpoint: web_quic_endpoint.clone(),
+            paths: vec![certfile.to_owned(), keyfile.to_owned()],
+        })
+        .unwrap();
+        notify::Watcher::watch(
+            &mut watcher,
+            certfile.parent().unwrap(),
+            notify::RecursiveMode::NonRecursive,
+        )
+        .unwrap();
+        notify::Watcher::watch(
+            &mut watcher,
+            keyfile.parent().unwrap(),
+            notify::RecursiveMode::NonRecursive,
+        )
+        .unwrap();
+
+        cert_watcher = Some(watcher);
+    }
+
+    futures_util::join!(
+        systems::handle_connection::run(global_state.clone(), web_incoming),
+        systems::cleanup::run(global_state.clone()),
+        {
+            let global_state = global_state.clone();
+            let redis_conn_details = redis_conn_details.clone();
+            async move {
+                if let Some((my_hostname, (server_id, redis_conn))) = redis_conn_details {
+                    systems::publish::run(
+                        global_state,
+                        my_hostname,
+                        web_port,
+                        server_id,
+                        my_region,
+                        redis_conn,
+                    )
+                    .await;
+                }
+            }
+        },
+        systems::bots::run(global_state),
+    );
+
+    let _ = cert_watcher;
+}
+
+fn load_server_config() -> quinn::ServerConfig {
     let (certs, pkey) = match std::env::var_os("CERTIFICATE_FILE") {
         Some(certfile) => {
             let keyfile =
@@ -294,10 +443,6 @@ async fn main() {
 
     let privkey = rustls::PrivateKey(pkey.private_key_to_der().unwrap());
 
-    let global_state = Arc::new(GlobalState {
-        games: Default::default(),
-    });
-
     let mut server_config = rustls::ServerConfig::builder()
         .with_safe_default_cipher_suites()
         .with_safe_default_kx_groups()
@@ -308,118 +453,17 @@ async fn main() {
         .expect("Failed to initialize TLS config");
 
     server_config.key_log = Arc::new(rustls::KeyLogFile::new());
+    server_config
+        .alpn_protocols
+        .push(webtransport_quinn::ALPN.to_vec());
 
     let server_config = Arc::new(server_config);
-
-    let web_server_config = {
-        let mut config = (*server_config).clone();
-        config
-            .alpn_protocols
-            .push(webtransport_quinn::ALPN.to_vec());
-
-        Arc::new(config)
-    };
 
     let mut transport_config = quinn::TransportConfig::default();
     transport_config.keep_alive_interval(Some(std::time::Duration::from_secs(5)));
 
-    let mut quic_server_config = quinn::ServerConfig::with_crypto(server_config);
-    quic_server_config.transport = Arc::new(transport_config);
+    let mut web_quic_server_config = quinn::ServerConfig::with_crypto(server_config);
+    web_quic_server_config.transport = Arc::new(transport_config);
 
-    let mut web_quic_server_config = quinn::ServerConfig::with_crypto(web_server_config);
-    web_quic_server_config.transport = quic_server_config.transport.clone();
-
-    let redis_conn_details = match std::env::var("REDIS_URI") {
-        Ok(value) => Some((
-            std::env::var("MY_HOSTNAME")
-                .expect("Missing MY_HOSTNAME")
-                .parse()
-                .expect("Invalid value for MY_HOSTNAME"),
-            {
-                let mut conn = redis::Client::open(value)
-                    .expect("Failed to connect to Redis")
-                    .get_multiplexed_async_connection()
-                    .await
-                    .expect("Failed to connnect to Redis");
-
-                let server_id = loop {
-                    let server_id: u8 = rand::thread_rng().gen();
-
-                    let res = conn
-                        .set_options(
-                            format!("server_ids/{}", server_id),
-                            "yes",
-                            redis::SetOptions::default()
-                                .with_expiration(redis::SetExpiry::EX(120))
-                                .conditional_set(redis::ExistenceCheck::NX),
-                        )
-                        .await
-                        .expect("Failed to reserve server ID");
-
-                    match res {
-                        redis::Value::Nil => {
-                            // try again
-                        }
-                        redis::Value::Okay => {
-                            // success
-                            break server_id;
-                        }
-                        _ => {
-                            panic!("Unknown response from server ID reservation: {:?}", res);
-                        }
-                    }
-                };
-
-                (server_id, conn)
-            },
-        )),
-        Err(std::env::VarError::NotPresent) => None,
-        Err(std::env::VarError::NotUnicode(_)) => panic!("REDIS_URI is not valid unicode"),
-    };
-
-    let web_quic_endpoint = quinn::Endpoint::server(
-        web_quic_server_config,
-        (std::net::Ipv6Addr::UNSPECIFIED, web_port).into(),
-    )
-    .unwrap();
-    let web_incoming = futures_util::stream::unfold((), |()| async {
-        if let Some(connecting) = web_quic_endpoint.accept().await {
-            Some((
-                async {
-                    let conn = connecting.await?;
-
-                    let req = webtransport_quinn::accept(conn).await?;
-                    let session = req.ok().await?;
-
-                    Result::<_, anyhow::Error>::Ok(session)
-                },
-                (),
-            ))
-        } else {
-            None
-        }
-    });
-
-    futures_util::join!(
-        systems::handle_connection::run(global_state.clone(), web_incoming),
-        systems::cleanup::run(global_state.clone()),
-        {
-            let global_state = global_state.clone();
-            let redis_conn_details = redis_conn_details.clone();
-            async move {
-                if let Some((my_hostname, (server_id, redis_conn))) = redis_conn_details {
-                    systems::publish::run(
-                        global_state,
-                        my_hostname,
-                        web_port,
-                        server_id,
-                        my_region,
-                        redis_conn,
-                    )
-                    .await;
-                }
-            }
-        },
-        systems::bots::run(global_state),
-    );
+    web_quic_server_config
 }
