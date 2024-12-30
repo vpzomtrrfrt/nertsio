@@ -219,7 +219,7 @@ dependencies = [
  "futures-io",
  "futures-sink",
  "serde",
- "tokio 1.29.1",
+ "tokio 1.42.0",
 ]
 
 [[package]]
@@ -748,7 +748,7 @@ dependencies = [
  "futures-core",
  "memchr",
  "pin-project-lite 0.2.13",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-util 0.7.10",
 ]
 
@@ -2441,7 +2441,7 @@ dependencies = [
  "http",
  "indexmap 1.9.1",
  "slab",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-util 0.7.10",
  "tracing",
 ]
@@ -2681,7 +2681,7 @@ dependencies = [
  "itoa 1.0.4",
  "pin-project-lite 0.2.13",
  "socket2 0.4.10",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tower-service",
  "tracing",
  "want",
@@ -2696,7 +2696,7 @@ dependencies = [
  "http",
  "hyper 0.14.23",
  "rustls 0.20.7",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-rustls",
 ]
 
@@ -2709,7 +2709,7 @@ dependencies = [
  "bytes 1.5.0",
  "hyper 0.14.23",
  "native-tls",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-native-tls",
 ]
 
@@ -3317,13 +3317,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.10"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f3d0b296e374a4e6f3c7b0a1f5a51d748a0d34c85e7dc48fc3fa9a87657fe09"
+checksum = "80e04d1dcff3aae0704555fe5fee3bcfaf3d1fdf8a7e521d5b9d2b42acb52cec"
 dependencies = [
+ "hermit-abi 0.3.9",
  "libc",
  "wasi",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3391,7 +3392,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "trout",
 ]
 
@@ -3417,7 +3418,7 @@ dependencies = [
  "rustls-pemfile 0.3.0",
  "serde_json",
  "tempfile",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-rustls",
  "tokio-stream",
  "tokio-util 0.7.10",
@@ -3478,7 +3479,7 @@ dependencies = [
  "serde",
  "serde_json",
  "splines",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-util 0.7.10",
  "wasm-bindgen-futures",
  "wasm-logger",
@@ -3874,22 +3875,22 @@ checksum = "db8bcd96cb740d03149cbad5518db9fd87126a10ab519c011893b1754134c468"
 
 [[package]]
 name = "pin-project"
-version = "1.0.12"
+version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad29a609b6bcd67fee905812e544992d216af9d755757c05ed2d0e15a74c6ecc"
+checksum = "be57f64e946e500c8ee36ef6331845d40a93055567ec57e8fae13efd33759b95"
 dependencies = [
  "pin-project-internal",
 ]
 
 [[package]]
 name = "pin-project-internal"
-version = "1.0.12"
+version = "1.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "069bdb1e05adc7a8990dce9cc75370895fbe4e3d58b9b73bf1aee56359344a55"
+checksum = "3c0f5fad0874fc7abcd4d750e76917eaebbecaa2c20bde22e1dbeeba8beb758c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.103",
+ "syn 2.0.90",
 ]
 
 [[package]]
@@ -4052,7 +4053,7 @@ dependencies = [
  "rustc-hash",
  "rustls 0.21.10",
  "thiserror",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tracing",
 ]
 
@@ -4163,6 +4164,7 @@ dependencies = [
  "async-trait",
  "bytes 1.5.0",
  "combine",
+ "futures",
  "futures-util",
  "itoa 1.0.4",
  "num-bigint",
@@ -4171,7 +4173,8 @@ dependencies = [
  "ryu",
  "sha1_smol",
  "socket2 0.5.5",
- "tokio 1.29.1",
+ "tokio 1.42.0",
+ "tokio-retry2",
  "tokio-util 0.7.10",
  "url",
 ]
@@ -4279,7 +4282,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_urlencoded",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tokio-native-tls",
  "tokio-rustls",
  "tower-service",
@@ -5203,27 +5206,25 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.29.1"
+version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "532826ff75199d5833b9d2c5fe410f29235e25704ee5f0ef599fb51c21f4a4da"
+checksum = "5cec9b21b0450273377fc97bd4c33a8acffc8c996c987a7c5b319a0083707551"
 dependencies = [
- "autocfg",
  "backtrace",
  "bytes 1.5.0",
  "libc",
- "mio 0.8.10",
- "num_cpus",
+ "mio 1.0.2",
  "pin-project-lite 0.2.13",
- "socket2 0.4.10",
+ "socket2 0.5.5",
  "tokio-macros",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "tokio-macros"
-version = "2.1.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5237,7 +5238,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
  "native-tls",
- "tokio 1.29.1",
+ "tokio 1.42.0",
+]
+
+[[package]]
+name = "tokio-retry2"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "903934dba1c4c2f2e9cb460ef10b5695e0b0ecad3bf9ee7c8675e540c5e8b2d1"
+dependencies = [
+ "pin-project",
+ "rand",
+ "tokio 1.42.0",
 ]
 
 [[package]]
@@ -5247,7 +5259,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
 dependencies = [
  "rustls 0.20.7",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "webpki",
 ]
 
@@ -5259,7 +5271,7 @@ checksum = "d660770404473ccd7bc9f8b28494a811bc18542b915c0855c51e8f419d5223ce"
 dependencies = [
  "futures-core",
  "pin-project-lite 0.2.13",
- "tokio 1.29.1",
+ "tokio 1.42.0",
 ]
 
 [[package]]
@@ -5287,7 +5299,7 @@ dependencies = [
  "futures-io",
  "futures-sink",
  "pin-project-lite 0.2.13",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tracing",
 ]
 
@@ -5830,7 +5842,7 @@ version = "0.2.4"
 source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "js-sys",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
@@ -5894,7 +5906,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df712317d761312996f654739debeb3838eb02c6fd9146d9efdfd08a46674e45"
 dependencies = [
  "bytes 1.5.0",
- "tokio 1.29.1",
+ "tokio 1.42.0",
 ]
 
 [[package]]
@@ -5922,7 +5934,7 @@ dependencies = [
  "quinn",
  "quinn-proto",
  "thiserror",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "url",
  "webtransport-generic",
  "webtransport-proto",
@@ -6205,7 +6217,7 @@ dependencies = [
  "socket2 0.5.5",
  "thiserror",
  "time",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "tracing",
  "url",
  "wtransport-proto",
@@ -6308,7 +6320,7 @@ version = "0.2.1"
 source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "async-trait",
- "tokio 1.29.1",
+ "tokio 1.42.0",
 ]
 
 [[package]]
@@ -6317,7 +6329,7 @@ version = "0.4.3"
 source = "git+https://github.com/vpzomtrrfrt/xwt?branch=all#b25de956ad89aa9241f9921365d791d17230d8ea"
 dependencies = [
  "js-sys",
- "tokio 1.29.1",
+ "tokio 1.42.0",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
