@@ -10,7 +10,7 @@ pub(crate) async fn run(
     web_port: u16,
     server_id: u8,
     my_region: Option<String>,
-    redis_conn: redis::aio::MultiplexedConnection,
+    redis_conn: redis::aio::ConnectionManager,
 ) {
     futures_util::join!(
         {

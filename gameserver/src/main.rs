@@ -267,7 +267,7 @@ async fn main() {
             {
                 let mut conn = redis::Client::open(value)
                     .expect("Failed to connect to Redis")
-                    .get_multiplexed_async_connection()
+                    .get_connection_manager()
                     .await
                     .expect("Failed to connnect to Redis");
 
