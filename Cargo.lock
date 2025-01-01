@@ -194,7 +194,7 @@ dependencies = [
 [[package]]
 name = "async-bincode"
 version = "0.7.2"
-source = "git+https://github.com/vpzomtrrfrt/async-bincode?branch=constant-len#b1c201b5f5ab2550dce2afe83ccd2fca2f33dc38"
+source = "git+https://github.com/vpzomtrrfrt/async-bincode?branch=constant-len#6b1ea63568d4b99b40010ccb974965da5cf7fd7c"
 dependencies = [
  "bincode",
  "byteorder",
@@ -3307,7 +3307,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if 1.0.0",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
