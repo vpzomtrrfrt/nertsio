@@ -454,7 +454,15 @@ async fn main() {
                                 let body =
                                     prometheus::TextEncoder.encode_to_string(&registry.gather())?;
 
-                                Ok::<_, anyhow::Error>(hyper::Response::new(body))
+                                let mut res = hyper::Response::new(body);
+                                res.headers_mut().insert(
+                                    hyper::header::CONTENT_TYPE,
+                                    hyper::header::HeaderValue::from_static(
+                                        "text/plain; version=0.0.4",
+                                    ),
+                                );
+
+                                Ok::<_, anyhow::Error>(res)
                             }
                         }),
                     )
