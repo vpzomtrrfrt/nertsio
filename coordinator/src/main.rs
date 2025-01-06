@@ -421,6 +421,50 @@ async fn main() {
         geoip_db,
     });
 
+    let metrics_registry = prometheus::Registry::new();
+    {
+        let server_count_gauge = prometheus::PullingGauge::new(
+            "gameserver_count",
+            "Number of gameservers this coordinator is aware of.",
+            {
+                let global_state = global_state.clone();
+                Box::new(move || global_state.gameservers.read().unwrap().len() as f64)
+            },
+        )
+        .unwrap();
+
+        metrics_registry
+            .register(Box::new(server_count_gauge))
+            .unwrap();
+    }
+
+    let metrics_server = match std::env::var("METRICS_PORT") {
+        Ok(value) => {
+            let port: u16 = value.parse().expect("Invalid value for METRICS_PORT");
+
+            Some(hyper::Server::bind(&([0, 0, 0, 0], port).into()).serve({
+                let registry = metrics_registry.clone();
+                hyper::service::make_service_fn(move |_conn: &hyper::server::conn::AddrStream| {
+                    let registry = registry.clone();
+
+                    futures_util::future::ok::<_, std::convert::Infallible>(
+                        hyper::service::service_fn(move |_req| {
+                            let registry = registry.clone();
+                            async move {
+                                let body =
+                                    prometheus::TextEncoder.encode_to_string(&registry.gather())?;
+
+                                Ok::<_, anyhow::Error>(hyper::Response::new(body))
+                            }
+                        }),
+                    )
+                })
+            }))
+        }
+        Err(std::env::VarError::NotPresent) => None,
+        Err(std::env::VarError::NotUnicode(_)) => panic!("Invalid value for METRICS_PORT"),
+    };
+
     let server = hyper::Server::bind(&addr).serve({
         let global_state = global_state.clone();
         hyper::service::make_service_fn(move |conn: &hyper::server::conn::AddrStream| {
@@ -519,6 +563,13 @@ async fn main() {
         .expect("Failed to subscribe to channel");
 
     if let Err(err) = futures_util::try_join!(
+        async move {
+            if let Some(metrics_server) = metrics_server {
+                metrics_server.await?;
+            }
+
+            Ok(())
+        },
         server.map_err(Into::into),
         {
             let global_state = global_state.clone();

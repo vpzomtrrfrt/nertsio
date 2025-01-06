@@ -21,3 +21,4 @@ serde = "1.0.130"
 serde_urlencoded = "0.7.1"
 geo = { version = "0.29.3", default-features = false }
 geoip2 = "0.1.7"
+prometheus = "0.13.4"
