@@ -433,8 +433,29 @@ async fn main() {
         )
         .unwrap();
 
+        let player_count_gauge =
+            prometheus::PullingGauge::new("players", "Number of players currently connected.", {
+                let global_state = global_state.clone();
+                Box::new(move || {
+                    global_state
+                        .gameservers
+                        .read()
+                        .unwrap()
+                        .iter()
+                        .fold(0, |acc, entry| {
+                            acc + entry.1 .1.stats.public_game_players
+                                + entry.1 .1.stats.private_game_players
+                        }) as f64
+                })
+            })
+            .unwrap();
+
         metrics_registry
             .register(Box::new(server_count_gauge))
+            .unwrap();
+
+        metrics_registry
+            .register(Box::new(player_count_gauge))
             .unwrap();
     }
 
