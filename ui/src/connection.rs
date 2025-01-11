@@ -46,7 +46,8 @@ pub enum ConnectionEvent {
     PlayerJoined,
     PlayerLeft,
     HandInit,
-    PlayerHandAction(ni_ty::HandAction),
+    PlayerHandAction(u8, ni_ty::HandAction),
+    ServerHandAction(ni_ty::HandAction),
     NertsCalled,
 }
 
@@ -478,8 +479,9 @@ pub(crate) async fn handle_connection(
 
                                     hand.apply(Some(player), action).unwrap();
 
-                                    let _ = events_send
-                                        .unbounded_send(ConnectionEvent::PlayerHandAction(action));
+                                    let _ = events_send.unbounded_send(
+                                        ConnectionEvent::PlayerHandAction(player, action),
+                                    );
                                 }
                                 GameMessageS2C::ServerHandAction { action } => {
                                     let mut lock = info_mutex.lock().unwrap();
@@ -492,6 +494,9 @@ pub(crate) async fn handle_connection(
                                     if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
                                         shared.hand_extra.as_mut().unwrap().stalled = false;
                                     }
+
+                                    let _ = events_send
+                                        .unbounded_send(ConnectionEvent::ServerHandAction(action));
                                 }
                                 GameMessageS2C::NertsCalled { player: _ } => {
                                     let mut lock = info_mutex.lock().unwrap();

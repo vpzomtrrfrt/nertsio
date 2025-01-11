@@ -362,8 +362,30 @@ async fn main() {
         macroquad::audio::load_sound_from_bytes(include_bytes!("../res/playerjoin.ogg"))
             .await
             .unwrap();
+
     let player_left_sound =
         macroquad::audio::load_sound_from_bytes(include_bytes!("../res/playerleft.ogg"))
+            .await
+            .unwrap();
+
+    let flip_sound = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/flip.ogg"))
+        .await
+        .unwrap();
+
+    let gather_sound = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/gather.ogg"))
+        .await
+        .unwrap();
+
+    let pickup_sound = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/pickup.ogg"))
+        .await
+        .unwrap();
+
+    let place_sound = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/place.ogg"))
+        .await
+        .unwrap();
+
+    let shuffle_sound =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/shuffle.ogg"))
             .await
             .unwrap();
 
@@ -423,6 +445,11 @@ async fn main() {
         placeholder_texture,
         font,
         nerts_callout: &nerts_callout,
+        flip_sound: &flip_sound,
+        gather_sound: &gather_sound,
+        pickup_sound: &pickup_sound,
+        place_sound: &place_sound,
+        shuffle_sound: &shuffle_sound,
     };
 
     let mut view: views::View = views::MainMenuView::init(&ctx).into();
@@ -484,15 +511,32 @@ async fn main() {
                         macroquad::audio::play_sound_once(&round_start_music);
                     }
                 }
-                ConnectionEvent::PlayerHandAction(action) => {
+                ConnectionEvent::ServerHandAction(action) => {
                     let mut settings_lock = settings_mutex.lock().unwrap();
                     let settings = &mut *settings_lock;
 
                     if settings.sounds {
-                        if let ni_ty::HandAction::Move { to, .. } = action {
-                            if matches!(to, ni_ty::StackLocation::Lake(_)) {
-                                let mut lock = game_info_mutex.lock().unwrap();
-                                if let Some(shared) = (*lock).as_info_mut() {
+                        ctx.play_sound_for_action(action);
+                    }
+                }
+                ConnectionEvent::PlayerHandAction(player, action) => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.sounds {
+                        let mut lock = game_info_mutex.lock().unwrap();
+                        if let Some(shared) = (*lock).as_info_mut() {
+                            if let Some(hand) = &shared.game.hand {
+                                let player = &hand.players()[player as usize];
+
+                                // my own sounds are triggered when sending them, so only handle others
+                                if player.player_id() != shared.my_player_id {
+                                    ctx.play_sound_for_action(action);
+                                }
+                            }
+
+                            if let ni_ty::HandAction::Move { to, .. } = action {
+                                if matches!(to, ni_ty::StackLocation::Lake(_)) {
                                     if let Some(hand) = &shared.game.hand {
                                         if let Some(stack) = hand.stack_at(to) {
                                             if let Some(top) = stack.last() {

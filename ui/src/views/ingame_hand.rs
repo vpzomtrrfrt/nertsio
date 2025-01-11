@@ -160,6 +160,10 @@ impl super::ViewImpl for IngameHandView {
                                             .unwrap();
 
                                         hand_extra.my_held_state = None;
+
+                                        if settings.sounds {
+                                            ctx.play_sound_for_action(action);
+                                        }
                                     }
                                 }
                             } else {
@@ -400,7 +404,13 @@ impl super::ViewImpl for IngameHandView {
                                                                     DragMode::Drag
                                                                     | DragMode::Hybrid => true,
                                                                 },
-                                                            })
+                                                            });
+
+                                                        if settings.sounds {
+                                                            macroquad::audio::play_sound_once(
+                                                                &ctx.pickup_sound,
+                                                            );
+                                                        }
                                                     }
                                                 }
                                             }
@@ -422,12 +432,14 @@ impl super::ViewImpl for IngameHandView {
 
                                         let mut any_success = false;
                                         let mut maybe_start_nondrag = false;
+                                        let mut put_back = false;
 
                                         for found in found {
                                             let target_loc = found.location;
                                             if target_loc == src_loc {
                                                 any_success = true;
                                                 maybe_start_nondrag = true;
+                                                put_back = true;
                                                 break;
                                             } else {
                                                 let success = if matches!(
@@ -471,6 +483,12 @@ impl super::ViewImpl for IngameHandView {
                                                                         .pending_actions
                                                                         .push_back(action);
                                                                     ctx.game_msg_send.borrow().as_ref().unwrap().unbounded_send(ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }.into()).unwrap();
+
+                                                                    if settings.sounds {
+                                                                        ctx.play_sound_for_action(
+                                                                            action,
+                                                                        );
+                                                                    }
                                                                 }
 
                                                                 true
@@ -507,7 +525,17 @@ impl super::ViewImpl for IngameHandView {
                                         {
                                             held.is_drag = false;
                                         } else if any_success || held.is_drag {
+                                            let is_drag = held.is_drag;
+
                                             hand_extra.my_held_state = None;
+
+                                            if ((!any_success && is_drag) || put_back)
+                                                && settings.sounds
+                                            {
+                                                // not a real move, make sure to play the sound
+                                                // anyway
+                                                macroquad::audio::play_sound_once(ctx.place_sound);
+                                            }
                                         }
                                     }
                                 }
@@ -515,7 +543,13 @@ impl super::ViewImpl for IngameHandView {
                         } else if mq::is_mouse_button_pressed(mq::MouseButton::Right)
                             || mq::is_key_pressed(mq::KeyCode::Escape)
                         {
-                            hand_extra.my_held_state = None;
+                            if hand_extra.my_held_state.is_some() {
+                                hand_extra.my_held_state = None;
+
+                                if settings.sounds {
+                                    macroquad::audio::play_sound_once(ctx.place_sound);
+                                }
+                            }
                         } else if mq::is_key_pressed(mq::KeyCode::Tab)
                             || mq::is_key_pressed(mq::KeyCode::Z)
                             || mq::is_key_pressed(mq::KeyCode::X)
@@ -542,6 +576,10 @@ impl super::ViewImpl for IngameHandView {
                                     .unwrap();
 
                                 hand_extra.my_held_state = None;
+
+                                if settings.sounds {
+                                    ctx.play_sound_for_action(action);
+                                }
                             }
                         }
                     }

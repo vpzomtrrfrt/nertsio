@@ -110,6 +110,11 @@ pub struct GameContext<'a> {
     pub placeholder_texture: mq::Texture2D,
     pub font: mq::Font,
     pub nerts_callout: &'a macroquad::audio::Sound,
+    pub flip_sound: &'a macroquad::audio::Sound,
+    pub gather_sound: &'a macroquad::audio::Sound,
+    pub pickup_sound: &'a macroquad::audio::Sound,
+    pub place_sound: &'a macroquad::audio::Sound,
+    pub shuffle_sound: &'a macroquad::audio::Sound,
 }
 
 impl<'a> GameContext<'a> {
@@ -352,6 +357,21 @@ impl<'a> GameContext<'a> {
                 ..Default::default()
             },
         );
+    }
+
+    pub fn play_sound_for_action(&self, action: ni_ty::HandAction) {
+        #[allow(unreachable_patterns)]
+        let sound = match action {
+            ni_ty::HandAction::ReturnStock => Some(&self.gather_sound),
+            ni_ty::HandAction::FlipStock => Some(&self.flip_sound),
+            ni_ty::HandAction::Move { .. } => Some(&self.place_sound),
+            ni_ty::HandAction::ShuffleStock { .. } => Some(&self.shuffle_sound),
+            _ => None,
+        };
+
+        if let Some(sound) = sound {
+            macroquad::audio::play_sound_once(sound);
+        }
     }
 }
 
