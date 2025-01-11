@@ -43,6 +43,8 @@ impl From<ni_ty::protocol::GameMessageC2S> for ConnectionMessage {
 
 /// Used to trigger sounds
 pub enum ConnectionEvent {
+    PlayerJoined,
+    PlayerLeft,
     HandInit,
     PlayerHandAction(ni_ty::HandAction),
     NertsCalled,
@@ -390,6 +392,12 @@ pub(crate) async fn handle_connection(
                                         .game
                                         .players
                                         .insert(id, info);
+
+                                    if let Err(err) =
+                                        events_send.unbounded_send(ConnectionEvent::PlayerJoined)
+                                    {
+                                        eprintln!("unable to trigger event: {:?}", err);
+                                    }
                                 }
                                 GameMessageS2C::PlayerLeave { id } => {
                                     let mut lock = info_mutex.lock().unwrap();
@@ -398,6 +406,12 @@ pub(crate) async fn handle_connection(
                                     shared.game.players.remove(&id);
 
                                     shared.menu_mouse_states.remove(&id);
+
+                                    if let Err(err) =
+                                        events_send.unbounded_send(ConnectionEvent::PlayerLeft)
+                                    {
+                                        eprintln!("unable to trigger event: {:?}", err);
+                                    }
                                 }
                                 GameMessageS2C::PlayerUpdateReady { id, value } => {
                                     (*info_mutex.lock().unwrap())

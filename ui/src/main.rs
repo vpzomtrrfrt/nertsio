@@ -358,6 +358,15 @@ async fn main() {
             .await
             .unwrap();
 
+    let player_join_sound =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/playerjoin.ogg"))
+            .await
+            .unwrap();
+    let player_left_sound =
+        macroquad::audio::load_sound_from_bytes(include_bytes!("../res/playerleft.ogg"))
+            .await
+            .unwrap();
+
     let nerts_callout = macroquad::audio::load_sound_from_bytes(include_bytes!("../res/nerts.ogg"))
         .await
         .unwrap();
@@ -450,11 +459,27 @@ async fn main() {
 
         match events_recv.try_next() {
             Ok(Some(evt)) => match evt {
+                ConnectionEvent::PlayerJoined => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.sounds {
+                        macroquad::audio::play_sound_once(&player_join_sound);
+                    }
+                }
+                ConnectionEvent::PlayerLeft => {
+                    let mut settings_lock = settings_mutex.lock().unwrap();
+                    let settings = &mut *settings_lock;
+
+                    if settings.sounds {
+                        macroquad::audio::play_sound_once(&player_left_sound);
+                    }
+                }
                 ConnectionEvent::HandInit => {
                     let mut settings_lock = settings_mutex.lock().unwrap();
                     let settings = &mut *settings_lock;
 
-                    if settings.round_start_music {
+                    if settings.music {
                         println!("playing sound");
                         macroquad::audio::play_sound_once(&round_start_music);
                     }
@@ -463,7 +488,7 @@ async fn main() {
                     let mut settings_lock = settings_mutex.lock().unwrap();
                     let settings = &mut *settings_lock;
 
-                    if settings.suit_callouts {
+                    if settings.sounds {
                         if let ni_ty::HandAction::Move { to, .. } = action {
                             if matches!(to, ni_ty::StackLocation::Lake(_)) {
                                 let mut lock = game_info_mutex.lock().unwrap();
@@ -501,7 +526,7 @@ async fn main() {
                     let mut settings_lock = settings_mutex.lock().unwrap();
                     let settings = &mut *settings_lock;
 
-                    if settings.nerts_callout {
+                    if settings.sounds {
                         macroquad::audio::play_sound_once(&nerts_callout);
                     }
                 }

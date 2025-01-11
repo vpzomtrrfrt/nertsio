@@ -1038,7 +1038,7 @@ impl super::ViewImpl for IngameHandView {
                                                     let mut settings_lock = ctx.settings_mutex.lock().unwrap();
                                                     let settings = &mut *settings_lock;
 
-                                                    if settings.nerts_callout {
+                                                    if settings.sounds {
                                                         macroquad::audio::play_sound_once(ctx.nerts_callout);
                                                     }
                                                 }

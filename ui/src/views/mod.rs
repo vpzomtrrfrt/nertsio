@@ -403,9 +403,8 @@ pub fn render_settings_window(egui_ctx: &egui::Context, ctx: &GameContext) -> bo
 
                         ui.label("Sound");
                         ui.indent(hash!(), |ui| {
-                            ui.checkbox(&mut settings.round_start_music, "Round Start Music");
-                            ui.checkbox(&mut settings.suit_callouts, "Suit Callouts");
-                            ui.checkbox(&mut settings.nerts_callout, "Nerts Callout");
+                            ui.checkbox(&mut settings.music, "Round Start Music");
+                            ui.checkbox(&mut settings.sounds, "Sounds");
                         });
 
                         ui.label("Preferred Region");

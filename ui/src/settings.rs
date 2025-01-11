@@ -36,14 +36,17 @@ pub struct Settings {
     #[serde(default)]
     pub card_theme: CardTheme,
 
-    #[serde(default)]
-    pub round_start_music: bool,
+    #[serde(default, alias = "round_start_music")]
+    pub music: bool,
 
     #[serde(default)]
-    pub suit_callouts: bool,
+    pub sounds: bool,
 
-    #[serde(default)]
-    pub nerts_callout: bool,
+    #[serde(default, rename = "suit_callouts", skip_serializing)]
+    pub legacy_suit_callouts: bool,
+
+    #[serde(default, rename = "nerts_callout", skip_serializing)]
+    pub legacy_nerts_callout: bool,
 
     #[serde(rename = "drag")]
     #[serde(skip_serializing)]
@@ -58,9 +61,10 @@ impl Default for Settings {
             name: default_name(),
             drag_mode: Default::default(),
             card_theme: Default::default(),
-            round_start_music: false,
-            suit_callouts: false,
-            nerts_callout: false,
+            music: false,
+            sounds: false,
+            legacy_suit_callouts: false,
+            legacy_nerts_callout: false,
             legacy_drag: None,
             preferred_region: None,
         }
@@ -213,6 +217,10 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
                     } else {
                         DragMode::Click
                     };
+                }
+
+                if init_value.legacy_suit_callouts || init_value.legacy_suit_callouts {
+                    init_value.sounds = true;
                 }
 
                 settings_mutex = Arc::new(Mutex::new(init_value.clone()));
