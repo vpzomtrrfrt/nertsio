@@ -169,6 +169,12 @@ pub struct RespList<T> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct GameListInfo<'a> {
+    pub game_id: u32,
+    pub server: ServerConnectionInfo<'a>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PublicGameInfoExpanded<'a> {
     pub game_id: u32,
     pub players: u8,

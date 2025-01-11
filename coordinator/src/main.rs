@@ -6,6 +6,8 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+mod game_id;
+
 const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 const PUBLIC_GAME_COUNT: usize = 8;
 
@@ -112,6 +114,48 @@ pub fn json_response(body: &impl serde::Serialize) -> Result<hyper::Response<hyp
     Ok(common_response_builder()
         .header(hyper::header::CONTENT_TYPE, "application/json")
         .body(body.into())?)
+}
+
+async fn handler_games_list(
+    _: (),
+    ctx: Arc<GlobalState>,
+    req: Request,
+) -> Result<hyper::Response<hyper::Body>, crate::Error> {
+    #[derive(Deserialize, Debug)]
+    struct Query<'a> {
+        key: Cow<'a, str>,
+    }
+
+    let query: Query = serde_urlencoded::from_str(req.as_ref().uri().query().unwrap_or(""))?;
+
+    let parse_res = game_id::parse_full_game_id_str(&query.key);
+
+    let gameservers = ctx.gameservers.read().unwrap();
+
+    let output = match parse_res {
+        Err(_) => vec![],
+        Ok((server_id, game_id)) => match gameservers.get(&server_id) {
+            None => vec![],
+            Some((_, server)) => {
+                vec![ni_ty::protocol::GameListInfo {
+                    game_id,
+                    #[allow(deprecated)]
+                    server: ni_ty::protocol::ServerConnectionInfo {
+                        server_id,
+                        address_ipv4: server.address_ipv4,
+                        hostname: server.hostname.as_ref().map(|x| Cow::Borrowed(x.as_ref())),
+                        web_port: server.web_port,
+                        region: server
+                            .region
+                            .as_ref()
+                            .map(|id| ctx.get_region_for_output(id)),
+                    },
+                }]
+            }
+        },
+    };
+
+    json_response(&ni_ty::protocol::RespList { items: output })
 }
 
 async fn handler_public_games_list(
@@ -367,6 +411,10 @@ async fn main() {
 
     let routes: Arc<RouteNode<()>> = Arc::new(
         RouteNode::new()
+            .with_child(
+                "games",
+                RouteNode::new().with_handler_async("GET", handler_games_list),
+            )
             .with_child(
                 "public_games",
                 RouteNode::new().with_handler_async("GET", handler_public_games_list),
