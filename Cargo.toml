@@ -1,5 +1,5 @@
 [workspace]
-members = ["common", "types", "ui", "textures", "gameserver", "coordinator", "ui_metrics"]
+members = ["common", "types", "ui", "textures", "gameserver", "coordinator", "ui_metrics", "overseer"]
 resolver = "2"
 
 [patch.crates-io]

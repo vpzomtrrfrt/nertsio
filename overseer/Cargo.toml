@@ -1,0 +1,16 @@
+[package]
+name = "nertsio_overseer"
+version = "0.0.0-dev"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.95"
+futures-util = "0.3.31"
+hyper = { version = "0.14.15", features = ["server", "http1", "tcp"] }
+indexmap = "2.7.1"
+nertsio_types = { path = "../types" }
+prometheus = "0.13.4"
+redis = { version = "0.28.2", features = ["tokio-comp"] }
+serde_json = "1.0.137"
+tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
+wtransport = { version = "0.5.0", features = ["dangerous-configuration"] }
