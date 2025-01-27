@@ -206,7 +206,7 @@ async fn main() {
 async fn run_test(
     target: &ni_ty::protocol::ServerStatusMessage<'static>,
 ) -> Result<(), anyhow::Error> {
-    tokio::time::timeout(std::time::Duration::from_secs(5), run_test_inner(target)).await??;
+    tokio::time::timeout(std::time::Duration::from_secs(7), run_test_inner(target)).await??;
     Ok(())
 }
 
