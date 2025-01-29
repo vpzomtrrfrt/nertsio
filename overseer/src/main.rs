@@ -1,5 +1,5 @@
-use futures_util::StreamExt;
 use nertsio_types as ni_ty;
+use redis::FromRedisValue;
 use std::sync::{Arc, RwLock};
 
 const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
@@ -73,12 +73,26 @@ async fn main() {
         })
     });
 
-    let mut redis_conn =
-        redis::Client::open(std::env::var("REDIS_URI").expect("Missing REDIS_URI"))
-            .expect("Failed to connect to Redis")
-            .get_async_pubsub()
-            .await
-            .expect("Failed to connect to Redis");
+    let (redis_msg_tx, mut redis_msg_rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let mut redis_conn = redis::Client::open({
+        use redis::IntoConnectionInfo;
+
+        let mut info = std::env::var("REDIS_URI")
+            .expect("Missing REDIS_URI")
+            .into_connection_info()
+            .expect("Failed to parse REDIS_URI");
+
+        info.redis.protocol = redis::ProtocolVersion::RESP3;
+
+        info
+    })
+    .expect("Failed to connect to Redis")
+    .get_multiplexed_async_connection_with_config(
+        &redis::AsyncConnectionConfig::new().set_push_sender(redis_msg_tx),
+    )
+    .await
+    .expect("Failed to connect to Redis");
 
     redis_conn
         .subscribe(ni_ty::protocol::COORDINATOR_CHANNEL)
@@ -94,44 +108,45 @@ async fn main() {
         {
             let global_state = global_state.clone();
             async move {
-                redis_conn
-                    .on_message()
-                    .for_each(|value| {
-                        match value.get_payload::<String>() {
-                            Ok(content) => {
-                                match serde_json::from_str::<ni_ty::protocol::ServerStatusMessage>(
-                                    &content,
-                                ) {
-                                    Ok(message) => {
-                                        let mut gameservers =
-                                            global_state.gameservers.write().unwrap();
+                while let Some(msg) = redis_msg_rx.recv().await {
+                    if msg.kind != redis::PushKind::Message {
+                        continue;
+                    }
 
-                                        match gameservers.entry(message.server_id) {
-                                            indexmap::map::Entry::Occupied(mut entry) => {
-                                                entry.get_mut().last_updated =
-                                                    std::time::Instant::now();
-                                                entry.get_mut().message = message;
-                                            }
-                                            indexmap::map::Entry::Vacant(entry) => {
-                                                entry.insert(ServerState {
-                                                    last_updated: std::time::Instant::now(),
-                                                    message,
-                                                    ping_result: None,
-                                                });
-                                            }
+                    match String::from_owned_redis_value(
+                        msg.data.into_iter().skip(1).next().unwrap(),
+                    ) {
+                        Ok(content) => {
+                            match serde_json::from_str::<ni_ty::protocol::ServerStatusMessage>(
+                                &content,
+                            ) {
+                                Ok(message) => {
+                                    let mut gameservers = global_state.gameservers.write().unwrap();
+
+                                    match gameservers.entry(message.server_id) {
+                                        indexmap::map::Entry::Occupied(mut entry) => {
+                                            entry.get_mut().last_updated =
+                                                std::time::Instant::now();
+                                            entry.get_mut().message = message;
+                                        }
+                                        indexmap::map::Entry::Vacant(entry) => {
+                                            entry.insert(ServerState {
+                                                last_updated: std::time::Instant::now(),
+                                                message,
+                                                ping_result: None,
+                                            });
                                         }
                                     }
-                                    Err(err) => {
-                                        eprintln!("failed to parse message: {:?}", err);
-                                    }
+                                }
+                                Err(err) => {
+                                    eprintln!("failed to parse message: {:?}", err);
                                 }
                             }
-                            Err(err) => eprintln!("failed to parse message: {:?}", err),
                         }
+                        Err(err) => eprintln!("unexpected type for message: {:?}", err),
+                    }
+                }
 
-                        futures_util::future::ready(())
-                    })
-                    .await;
                 Result::<(), _>::Err(anyhow::anyhow!("subscription stream ended"))
             }
         },
