@@ -343,6 +343,9 @@ async fn main() {
             paths: vec![certfile.to_owned(), keyfile.to_owned()],
         })
         .unwrap();
+        notify::Watcher::watch(&mut watcher, certfile, notify::RecursiveMode::NonRecursive)
+            .unwrap();
+        notify::Watcher::watch(&mut watcher, keyfile, notify::RecursiveMode::NonRecursive).unwrap();
         notify::Watcher::watch(
             &mut watcher,
             certfile.parent().unwrap(),
