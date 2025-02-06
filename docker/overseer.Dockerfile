@@ -4,9 +4,10 @@ RUN apk add --no-cache cargo pkgconf openssl-dev
 
 WORKDIR /usr/src/nertsio
 
-RUN sh -c "echo -e '[workspace]\nmembers = [\"types\", \"overseer\"]' > Cargo.toml"
+RUN sh -c "echo -e '[workspace]\nmembers = [\"types\", \"common\", \"overseer\"]' > Cargo.toml"
 COPY Cargo.lock ./
 COPY overseer ./overseer
+COPY common ./common
 COPY types ./types
 
 RUN cd overseer
