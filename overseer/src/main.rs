@@ -2,8 +2,6 @@ use nertsio_types as ni_ty;
 use redis::FromRedisValue;
 use std::sync::{Arc, RwLock};
 
-const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
-
 struct GlobalState {
     gameservers: RwLock<indexmap::IndexMap<u8, ServerState>>,
 }
@@ -163,7 +161,10 @@ async fn main() {
                         .gameservers
                         .write()
                         .unwrap()
-                        .retain(|_key, value| value.last_updated.elapsed() < GAMESERVER_TIMEOUT);
+                        .retain(|_key, value| {
+                            value.last_updated.elapsed()
+                                < nertsio_common::GAMESERVER_PUBLISH_TIMEOUT
+                        });
                 }
 
                 // helps infer return type

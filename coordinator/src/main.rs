@@ -8,7 +8,6 @@ use std::sync::{Arc, RwLock};
 
 mod game_id;
 
-const GAMESERVER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 const PUBLIC_GAME_COUNT: usize = 8;
 
 #[derive(Debug)]
@@ -691,7 +690,9 @@ async fn main() {
                     .gameservers
                     .write()
                     .unwrap()
-                    .retain(|_key, value| value.0.elapsed() < GAMESERVER_TIMEOUT);
+                    .retain(|_key, value| {
+                        value.0.elapsed() < nertsio_common::GAMESERVER_PUBLISH_TIMEOUT
+                    });
             }
 
             // helps infer return type

@@ -8,6 +8,7 @@ anyhow = "1.0.95"
 futures-util = "0.3.31"
 hyper = { version = "0.14.15", features = ["server", "http1", "tcp"] }
 indexmap = "2.7.1"
+nertsio_common = { path = "../common" }
 nertsio_types = { path = "../types" }
 prometheus = "0.13.4"
 redis = { version = "0.28.2", features = ["tokio-comp"] }
