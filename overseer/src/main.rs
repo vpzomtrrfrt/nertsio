@@ -221,9 +221,11 @@ async fn main() {
 
 async fn run_test(
     target: &ni_ty::protocol::ServerStatusMessage<'static>,
-) -> Result<(), anyhow::Error> {
+) -> Result<std::time::Duration, anyhow::Error> {
+    let start = std::time::Instant::now();
+
     tokio::time::timeout(std::time::Duration::from_secs(7), run_test_inner(target)).await??;
-    Ok(())
+    Ok(start.elapsed())
 }
 
 async fn run_test_inner(
