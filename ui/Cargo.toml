@@ -45,13 +45,14 @@ egui-macroquad = { git = "https://github.com/vpzomtrrfrt/egui-macroquad", branch
 egui = "0.28.1"
 enum_dispatch = "0.3.12"
 percent-encoding = "2.3.1"
+glam = "0.27"
 
 [build-dependencies]
 bureau = "0.2.0"
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { version = "1.14.0", features = ["rt-multi-thread", "sync", "fs", "io-util"] }
-wtransport = { version = "0.5.0", features = ["dangerous-configuration"] }
+wtransport = { version = "0.6.1", features = ["dangerous-configuration"] }
 xwt-wtransport = "0.13.0"
 atomicwrites = "0.3.1"
 async-bincode = { version = "0.7.2" }
