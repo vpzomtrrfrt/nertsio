@@ -14,4 +14,4 @@ prometheus = "0.13.4"
 redis = { version = "0.28.2", features = ["tokio-comp"] }
 serde_json = "1.0.137"
 tokio = { version = "1.43.0", features = ["macros", "rt-multi-thread"] }
-wtransport = { version = "0.5.0", features = ["dangerous-configuration"] }
+wtransport = { version = "0.6.1", features = ["dangerous-configuration"] }
