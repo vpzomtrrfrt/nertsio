@@ -1,4 +1,4 @@
-FROM alpine:3.19 AS builder
+FROM alpine:3.22 AS builder
 
 RUN apk add --no-cache cargo pkgconf openssl-dev
 
@@ -14,7 +14,7 @@ COPY ui_metrics ./ui_metrics
 RUN cd gameserver
 RUN cargo build --release
 
-FROM alpine:3.19
+FROM alpine:3.22
 
 RUN apk add --no-cache openssl libgcc
 

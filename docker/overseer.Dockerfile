@@ -1,4 +1,4 @@
-FROM alpine:3.19 AS builder
+FROM alpine:3.22 AS builder
 
 RUN apk add --no-cache cargo pkgconf openssl-dev
 
@@ -13,7 +13,7 @@ COPY types ./types
 RUN cd overseer
 RUN cargo build --release
 
-FROM alpine:3.19
+FROM alpine:3.22
 
 RUN apk add --no-cache openssl libgcc
 
