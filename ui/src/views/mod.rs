@@ -21,7 +21,11 @@ const CARD_SIZE: mq::Vec2 = mq::Vec2 {
     y: metrics::CARD_HEIGHT,
 };
 
-const CAN_QUIT: bool = cfg!(not(any(target_family = "wasm", target_os = "android")));
+const CAN_QUIT: bool = cfg!(not(any(
+    target_family = "wasm",
+    target_os = "android",
+    target_os = "ios"
+)));
 
 const PUBLIC_GAMES_REFRESH_DELAY: std::time::Duration = std::time::Duration::from_secs(5);
 
