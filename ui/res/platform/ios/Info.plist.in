@@ -9,12 +9,49 @@
 		<key>CFBundleName</key>
 		<string>nertsio</string>
 		<key>CFBundleVersion</key>
-		<string>%VERSION%</string>
+		<string>%BUNDLE_VERSION%</string>
 		<key>CFBundleShortVersionString</key>
 		<string>%VERSION%</string>
-		<key>CFBundleIconFile</key>
-		<string>nertsio.icns</string>
+		<key>CFBundleIcons</key>
+        <dict>
+            <key>CFBundlePrimaryIcon</key>
+            <dict>
+                <key>CFBundleIconFiles</key>
+                <array>
+                    <string>icon_1024</string>
+                </array>
+            </dict>
+        </dict>
 		<key>UILaunchStoryboardName</key>
 		<string>LaunchScreen</string>
+		<key>DTPlatformName</key>
+		<string>iphoneos</string>
+		<key>MinimumOSVersion</key>
+		<string>12.0</string>
+		<key>UIRequiredDeviceCapabilities</key>
+		<array>
+			<string>arm64</string>
+		</array>
+		<key>CFBundlePackageType</key>
+		<string>APPL</string>
+		<key>UIDeviceFamily</key>
+		<array>
+			<integer>1</integer>
+			<integer>2</integer>
+		</array>
+		<key>DTPlatformBuild</key>
+		<string>22F76</string>
+		<key>DTSDKBuild</key>
+		<string>22F76</string>
+		<key>DTSDKName</key>
+		<string>iphoneos18.5</string>
+		<key>DTXcode</key>
+		<string>1640</string>
+		<key>DTXcodeBuild</key>
+		<string>16F6</string>
+		<key>CFBundleSupportedPlatforms</key>
+		<array>
+			<string>iPhoneOS</string>
+		</array>
 	</dict>
 </plist>

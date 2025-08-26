@@ -1,5 +1,9 @@
 #!/bin/sh
 
+RAW_VERSION=$(cat ui/Cargo.toml | grep version | head -n 1 | sed "s/.*\"\(.*\)\".*/\1/")
+VERSION="$RAW_VERSION"
+BUNDLE_VERSION="$VERSION"
+
 TARGET=aarch64-apple-ios
 MAKE_IPA=no
 
@@ -8,13 +12,12 @@ if [ "$1" == "--simulator" ]; then
 elif [ "$1" == "--ipa" ]; then
 	MAKE_IPA=yes
 	SECRETS_DIR="$2"
+	BUNDLE_VERSION="$3"
 fi
 
 cargo build --release -p nertsio_ui --target $TARGET
 
 APP_DIR=target/$TARGET/dist/nertsio.app
-RAW_VERSION=$(cat ui/Cargo.toml | grep version | head -n 1 | sed "s/.*\"\(.*\)\".*/\1/")
-VERSION="$RAW_VERSION"
 
 if [[ "$RAW_VERSION" == *-* ]]; then
 	VERSION="${RAW_VERSION%-*}"
@@ -24,8 +27,8 @@ rm -rf "$APP_DIR"
 
 mkdir -p "$APP_DIR"
 
-sed "s/%VERSION%/$VERSION/g" < ui/res/platform/ios/Info.plist.in > "$APP_DIR"/Info.plist
-iconutil -c icns --output "$APP_DIR/nertsio.icns" target/mac_res/nertsio.iconset
+sed "s/%VERSION%/$VERSION/g" < ui/res/platform/ios/Info.plist.in | sed "s/%BUNDLE_VERSION%/$BUNDLE_VERSION/g" > "$APP_DIR"/Info.plist
+cp target/ios_res/nertsio.iconset/* "$APP_DIR"/
 cp target/$TARGET/release/nertsio_ui "$APP_DIR"/
 echo -n "APPL????" > "$APP_DIR"/PkgInfo
 

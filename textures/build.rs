@@ -145,4 +145,44 @@ fn main() {
             }
         }
     }
+
+    {
+        let ios_res_dir = std::env::current_dir()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("target")
+            .join("ios_res");
+        let iconset_dir = ios_res_dir.join("nertsio.iconset");
+
+        std::fs::create_dir_all(&iconset_dir).unwrap();
+
+        let content = std::fs::read("res/icon.svg").unwrap();
+        let tree = usvg::Tree::from_data(&content, &usvg::Options::default().to_ref()).unwrap();
+
+        for (base_size, density) in [(1024, 1)] {
+            let real_size = base_size * density;
+            let filename = format!(
+                "icon_{0}x{0}{1}.png",
+                base_size,
+                match density {
+                    1 => "",
+                    2 => "@2x",
+                    3 => "@3x",
+                    _ => unreachable!(),
+                },
+            );
+
+            let mut pixmap = tiny_skia::Pixmap::new(real_size, real_size).unwrap();
+            resvg::render(
+                &tree,
+                usvg::FitTo::Size(pixmap.width(), pixmap.height()),
+                pixmap.as_mut(),
+            )
+            .unwrap();
+
+            let bytes = pixmap.encode_png().unwrap();
+            std::fs::write(iconset_dir.join(filename), bytes).unwrap();
+        }
+    }
 }
