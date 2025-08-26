@@ -5,7 +5,7 @@
 		<key>CFBundleExecutable</key>
 		<string>nertsio_ui</string>
 		<key>CFBundleIdentifier</key>
-		<string>io.nerts.nertsio_ui</string>
+		<string>io.nerts.nertsio-ui</string>
 		<key>CFBundleName</key>
 		<string>nertsio</string>
 		<key>CFBundleVersion</key>
