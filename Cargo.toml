@@ -6,3 +6,4 @@ resolver = "2"
 async-bincode = { git = "https://github.com/vpzomtrrfrt/async-bincode", branch = "constant-len" }
 egui = { git = "https://github.com/vpzomtrrfrt/egui", branch = "no-tab-start-0.28" }
 egui-miniquad = { git = "https://github.com/vpzomtrrfrt/egui-miniquad", branch = "miniquad-permissive" }
+miniquad = { path = "../miniquad" }

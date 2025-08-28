@@ -15,7 +15,7 @@ mod ingame_hand;
 use ingame_hand::IngameHandView;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.1, 0.6, 0.1, 1.0);
-const SCREEN_MARGIN: f32 = 5.0;
+const BASE_SCREEN_MARGIN: f32 = 5.0;
 const CARD_SIZE: mq::Vec2 = mq::Vec2 {
     x: metrics::CARD_WIDTH,
     y: metrics::CARD_HEIGHT,
@@ -530,8 +530,15 @@ impl ViewImpl for MainMenuView {
         let mut new_state: Option<View> = None;
 
         egui_macroquad::ui(|egui_ctx| {
+            let screen_margin = get_screen_margin(egui_ctx);
+
             egui::SidePanel::left("main_menu")
-                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin {
+                    left: screen_margin.left,
+                    right: BASE_SCREEN_MARGIN,
+                    top: screen_margin.top,
+                    bottom: screen_margin.bottom,
+                }))
                 .show(egui_ctx, |ui| {
                     if self.show_settings {
                         ui.disable();
@@ -595,7 +602,12 @@ impl ViewImpl for MainMenuView {
                 });
 
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin {
+                    left: BASE_SCREEN_MARGIN,
+                    right: screen_margin.right,
+                    top: screen_margin.top,
+                    bottom: screen_margin.bottom,
+                }))
                 .show(egui_ctx, |ui| {
                     ui.heading("Public Games");
 
@@ -676,8 +688,10 @@ impl ViewImpl for JoinGameFormView {
         let mut go_back = false;
 
         egui_macroquad::ui(|egui_ctx| {
+            let screen_margin = get_screen_margin(egui_ctx);
+
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(screen_margin))
                 .show(egui_ctx, |ui| {
                     let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
                     let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
@@ -834,13 +848,17 @@ impl ViewImpl for IngameNeutralView {
 
                         let mut ui_scale = None;
                         egui_macroquad::ui(|egui_ctx| {
+                            let screen_margin = get_screen_margin(egui_ctx);
+
                             ui_scale = Some(egui_ctx.zoom_factor());
 
                             egui::SidePanel::right("game_settings_panel")
-                                .frame(
-                                    egui::Frame::none()
-                                        .inner_margin(egui::Margin::same(SCREEN_MARGIN)),
-                                )
+                                .frame(egui::Frame::none().inner_margin(egui::Margin {
+                                    left: BASE_SCREEN_MARGIN,
+                                    right: screen_margin.right,
+                                    top: screen_margin.top,
+                                    bottom: screen_margin.bottom,
+                                }))
                                 .resizable(false)
                                 .show(egui_ctx, |ui| {
                                     if self.show_settings || self.editing_game_settings.is_some() {
@@ -903,73 +921,46 @@ impl ViewImpl for IngameNeutralView {
                                     );
                                 });
 
-                            egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN))).show(egui_ctx, |ui| {
-                                if self.show_settings || self.editing_game_settings.is_some() {
-                                    ui.disable();
-                                }
-
-
-                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
-                                    if ui.button("Leave").clicked() {
-                                        ctx.game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .unbounded_send(crate::ConnectionMessage::Leave)
-                                            .unwrap();
+                            egui::CentralPanel::default()
+                                .frame(egui::Frame::none().inner_margin(egui::Margin {
+                                    left: screen_margin.left,
+                                    right: BASE_SCREEN_MARGIN,
+                                    top: screen_margin.top,
+                                    bottom: screen_margin.bottom,
+                                }))
+                                .show(egui_ctx, |ui| {
+                                    if self.show_settings || self.editing_game_settings.is_some() {
+                                        ui.disable();
                                     }
 
-                                    if ui.button("Settings").clicked() {
-                                        self.show_settings = true;
-                                    }
-                                });
 
-                                ui.label(format!("Room Code: {}", crate::util::to_full_game_id_str(shared.server_id, shared.game.id)));
+                                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                                        if ui.button("Leave").clicked() {
+                                            ctx.game_msg_send
+                                                .borrow()
+                                                .as_ref()
+                                                .unwrap()
+                                                .unbounded_send(crate::ConnectionMessage::Leave)
+                                                .unwrap();
+                                        }
 
-                                egui::Grid::new("scoreboard_grid").show(ui, |ui| {
-                                    for key in sorted.iter() {
-                                        let player = shared.game.players.get_mut(key).unwrap();
+                                        if ui.button("Settings").clicked() {
+                                            self.show_settings = true;
+                                        }
+                                    });
 
-                                        ui.label(player.score.to_string());
+                                    ui.label(format!("Room Code: {}", crate::util::to_full_game_id_str(shared.server_id, shared.game.id)));
 
-                                        if *key == shared.my_player_id {
-                                            if player.spectating {
-                                                if ui.add_enabled(can_add_player, egui::Button::new("Stop Spectating")).clicked() {
-                                                    player.spectating = false;
+                                    egui::Grid::new("scoreboard_grid").show(ui, |ui| {
+                                        for key in sorted.iter() {
+                                            let player = shared.game.players.get_mut(key).unwrap();
 
-                                                    ctx.game_msg_send
-                                                        .borrow()
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .unbounded_send(
-                                                            ni_ty::protocol::GameMessageC2S::UpdateSelfSpectating {
-                                                                value: false,
-                                                            }
-                                                            .into(),
-                                                        )
-                                                        .unwrap();
-                                                }
-                                            } else {
-                                                ui.horizontal(|ui| {
-                                                    if ui.button(if player.ready { "Unready" } else { "Ready" }).clicked() {
-                                                        let new_value = !player.ready;
-                                                        player.ready = new_value;
+                                            ui.label(player.score.to_string());
 
-                                                        ctx.game_msg_send
-                                                            .borrow()
-                                                            .as_ref()
-                                                            .unwrap()
-                                                            .unbounded_send(
-                                                                ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
-                                                                    value: new_value,
-                                                                }
-                                                                .into(),
-                                                            )
-                                                            .unwrap();
-                                                    }
-
-                                                    if ui.button("Spectate").clicked() {
-                                                        player.spectating = true;
+                                            if *key == shared.my_player_id {
+                                                if player.spectating {
+                                                    if ui.add_enabled(can_add_player, egui::Button::new("Stop Spectating")).clicked() {
+                                                        player.spectating = false;
 
                                                         ctx.game_msg_send
                                                             .borrow()
@@ -977,72 +968,106 @@ impl ViewImpl for IngameNeutralView {
                                                             .unwrap()
                                                             .unbounded_send(
                                                                 ni_ty::protocol::GameMessageC2S::UpdateSelfSpectating {
-                                                                    value: true,
+                                                                    value: false,
                                                                 }
                                                                 .into(),
                                                             )
                                                             .unwrap();
                                                     }
-                                                });
-                                            }
-                                        } else {
-                                            ui.label(if player.spectating { "Spectating" } else if player.ready { "Ready" } else { "Not Ready" });
-                                        }
+                                                } else {
+                                                    ui.horizontal(|ui| {
+                                                        if ui.button(if player.ready { "Unready" } else { "Ready" }).clicked() {
+                                                            let new_value = !player.ready;
+                                                            player.ready = new_value;
 
-                                        ui.horizontal(|ui| {
-                                            if shared.game.master_player == *key {
-                                                ui.colored_label(egui::Color32::YELLOW, "★");
-                                            } else if shared.game.master_player == shared.my_player_id {
-                                                if ui.button("x").clicked() {
-                                                    ctx.game_msg_send
-                                                        .borrow()
-                                                        .as_ref()
-                                                        .unwrap()
-                                                        .unbounded_send(
-                                                            ni_ty::protocol::GameMessageC2S::KickPlayer {
-                                                                player: *key,
-                                                            }
-                                                            .into(),
-                                                        )
-                                                        .unwrap();
+                                                            ctx.game_msg_send
+                                                                .borrow()
+                                                                .as_ref()
+                                                                .unwrap()
+                                                                .unbounded_send(
+                                                                    ni_ty::protocol::GameMessageC2S::UpdateSelfReady {
+                                                                        value: new_value,
+                                                                    }
+                                                                    .into(),
+                                                                )
+                                                                .unwrap();
+                                                        }
+
+                                                        if ui.button("Spectate").clicked() {
+                                                            player.spectating = true;
+
+                                                            ctx.game_msg_send
+                                                                .borrow()
+                                                                .as_ref()
+                                                                .unwrap()
+                                                                .unbounded_send(
+                                                                    ni_ty::protocol::GameMessageC2S::UpdateSelfSpectating {
+                                                                        value: true,
+                                                                    }
+                                                                    .into(),
+                                                                )
+                                                                .unwrap();
+                                                        }
+                                                    });
                                                 }
+                                            } else {
+                                                ui.label(if player.spectating { "Spectating" } else if player.ready { "Ready" } else { "Not Ready" });
                                             }
-                                            ui.label(&player.name);
-                                        });
 
-                                        ui.end_row();
-                                    }
-                                });
+                                            ui.horizontal(|ui| {
+                                                if shared.game.master_player == *key {
+                                                    ui.colored_label(egui::Color32::YELLOW, "★");
+                                                } else if shared.game.master_player == shared.my_player_id {
+                                                    if ui.button("x").clicked() {
+                                                        ctx.game_msg_send
+                                                            .borrow()
+                                                            .as_ref()
+                                                            .unwrap()
+                                                            .unbounded_send(
+                                                                ni_ty::protocol::GameMessageC2S::KickPlayer {
+                                                                    player: *key,
+                                                                }
+                                                                .into(),
+                                                            )
+                                                            .unwrap();
+                                                    }
+                                                }
+                                                ui.label(&player.name);
+                                            });
 
-                                if shared.game.master_player == shared.my_player_id {
-                                    if ui.add_enabled(can_add_player, egui::Button::new("Add Bot")).clicked() {
-                                        ctx.game_msg_send
-                                            .borrow()
-                                            .as_ref()
-                                            .unwrap()
-                                            .unbounded_send(
-                                                ni_ty::protocol::GameMessageC2S::AddBot.into(),
-                                            )
-                                            .unwrap();
-                                    }
+                                            ui.end_row();
+                                        }
+                                    });
 
-                                    let my_player_state = shared.game.players.get(&shared.my_player_id).unwrap();
-
-                                    if my_player_state.ready || my_player_state.spectating {
-                                        if ui.button("Force Start").clicked() {
+                                    if shared.game.master_player == shared.my_player_id {
+                                        if ui.add_enabled(can_add_player, egui::Button::new("Add Bot")).clicked() {
                                             ctx.game_msg_send
                                                 .borrow()
                                                 .as_ref()
                                                 .unwrap()
                                                 .unbounded_send(
-                                                    ni_ty::protocol::GameMessageC2S::ForceStart.into(),
+                                                    ni_ty::protocol::GameMessageC2S::AddBot.into(),
                                                 )
                                                 .unwrap();
                                         }
-                                    }
-                                }
 
-                            });
+                                        let my_player_state = shared.game.players.get(&shared.my_player_id).unwrap();
+
+                                        if my_player_state.ready || my_player_state.spectating {
+                                            if ui.button("Force Start").clicked() {
+                                                ctx.game_msg_send
+                                                    .borrow()
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .unbounded_send(
+                                                        ni_ty::protocol::GameMessageC2S::ForceStart.into(),
+                                                    )
+                                                    .unwrap();
+                                            }
+                                        }
+                                    }
+
+                                });
 
                             if let Some(ref mut new_settings) = self.editing_game_settings {
                                 let menu_width = 300.0;
@@ -1255,17 +1280,19 @@ impl ViewImpl for LostConnectionView {
         let mut go_back = false;
 
         egui_macroquad::ui(|egui_ctx| {
+            let screen_margin = get_screen_margin(egui_ctx);
+
             egui::CentralPanel::default()
                 .frame(egui::Frame::none())
                 .show(egui_ctx, |ui| {
                     ui.allocate_ui_at_rect(
                         egui::Rect {
                             min: egui::Pos2::new(
-                                SCREEN_MARGIN,
+                                screen_margin.left,
                                 (screen_center.1 + 80.0) / egui_ctx.zoom_factor(),
                             ),
                             max: egui::Pos2::new(
-                                (mq::screen_width() - SCREEN_MARGIN) / egui_ctx.zoom_factor(),
+                                mq::screen_width() / egui_ctx.zoom_factor() - screen_margin.right,
                                 mq::screen_height() / egui_ctx.zoom_factor(),
                             ),
                         },
@@ -1304,7 +1331,7 @@ impl ViewImpl for CreditsView {
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().inner_margin(egui::Margin::same(SCREEN_MARGIN)))
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(BASE_SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
                     if ui.button("Back").clicked() {
                         go_back = true;
@@ -1344,5 +1371,18 @@ fn handle_input_response(res: egui::Response) {
         miniquad::window::show_keyboard(false);
     } else if res.gained_focus() {
         miniquad::window::show_keyboard(true);
+    }
+}
+
+fn get_screen_margin(egui_ctx: &egui::Context) -> egui::Margin {
+    let insets = macroquad::miniquad::window::get_safe_insets();
+
+    let scale = egui_ctx.zoom_factor() * 2.0; // no idea why we need this
+
+    egui::Margin {
+        left: ((insets.left as f32) / scale) + BASE_SCREEN_MARGIN,
+        right: ((insets.right as f32) / scale) + BASE_SCREEN_MARGIN,
+        top: ((insets.top as f32) / scale) + BASE_SCREEN_MARGIN,
+        bottom: ((insets.bottom as f32) / scale) + BASE_SCREEN_MARGIN,
     }
 }

@@ -13,7 +13,7 @@ icon = "@mipmap/icon"
 
 [package.metadata.android.activity_attributes]
 "android:exported" = "true"
-"android:screenOrientation" = "landscape"
+"android:screenOrientation" = "userLandscape"
 
 [[package.metadata.android.permission]]
 name = "android.permission.INTERNET"

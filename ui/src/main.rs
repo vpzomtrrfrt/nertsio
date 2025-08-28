@@ -282,6 +282,9 @@ async fn main() {
         wasm_logger::init(wasm_logger::Config::default());
     }
 
+    let insets = macroquad::miniquad::window::get_safe_insets();
+    log::debug!("insets: {:?}", insets);
+
     let mut coordinator_url = "https://coordinator.nerts.io/".to_owned();
 
     {

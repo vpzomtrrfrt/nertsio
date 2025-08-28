@@ -1009,12 +1009,14 @@ impl super::ViewImpl for IngameHandView {
                 }
 
                 egui_macroquad::ui(|egui_ctx| {
+                    let screen_margin = super::get_screen_margin(egui_ctx);
+
                     let ui_scale = scale / egui_ctx.zoom_factor();
 
                     egui::CentralPanel::default()
                         .frame(
                             egui::Frame::none()
-                                .inner_margin(egui::Margin::same(super::SCREEN_MARGIN)),
+                                .inner_margin(screen_margin),
                         )
                         .show(egui_ctx, |ui| {
                             if !interaction_enabled {
