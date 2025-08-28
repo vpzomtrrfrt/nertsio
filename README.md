@@ -20,7 +20,7 @@ Required Dependencies (at least for Linux, I don't know about Windows. Other dep
 Run `cargo build --release -p nertsio_ui`. The resulting executable will be placed in `target/release`.
 
 ## Android
-Android builds require [a fork of cargo-quad-apk](https://github.com/vpzomtrrfrt/cargo-quad-apk/tree/all).
+Android builds require [cargo-quad-apk](https://github.com/not-fl3/cargo-quad-apk).
 
 Run `cargo quad-apk build -p nertsio_ui`. The resulting package will be placed in `target/android-artifacts/release/apk`.
 
