@@ -5,6 +5,9 @@ nertsio
 
 **nertsio** is an online multiplayer implementation of the card game Nerts.
 
+# Download
+Releases are available on [itch.io](https://phygs.itch.io/nertsio) or [GitLab](https://gitlab.com/vpzomtrrfrt/nertsio/-/releases).
+
 # Community
 Chat with us on [Matrix](https://matrix.to/#/#nertsio:synapse.vpzom.click), [XMPP](xmpp:nertsio@conference.vpzom.click) or [Discord](https://discord.gg/bmGh9Ym6ce).
 
