@@ -11,8 +11,11 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 mod ingame_hand;
+mod ingame_hand_common;
+mod practice_hand;
 
 use ingame_hand::IngameHandView;
+use practice_hand::PracticeHandView;
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.1, 0.6, 0.1, 1.0);
 const SCREEN_MARGIN: f32 = 5.0;
@@ -40,6 +43,7 @@ pub enum View {
     IngameHandView,
     IngameEndView,
     LostConnectionView,
+    PracticeHandView,
 }
 
 #[enum_dispatch::enum_dispatch(View)]
@@ -523,7 +527,7 @@ impl ViewImpl for MainMenuView {
 
         let button_height = 20.0;
 
-        let button_count = 6;
+        let button_count = 7;
 
         let menu_width = 150.0;
 
@@ -583,6 +587,11 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(ConnectingView.into());
                             } else if menu_button(ui, "Join Private Game") {
                                 new_state = Some(JoinGameFormView::default().into());
+                            } else if menu_button(ui, "Practice") {
+                                new_state = Some(
+                                    PracticeHandView::new(practice_hand::PracticeSpec::Invert)
+                                        .into(),
+                                );
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
                             } else if menu_button(ui, "Credits") {

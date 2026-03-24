@@ -86,10 +86,22 @@ pub struct Card {
     pub rank: Rank,
 }
 
+impl Card {
+    pub fn new(suit: Suit, rank: Rank) -> Self {
+        Self { suit, rank }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct CardInstance {
     pub card: Card,
     pub owner_id: u8,
+}
+
+impl CardInstance {
+    pub fn new(card: Card, owner_id: u8) -> Self {
+        Self { card, owner_id }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -234,6 +246,23 @@ pub struct HandPlayerState {
 }
 
 impl HandPlayerState {
+    pub fn raw(
+        player_id: u8,
+        nerts_stack: Stack,
+        stock_stack: Stack,
+        waste_stack: Stack,
+        tableau_stacks: Vec<Stack>,
+    ) -> Self {
+        Self {
+            player_id,
+
+            nerts_stack,
+            stock_stack,
+            waste_stack,
+            tableau_stacks,
+        }
+    }
+
     pub fn generate(player_id: u8, hand_player_id: u8, tableau_stacks_count: usize) -> Self {
         let mut cards: Vec<_> = FULL_DECK
             .iter()
@@ -358,6 +387,15 @@ pub struct HandState {
 }
 
 impl HandState {
+    pub fn raw(players: Vec<HandPlayerState>, lake_stacks: Vec<Stack>) -> Self {
+        Self {
+            players,
+            lake_stacks,
+            started: false,
+            nerts_called: false,
+        }
+    }
+
     pub fn generate(players: impl Iterator<Item = u8>) -> Self {
         let players: Vec<_> = players.collect();
 
