@@ -3,6 +3,9 @@ use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::collections::HashMap;
 
+const START_ANIMATION_SPEED: f32 = 3000.0;
+const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
+
 pub enum PracticeSpec {
     Invert,
     Distribute,
@@ -73,6 +76,8 @@ pub struct PracticeHandView {
     spec: PracticeSpec,
     hand: ni_ty::HandState,
     my_held_state: Option<crate::HeldState>,
+    start_animation_progress: f32,
+    started_at: web_time::Instant,
 }
 
 impl PracticeHandView {
@@ -81,14 +86,16 @@ impl PracticeHandView {
             hand: spec.gen_hand(),
             spec,
             my_held_state: None,
+            start_animation_progress: 0.0,
+            started_at: web_time::Instant::now(),
         }
     }
 }
 
 impl super::ViewImpl for PracticeHandView {
-    fn tick(self, ctx: &mut super::GameContext) -> super::View {
-        let mut hand = self.hand;
-        let mut my_held_state = self.my_held_state;
+    fn tick(mut self, ctx: &mut super::GameContext) -> super::View {
+        let hand = &mut self.hand;
+        let my_held_state = &mut self.my_held_state;
 
         let metrics = ingame_hand_common::hand_metrics(&hand);
 
@@ -108,6 +115,8 @@ impl super::ViewImpl for PracticeHandView {
         };
 
         let screen_center = (screen_size.0 / 2.0, screen_size.1 / 2.0);
+
+        let started = hand.started;
 
         mq::clear_background(super::BACKGROUND_COLOR);
 
@@ -131,7 +140,7 @@ impl super::ViewImpl for PracticeHandView {
                 screen_center.into(),
                 0,
                 &hand,
-                &mut my_held_state,
+                my_held_state,
                 mouse_pos,
             ) {
                 hand.apply(Some(0), action)
@@ -148,8 +157,8 @@ impl super::ViewImpl for PracticeHandView {
             &metrics,
             location,
             screen_center.into(),
-            true,
-            1.0,
+            started,
+            self.start_animation_progress,
         );
 
         let my_location = metrics.player_loc(0);
@@ -180,12 +189,35 @@ impl super::ViewImpl for PracticeHandView {
             ingame_hand_common::draw_held_state(ctx, &hand, 0, held_info, mouse_pos);
         }
 
-        Self {
-            my_held_state,
-            hand,
-            ..self
+        if !started {
+            mq::draw_rectangle(
+                0.0,
+                screen_center.1 - 70.0,
+                screen_size.0,
+                140.0,
+                ingame_hand_common::NERTS_OVERLAY_COLOR,
+            );
+
+            if let Some(time) = web_time::Instant::now().checked_duration_since(self.started_at) {
+                if let Some(time_until) = START_TIME.checked_sub(time) {
+                    ctx.draw_text_centered(
+                        &(time_until.as_secs() + 1).to_string(),
+                        screen_center.0,
+                        screen_center.1,
+                        100,
+                        ingame_hand_common::NERTS_TEXT_COLOR,
+                    );
+                } else {
+                    hand.started = true;
+                }
+            }
         }
-        .into()
+
+        if !started {
+            self.start_animation_progress += mq::get_frame_time() * START_ANIMATION_SPEED;
+        }
+
+        self.into()
     }
 }
 

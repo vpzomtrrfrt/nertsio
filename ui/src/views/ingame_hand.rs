@@ -7,9 +7,6 @@ use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 use std::borrow::Cow;
 
-const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
-const NERTS_TEXT_COLOR: mq::Color = mq::Color::new(0.0, 0.0, 1.0, 1.0);
-
 const START_ANIMATION_SPEED: f32 = 1500.0;
 
 pub struct IngameHandView {
@@ -362,7 +359,7 @@ impl super::ViewImpl for IngameHandView {
                         screen_center.1 - 70.0,
                         screen_size.0,
                         140.0,
-                        NERTS_OVERLAY_COLOR,
+                        ingame_hand_common::NERTS_OVERLAY_COLOR,
                     );
 
                     ctx.draw_text_centered(
@@ -370,7 +367,7 @@ impl super::ViewImpl for IngameHandView {
                         screen_center.0,
                         screen_center.1,
                         100,
-                        NERTS_TEXT_COLOR,
+                        ingame_hand_common::NERTS_TEXT_COLOR,
                     );
                 }
 
@@ -380,7 +377,7 @@ impl super::ViewImpl for IngameHandView {
                         screen_center.1 - 70.0,
                         screen_size.0,
                         140.0,
-                        NERTS_OVERLAY_COLOR,
+                        ingame_hand_common::NERTS_OVERLAY_COLOR,
                     );
 
                     if let Some(expected_start_time) = hand_extra.expected_start_time {
@@ -392,7 +389,7 @@ impl super::ViewImpl for IngameHandView {
                                 screen_center.0,
                                 screen_center.1,
                                 100,
-                                NERTS_TEXT_COLOR,
+                                ingame_hand_common::NERTS_TEXT_COLOR,
                             );
                         }
                     }

@@ -4,6 +4,9 @@ use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 
+pub const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
+pub const NERTS_TEXT_COLOR: mq::Color = mq::Color::new(0.0, 0.0, 1.0, 1.0);
+
 pub fn hand_metrics(hand: &ni_ty::HandState) -> metrics::HandMetrics {
     metrics::HandMetrics::new(
         hand.players().len(),
