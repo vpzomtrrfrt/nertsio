@@ -42,7 +42,7 @@ struct GlobalState {
 }
 
 impl GlobalState {
-    pub fn get_region_for_output<'a>(&'a self, id: &'a str) -> ni_ty::RegionInfo {
+    pub fn get_region_for_output<'a>(&'a self, id: &'a str) -> ni_ty::RegionInfo<'a> {
         match self.regions.get(id) {
             None => ni_ty::RegionInfo {
                 id: id.into(),
