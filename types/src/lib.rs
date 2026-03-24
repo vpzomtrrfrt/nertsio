@@ -530,7 +530,7 @@ impl HandState {
             .players()
             .iter()
             .map(|player| {
-                -1 * (player.nerts_stack().len() as i32) * (settings.nerts_card_penalty as i32)
+                -(player.nerts_stack().len() as i32) * (settings.nerts_card_penalty as i32)
             })
             .collect();
 

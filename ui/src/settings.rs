@@ -219,7 +219,7 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
                     };
                 }
 
-                if init_value.legacy_suit_callouts || init_value.legacy_suit_callouts {
+                if init_value.legacy_suit_callouts || init_value.legacy_nerts_callout {
                     init_value.sounds = true;
                 }
 

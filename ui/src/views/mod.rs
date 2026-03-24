@@ -637,7 +637,7 @@ impl ViewImpl for MainMenuView {
                 });
 
             if self.show_settings {
-                if !render_settings_window(egui_ctx, &ctx) {
+                if !render_settings_window(egui_ctx, ctx) {
                     self.show_settings = false;
                 }
             }
@@ -1109,7 +1109,7 @@ impl ViewImpl for IngameNeutralView {
                             }
 
                             if self.show_settings {
-                                if !render_settings_window(egui_ctx, &ctx) {
+                                if !render_settings_window(egui_ctx, ctx) {
                                     self.show_settings = false;
                                 }
                             }

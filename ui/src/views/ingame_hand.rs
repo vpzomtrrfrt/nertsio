@@ -408,7 +408,7 @@ impl super::ViewImpl for IngameHandView {
 
                                                         if settings.sounds {
                                                             macroquad::audio::play_sound_once(
-                                                                &ctx.pickup_sound,
+                                                                ctx.pickup_sound,
                                                             );
                                                         }
                                                     }
@@ -1088,7 +1088,7 @@ impl super::ViewImpl for IngameHandView {
                         });
 
                     if self.show_settings {
-                        if !super::render_settings_window(egui_ctx, &ctx) {
+                        if !super::render_settings_window(egui_ctx, ctx) {
                             self.show_settings = false;
                         }
                     }

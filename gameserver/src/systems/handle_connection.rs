@@ -88,7 +88,7 @@ fn on_player_leave(
         }
     }
 
-    maybe_start_hand(server_game_state, &global_state);
+    maybe_start_hand(server_game_state, global_state);
 }
 
 async fn handle_connection<
@@ -120,7 +120,7 @@ where
                 let mut dest = bytes::BytesMut::new().writer();
 
                 bincode::options()
-                    .with_limit(u32::max_value() as u64)
+                    .with_limit(u32::MAX as u64)
                     .allow_trailing_bytes()
                     .serialize_into(&mut dest, &msg)?;
 
@@ -132,7 +132,7 @@ where
             use bincode::Options;
 
             bincode::options()
-                .with_limit(u32::max_value() as u64)
+                .with_limit(u32::MAX as u64)
                 .allow_trailing_bytes()
                 .deserialize(&data)
                 .map_err(anyhow::Error::from)
@@ -309,7 +309,7 @@ where
             let mut dest = bytes::BytesMut::new().writer();
 
             bincode::options()
-                .with_limit(u32::max_value() as u64)
+                .with_limit(u32::MAX as u64)
                 .allow_trailing_bytes()
                 .serialize_into(&mut dest, &msg)?;
 
@@ -319,7 +319,7 @@ where
             use bincode::Options;
 
             Ok(bincode::options()
-                .with_limit(u32::max_value() as u64)
+                .with_limit(u32::MAX as u64)
                 .allow_trailing_bytes()
                 .deserialize(&data)?)
         });

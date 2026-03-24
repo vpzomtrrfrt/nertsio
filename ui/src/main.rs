@@ -254,10 +254,7 @@ impl<T> LoadState<T> {
     }
 
     pub fn is_done(&self) -> bool {
-        match self {
-            LoadState::Done(_) => true,
-            _ => false,
-        }
+        matches!(self, LoadState::Done(_))
     }
 }
 

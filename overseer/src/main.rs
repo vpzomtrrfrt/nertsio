@@ -111,9 +111,7 @@ async fn main() {
                         continue;
                     }
 
-                    match String::from_owned_redis_value(
-                        msg.data.into_iter().skip(1).next().unwrap(),
-                    ) {
+                    match String::from_owned_redis_value(msg.data.into_iter().nth(1).unwrap()) {
                         Ok(content) => {
                             match serde_json::from_str::<ni_ty::protocol::ServerStatusMessage>(
                                 &content,
@@ -186,7 +184,7 @@ async fn main() {
                         i = 0;
                     }
 
-                    if gameservers.len() < 1 {
+                    if gameservers.is_empty() {
                         continue; // no servers to check
                     }
 

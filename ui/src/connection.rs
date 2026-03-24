@@ -75,7 +75,7 @@ pub(crate) async fn handle_connection(
                     url,
                     "&preferred_region={}",
                     percent_encoding::utf8_percent_encode(
-                        &region,
+                        region,
                         percent_encoding::NON_ALPHANUMERIC
                     )
                 )

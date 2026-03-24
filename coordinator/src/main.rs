@@ -244,11 +244,9 @@ async fn handler_servers_pick_for_new_game(
     let query: Query = serde_urlencoded::from_str(req.as_ref().uri().query().unwrap_or(""))?;
 
     let preferred_region_loc = if let Some(region) = query.preferred_region {
-        if let Some(region) = ctx.regions.get(region.as_ref()) {
-            Some(geo::Point::new(region.lat, region.lon))
-        } else {
-            None
-        }
+        ctx.regions
+            .get(region.as_ref())
+            .map(|region| geo::Point::new(region.lat, region.lon))
     } else {
         None
     };
@@ -318,8 +316,8 @@ async fn handler_servers_pick_for_new_game(
         best,
     );
 
-    for i in 1..options.len() {
-        let current = &options[i].1 .1;
+    for current in options.iter().skip(1) {
+        let current = &current.1 .1;
 
         let priority = region_priority
             .iter()

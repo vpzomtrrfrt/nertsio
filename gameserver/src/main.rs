@@ -231,7 +231,7 @@ struct CertReloader {
 impl notify::EventHandler for CertReloader {
     fn handle_event(&mut self, evt: Result<notify::Event, notify::Error>) {
         if let Ok(evt) = evt {
-            if evt.kind.is_modify() && evt.paths.iter().any(|x| self.paths.contains(&x)) {
+            if evt.kind.is_modify() && evt.paths.iter().any(|x| self.paths.contains(x)) {
                 println!("reloading certs");
 
                 self.endpoint.set_server_config(Some(load_server_config()));
