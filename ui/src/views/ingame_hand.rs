@@ -93,16 +93,25 @@ impl super::ViewImpl for IngameHandView {
                                 &mut hand_extra.my_held_state,
                                 mouse_pos,
                             ) {
-                                hand_extra.pending_actions.push_back(action);
-                                ctx.game_msg_send
-                                    .borrow()
-                                    .as_ref()
-                                    .unwrap()
-                                    .unbounded_send(
-                                        ni_ty::protocol::GameMessageC2S::ApplyHandAction { action }
-                                            .into(),
-                                    )
-                                    .unwrap();
+                                match pred_hand_state.apply(Some(my_player_idx_u8), action) {
+                                    Ok(_) => {
+                                        hand_extra.pending_actions.push_back(action);
+                                        ctx.game_msg_send
+                                            .borrow()
+                                            .as_ref()
+                                            .unwrap()
+                                            .unbounded_send(
+                                                ni_ty::protocol::GameMessageC2S::ApplyHandAction {
+                                                    action,
+                                                }
+                                                .into(),
+                                            )
+                                            .unwrap();
+                                    }
+                                    Err(_) => {
+                                        eprintln!("Failed to apply player action");
+                                    }
+                                }
 
                                 if settings.sounds {
                                     ctx.play_sound_for_action(action);
