@@ -52,7 +52,7 @@ impl Rank {
     pub const ACE: Rank = Rank(1);
 
     pub fn iter() -> impl Iterator<Item = Rank> + Clone {
-        (1..13).map(Rank)
+        (1..=13).map(Rank)
     }
 
     pub fn try_new(src: u8) -> Option<Self> {
@@ -603,4 +603,9 @@ pub struct MenuMouseState {
 pub struct RegionInfo<'a> {
     pub id: Cow<'a, str>,
     pub name: Cow<'a, str>,
+}
+
+#[test]
+fn sanity_test() {
+    assert_eq!(FULL_DECK.len(), 52);
 }
