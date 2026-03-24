@@ -589,7 +589,7 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Practice") {
                                 new_state = Some(
-                                    PracticeHandView::new(practice_hand::PracticeSpec::Invert)
+                                    PracticeHandView::new(practice_hand::PracticeSpec::Distribute)
                                         .into(),
                                 );
                             } else if menu_button(ui, "Settings") {

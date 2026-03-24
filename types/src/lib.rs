@@ -43,6 +43,10 @@ impl Suit {
             Suit::Diamonds | Suit::Hearts => Color::Red,
         }
     }
+
+    pub fn iter() -> impl Iterator<Item = Self> + Clone {
+        <Self as strum::IntoEnumIterator>::iter()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -50,13 +54,15 @@ pub struct Rank(u8);
 
 impl Rank {
     pub const ACE: Rank = Rank(1);
+    pub const KING: Rank = Rank(13);
+    pub const COUNT: u8 = 13;
 
     pub fn iter() -> impl Iterator<Item = Rank> + Clone {
-        (1..=13).map(Rank)
+        (1..=Rank::COUNT).map(Rank)
     }
 
     pub fn try_new(src: u8) -> Option<Self> {
-        if (1..=13).contains(&src) {
+        if (1..=Rank::COUNT).contains(&src) {
             Some(Rank(src))
         } else {
             None

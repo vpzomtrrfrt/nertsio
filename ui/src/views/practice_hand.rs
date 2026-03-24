@@ -1,9 +1,11 @@
 use super::ingame_hand_common;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
+use std::collections::HashMap;
 
 pub enum PracticeSpec {
     Invert,
+    Distribute,
 }
 
 impl PracticeSpec {
@@ -28,7 +30,40 @@ impl PracticeSpec {
                     ni_ty::Stack::new(ni_ty::Ordering::Any, false),
                     vec![],
                 )],
-                vec![ni_ty::Stack::new(ni_ty::Ordering::SingleSuitUp, true)],
+                vec![lake_stack()],
+            ),
+            PracticeSpec::Distribute => ni_ty::HandState::raw(
+                vec![ni_ty::HandPlayerState::raw(
+                    0,
+                    ni_ty::Stack::from_list_unordered({
+                        let mut next_rank_map: HashMap<_, _> = ni_ty::Suit::iter()
+                            .map(|suit| (suit, ni_ty::Rank::KING))
+                            .collect();
+
+                        let mut list_src: Vec<_> = ni_ty::Suit::iter()
+                            .flat_map(|suit| std::iter::repeat_n(suit, ni_ty::Rank::COUNT.into()))
+                            .collect();
+                        rand::seq::SliceRandom::shuffle(&mut list_src[..], &mut rand::thread_rng());
+
+                        let mut list = Vec::with_capacity(list_src.len());
+                        for suit in list_src {
+                            let rank = next_rank_map.get(&suit).unwrap();
+                            list.push(ni_ty::CardInstance::new(ni_ty::Card::new(suit, *rank), 0));
+
+                            if let Some(next_rank) = rank.decrement() {
+                                next_rank_map.insert(suit, next_rank);
+                            } else {
+                                next_rank_map.remove(&suit);
+                            }
+                        }
+
+                        list
+                    }),
+                    ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                    ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                    vec![],
+                )],
+                ni_ty::Suit::iter().map(|_| lake_stack()).collect(),
             ),
         }
     }
@@ -60,6 +95,17 @@ impl super::ViewImpl for PracticeHandView {
         let real_screen_size = (mq::screen_width(), mq::screen_height());
         let screen_size = ingame_hand_common::screen_size_for_hand(real_screen_size, &metrics);
         let scale = real_screen_size.0 / screen_size.0;
+
+        let camera_rect = mq::Rect::new(0.0, screen_size.1, screen_size.0, -screen_size.1);
+
+        let normal_camera = mq::Camera2D {
+            ..mq::Camera2D::from_display_rect(camera_rect)
+        };
+
+        let inverted_camera = mq::Camera2D {
+            rotation: 180.0,
+            ..mq::Camera2D::from_display_rect(camera_rect)
+        };
 
         let screen_center = (screen_size.0 / 2.0, screen_size.1 / 2.0);
 
@@ -106,6 +152,14 @@ impl super::ViewImpl for PracticeHandView {
             1.0,
         );
 
+        let my_location = metrics.player_loc(0);
+
+        if my_location.inverted {
+            mq::set_camera(&inverted_camera);
+        } else {
+            mq::set_camera(&normal_camera);
+        }
+
         for (i, stack) in hand.lake_stacks().iter().enumerate() {
             let loc = ni_ty::StackLocation::Lake(i as u16);
             let pos = mq::Vec2::from(metrics.stack_pos(loc)) + mq::Vec2::from(screen_center);
@@ -120,6 +174,8 @@ impl super::ViewImpl for PracticeHandView {
             }
         }
 
+        mq::set_camera(&normal_camera);
+
         if let Some(held_info) = held_info {
             ingame_hand_common::draw_held_state(ctx, &hand, 0, held_info, mouse_pos);
         }
@@ -131,4 +187,8 @@ impl super::ViewImpl for PracticeHandView {
         }
         .into()
     }
+}
+
+fn lake_stack() -> ni_ty::Stack {
+    ni_ty::Stack::new(ni_ty::Ordering::SingleSuitUp, true)
 }
