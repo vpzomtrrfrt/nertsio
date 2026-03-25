@@ -1,4 +1,6 @@
 use super::ingame_hand_common;
+use crate::storage::Storage;
+use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::collections::HashMap;
@@ -7,7 +9,7 @@ use strum::IntoEnumIterator;
 const START_ANIMATION_SPEED: f32 = 5000.0;
 const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
 
-#[derive(Clone, Copy, PartialEq, strum_macros::EnumIter, strum_macros::Display)]
+#[derive(Clone, Copy, PartialEq, Debug, strum_macros::EnumIter, strum_macros::Display)]
 pub enum PracticeSpec {
     Invert,
     Distribute,
@@ -276,11 +278,7 @@ impl super::ViewImpl for PracticeHandView {
         if do_leave {
             super::MainMenuView::init(ctx).into()
         } else if self.spec.is_done(hand) {
-            super::PracticeEndView {
-                time: self.time,
-                spec: self.spec,
-            }
-            .into()
+            PracticeEndView::init(ctx, self.spec, self.time).into()
         } else {
             self.into()
         }
@@ -290,6 +288,50 @@ impl super::ViewImpl for PracticeHandView {
 pub struct PracticeEndView {
     spec: PracticeSpec,
     time: f32,
+    previous_best_time: Option<Option<f32>>,
+}
+
+impl PracticeEndView {
+    fn init(ctx: &super::GameContext, spec: PracticeSpec, time: f32) -> Self {
+        let key = format!("practiceBestTime/{:?}", spec);
+
+        let previous_best_time = ctx
+            .storage
+            .as_ref()
+            .and_then(|storage| match storage.get(&key) {
+                Err(err) => {
+                    eprintln!("Failed to fetch score: {:?}", err);
+                    None
+                }
+                Ok(None) => Some(None),
+                Ok(Some(value)) => match value.parse() {
+                    Ok(value) => Some(Some(value)),
+                    Err(err) => {
+                        eprintln!("Failed to fetch score: {:?}", err);
+                        Some(None)
+                    }
+                },
+            });
+
+        log::debug!("Previous best score: {:?}", previous_best_time);
+
+        let should_save_time = match previous_best_time {
+            Some(None) => true,
+            Some(Some(previous_best_time)) => time < previous_best_time,
+            _ => false,
+        };
+        if should_save_time {
+            if let Err(err) = ctx.storage.as_ref().unwrap().set(&key, time.to_string()) {
+                eprintln!("Failed to save new score: {:?}", err);
+            }
+        }
+
+        Self {
+            spec,
+            time,
+            previous_best_time,
+        }
+    }
 }
 
 impl super::ViewImpl for PracticeEndView {
@@ -308,7 +350,7 @@ impl super::ViewImpl for PracticeEndView {
                     let time_size = 30.0;
 
                     let box_width = 250.0;
-                    let box_height = (25.0 + ui.spacing().item_spacing.y) * 2.0 + time_size;
+                    let box_height = (25.0 + ui.spacing().item_spacing.y) * 3.0 + time_size;
 
                     let box_x = ui_screen_width / 2.0 - box_width / 2.0;
                     let box_y = ui_screen_height / 2.0 - box_height / 2.0;
@@ -324,6 +366,29 @@ impl super::ViewImpl for PracticeEndView {
                                     egui::RichText::new(format!("{:.2}", self.time))
                                         .size(time_size),
                                 );
+
+                                let best_text = match self.previous_best_time {
+                                    None | Some(None) => None,
+                                    Some(Some(previous_best_time)) => {
+                                        if previous_best_time > self.time {
+                                            Some(format!(
+                                                "New record! Your previous best: {:.2}",
+                                                previous_best_time
+                                            ))
+                                        } else {
+                                            Some(format!("Your best: {:.2}", previous_best_time))
+                                        }
+                                    }
+                                };
+
+                                match best_text {
+                                    None => {
+                                        ui.label("");
+                                    }
+                                    Some(text) => {
+                                        ui.label(text);
+                                    }
+                                }
 
                                 if ui.button("Play Again").clicked() {
                                     next_view = Some(PracticeHandView::new(self.spec).into());

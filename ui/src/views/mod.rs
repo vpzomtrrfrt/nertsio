@@ -109,6 +109,7 @@ pub struct GameContext<'a> {
     pub http_client: reqwest::Client,
     pub coordinator_url: &'a str,
     pub settings_mutex: Arc<Mutex<Settings>>,
+    pub storage: Option<Arc<crate::storage::DefaultStorage>>,
     pub events_send: futures_channel::mpsc::UnboundedSender<ConnectionEvent>,
     pub game_msg_send: RefCell<Option<futures_channel::mpsc::UnboundedSender<ConnectionMessage>>>,
     pub quit: bool,

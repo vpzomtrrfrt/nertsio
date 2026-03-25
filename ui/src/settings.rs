@@ -174,22 +174,7 @@ pub fn init_settings(async_rt: &crate::AsyncRt) -> Arc<Mutex<Settings>> {
     #[cfg(not(target_family = "wasm"))]
     {
         #[cfg(target_os = "android")]
-        let config_dir = {
-            // https://stackoverflow.com/a/6284443/2533397
-
-            let cmdline = std::fs::read_to_string("/proc/self/cmdline").unwrap();
-
-            // seems to be full of nul bytes, stop at the first one
-            let cmdline = match cmdline.find('\0') {
-                None => &cmdline,
-                Some(idx) => &cmdline[..idx],
-            };
-
-            let mut result = std::path::PathBuf::from("/data/data/");
-            result.push(std::path::Path::new(cmdline));
-
-            result
-        };
+        let config_dir = crate::get_android_data_dir();
         #[cfg(not(target_os = "android"))]
         let config_dir = dirs::config_dir()
             .map(Cow::Owned)

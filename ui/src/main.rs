@@ -13,6 +13,7 @@ use std::sync::Arc;
 
 mod connection;
 mod settings;
+mod storage;
 mod util;
 mod views;
 
@@ -264,6 +265,24 @@ impl<T> From<LoadChannel<T>> for LoadState<T> {
     }
 }
 
+#[cfg(target_os = "android")]
+pub fn get_android_data_dir() -> std::path::PathBuf {
+    // https://stackoverflow.com/a/6284443/2533397
+
+    let cmdline = std::fs::read_to_string("/proc/self/cmdline").unwrap();
+
+    // seems to be full of nul bytes, stop at the first one
+    let cmdline = match cmdline.find('\0') {
+        None => &cmdline,
+        Some(idx) => &cmdline[..idx],
+    };
+
+    let mut result = std::path::PathBuf::from("/data/data/");
+    result.push(std::path::Path::new(cmdline));
+
+    result
+}
+
 #[macroquad::main(get_window_conf)]
 async fn main() {
     #[cfg(not(target_family = "wasm"))]
@@ -402,6 +421,13 @@ async fn main() {
     let http_client = reqwest::Client::new();
 
     let settings_mutex = settings::init_settings(async_rt.handle());
+    let storage = match storage::init_storage() {
+        Ok(storage) => Some(storage),
+        Err(err) => {
+            eprintln!("Failed to initialize storage: {:?}", err);
+            None
+        }
+    };
 
     let get_cards_texture = || {
         let settings = settings_mutex.lock().unwrap();
@@ -432,6 +458,7 @@ async fn main() {
         http_client,
         coordinator_url: &coordinator_url,
         settings_mutex: settings_mutex.clone(),
+        storage,
         events_send,
         game_msg_send,
         quit: false,
