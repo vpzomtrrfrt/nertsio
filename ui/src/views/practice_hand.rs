@@ -73,7 +73,6 @@ impl PracticeSpec {
 }
 
 pub struct PracticeHandView {
-    spec: PracticeSpec,
     hand: ni_ty::HandState,
     my_held_state: Option<crate::HeldState>,
     start_animation_progress: f32,
@@ -84,7 +83,6 @@ impl PracticeHandView {
     pub fn new(spec: PracticeSpec) -> Self {
         Self {
             hand: spec.gen_hand(),
-            spec,
             my_held_state: None,
             start_animation_progress: 0.0,
             started_at: web_time::Instant::now(),
@@ -101,7 +99,6 @@ impl super::ViewImpl for PracticeHandView {
 
         let real_screen_size = (mq::screen_width(), mq::screen_height());
         let screen_size = ingame_hand_common::screen_size_for_hand(real_screen_size, &metrics);
-        let scale = real_screen_size.0 / screen_size.0;
 
         let camera_rect = mq::Rect::new(0.0, screen_size.1, screen_size.0, -screen_size.1);
 
@@ -121,7 +118,6 @@ impl super::ViewImpl for PracticeHandView {
         mq::clear_background(super::BACKGROUND_COLOR);
 
         let location = metrics.player_loc(0);
-        let position = mq::Vec2::from(location.pos()) + mq::Vec2::from(screen_center);
 
         let mouse_pos = mq::mouse_position();
         let mouse_pos = mq::Vec2::new(

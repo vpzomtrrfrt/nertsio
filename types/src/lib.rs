@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use strum::IntoEnumIterator;
 
 pub mod protocol;
 
