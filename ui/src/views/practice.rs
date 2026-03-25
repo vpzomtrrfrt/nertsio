@@ -161,6 +161,22 @@ impl super::ViewImpl for PracticeHandView {
             ) {
                 hand.apply(Some(0), action)
                     .expect("Failed to apply player action");
+
+                if settings.sounds {
+                    ctx.play_sound_for_action(action);
+
+                    if let ni_ty::HandAction::Move { to, .. } = action {
+                        if matches!(to, ni_ty::StackLocation::Lake(_)) {
+                            if let Some(stack) = hand.stack_at(to) {
+                                if let Some(top) = stack.last() {
+                                    if top.card.rank == ni_ty::Rank::ACE {
+                                        ctx.play_sound_for_new_lake_stack(top.card);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

@@ -125,6 +125,11 @@ pub struct GameContext<'a> {
     pub pickup_sound: &'a macroquad::audio::Sound,
     pub place_sound: &'a macroquad::audio::Sound,
     pub shuffle_sound: &'a macroquad::audio::Sound,
+
+    pub suit_callout_spades: &'a macroquad::audio::Sound,
+    pub suit_callout_diamonds: &'a macroquad::audio::Sound,
+    pub suit_callout_clubs: &'a macroquad::audio::Sound,
+    pub suit_callout_hearts: &'a macroquad::audio::Sound,
 }
 
 impl<'a> GameContext<'a> {
@@ -382,6 +387,15 @@ impl<'a> GameContext<'a> {
         if let Some(sound) = sound {
             macroquad::audio::play_sound_once(sound);
         }
+    }
+
+    pub fn play_sound_for_new_lake_stack(&self, card: ni_ty::Card) {
+        macroquad::audio::play_sound_once(match card.suit {
+            ni_ty::Suit::Spades => &self.suit_callout_spades,
+            ni_ty::Suit::Diamonds => &self.suit_callout_diamonds,
+            ni_ty::Suit::Clubs => &self.suit_callout_clubs,
+            ni_ty::Suit::Hearts => &self.suit_callout_hearts,
+        });
     }
 }
 

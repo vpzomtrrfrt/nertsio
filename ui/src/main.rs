@@ -448,6 +448,11 @@ async fn main() {
         pickup_sound: &pickup_sound,
         place_sound: &place_sound,
         shuffle_sound: &shuffle_sound,
+
+        suit_callout_spades: &suit_callout_spades,
+        suit_callout_diamonds: &suit_callout_diamonds,
+        suit_callout_clubs: &suit_callout_clubs,
+        suit_callout_hearts: &suit_callout_hearts,
     };
 
     let mut view: views::View = views::MainMenuView::init(&ctx).into();
@@ -539,22 +544,7 @@ async fn main() {
                                         if let Some(stack) = hand.stack_at(to) {
                                             if let Some(top) = stack.last() {
                                                 if top.card.rank == ni_ty::Rank::ACE {
-                                                    macroquad::audio::play_sound_once(
-                                                        match top.card.suit {
-                                                            ni_ty::Suit::Spades => {
-                                                                &suit_callout_spades
-                                                            }
-                                                            ni_ty::Suit::Diamonds => {
-                                                                &suit_callout_diamonds
-                                                            }
-                                                            ni_ty::Suit::Clubs => {
-                                                                &suit_callout_clubs
-                                                            }
-                                                            ni_ty::Suit::Hearts => {
-                                                                &suit_callout_hearts
-                                                            }
-                                                        },
-                                                    );
+                                                    ctx.play_sound_for_new_lake_stack(top.card);
                                                 }
                                             }
                                         }
