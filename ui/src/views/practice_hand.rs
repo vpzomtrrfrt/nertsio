@@ -70,22 +70,34 @@ impl PracticeSpec {
             ),
         }
     }
+
+    pub fn is_done(&self, hand: &ni_ty::HandState) -> bool {
+        match self {
+            PracticeSpec::Invert | PracticeSpec::Distribute => {
+                hand.players()[0].nerts_stack().is_empty()
+            }
+        }
+    }
 }
 
 pub struct PracticeHandView {
+    spec: PracticeSpec,
     hand: ni_ty::HandState,
     my_held_state: Option<crate::HeldState>,
     start_animation_progress: f32,
     started_at: web_time::Instant,
+    time: f32,
 }
 
 impl PracticeHandView {
     pub fn new(spec: PracticeSpec) -> Self {
         Self {
             hand: spec.gen_hand(),
+            spec,
             my_held_state: None,
             start_animation_progress: 0.0,
             started_at: web_time::Instant::now(),
+            time: 0.0,
         }
     }
 }
@@ -209,11 +221,31 @@ impl super::ViewImpl for PracticeHandView {
             }
         }
 
-        if !started {
+        egui_macroquad::ui(|egui_ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(super::SCREEN_MARGIN)))
+                .show(egui_ctx, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                        if started {
+                            ui.label(format!("{:.2}", self.time));
+                        }
+                    });
+                });
+        });
+
+        egui_macroquad::draw();
+
+        if started {
+            self.time += mq::get_frame_time();
+        } else {
             self.start_animation_progress += mq::get_frame_time() * START_ANIMATION_SPEED;
         }
 
-        self.into()
+        if self.spec.is_done(hand) {
+            super::PracticeEndView { time: self.time }.into()
+        } else {
+            self.into()
+        }
     }
 }
 
