@@ -1305,6 +1305,7 @@ impl ViewImpl for LostConnectionView {
 }
 
 pub struct PracticeEndView {
+    spec: practice_hand::PracticeSpec,
     time: f32,
 }
 
@@ -1313,6 +1314,8 @@ impl ViewImpl for PracticeEndView {
         mq::clear_background(BACKGROUND_COLOR);
 
         let mut next_view: Option<View> = None;
+
+        let spec = self.spec.clone();
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
@@ -1341,7 +1344,9 @@ impl ViewImpl for PracticeEndView {
                                         .size(time_size),
                                 );
 
-                                if ui.button("Main Menu").clicked() {
+                                if ui.button("Play Again").clicked() {
+                                    next_view = Some(PracticeHandView::new(spec).into());
+                                } else if ui.button("Main Menu").clicked() {
                                     next_view = Some(MainMenuView::init(ctx).into());
                                 }
                             });

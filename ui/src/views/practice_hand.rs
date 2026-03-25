@@ -6,6 +6,7 @@ use std::collections::HashMap;
 const START_ANIMATION_SPEED: f32 = 3000.0;
 const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
 
+#[derive(Clone)]
 pub enum PracticeSpec {
     Invert,
     Distribute,
@@ -242,7 +243,11 @@ impl super::ViewImpl for PracticeHandView {
         }
 
         if self.spec.is_done(hand) {
-            super::PracticeEndView { time: self.time }.into()
+            super::PracticeEndView {
+                time: self.time,
+                spec: self.spec,
+            }
+            .into()
         } else {
             self.into()
         }
