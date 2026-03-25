@@ -137,7 +137,7 @@ impl super::ViewImpl for PracticeHandView {
             mouse_pos.1 * screen_size.1 / real_screen_size.1,
         );
 
-        {
+        if started {
             let mut settings_lock = ctx.settings_mutex.lock().unwrap();
             let settings = &mut *settings_lock;
 
