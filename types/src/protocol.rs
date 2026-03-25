@@ -5,7 +5,7 @@ pub const COORDINATOR_CHANNEL: &str = "gameserver_states";
 
 /// Current version of protocol. If this is incompatible with previous versions,
 /// MIN_PROTOCOL_VERSION in gameserver may also need to be updated.
-pub const PROTOCOL_VERSION: u16 = 12;
+pub const PROTOCOL_VERSION: u16 = 13;
 
 pub const CLOSE_KICK: u8 = 1;
 pub const CLOSE_TOO_OLD: u8 = 2;

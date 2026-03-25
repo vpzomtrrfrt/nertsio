@@ -131,7 +131,7 @@ impl HandMetrics {
             ni_ty::PlayerStackLocation::Nerts => position,
             ni_ty::PlayerStackLocation::Tableau(idx) => (
                 position.0
-                    + NERTS_STACK_SPACING * 12.0
+                    + NERTS_STACK_SPACING * (self.nerts_pile_size - 1) as f32
                     + CARD_WIDTH
                     + 20.0
                     + (idx as f32) * (CARD_WIDTH + 10.0),

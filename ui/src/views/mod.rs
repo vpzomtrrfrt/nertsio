@@ -912,6 +912,11 @@ impl ViewImpl for IngameNeutralView {
                                                 (shared.game.settings.bot_difficulty * 100.0)
                                                     .round()
                                             ));
+
+                                            ui.label(format!(
+                                                "Nerts Stack Size: {}",
+                                                shared.game.settings.nerts_stack_size,
+                                            ));
                                         },
                                     );
 
@@ -1114,6 +1119,14 @@ impl ViewImpl for IngameNeutralView {
                                                     });
 
                                                     new_settings.bot_difficulty = bot_difficulty_pct / 100.0;
+
+                                                    ui.label("Nerts Stack Size");
+                                                    ui.indent(hash!(), |ui| {
+                                                        ui.add(egui::widgets::Slider::new(
+                                                            &mut new_settings.nerts_stack_size,
+                                                            0..=46,
+                                                        ));
+                                                    });
 
                                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| {
                                                         if ui.button("Save").clicked() {

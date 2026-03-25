@@ -268,7 +268,12 @@ impl HandPlayerState {
         }
     }
 
-    pub fn generate(player_id: u8, hand_player_id: u8, tableau_stacks_count: usize) -> Self {
+    pub fn generate(
+        player_id: u8,
+        hand_player_id: u8,
+        tableau_stacks_count: usize,
+        nerts_stack_size: usize,
+    ) -> Self {
         let mut cards: Vec<_> = FULL_DECK
             .iter()
             .map(|card| CardInstance {
@@ -278,7 +283,8 @@ impl HandPlayerState {
             .collect();
         rand::seq::SliceRandom::shuffle(&mut cards[..], &mut rand::thread_rng());
 
-        let nerts_stack = Stack::from_list_unordered(cards.split_off(cards.len() - 13));
+        let nerts_stack =
+            Stack::from_list_unordered(cards.split_off(cards.len() - nerts_stack_size));
         let tableau_stacks = (0..tableau_stacks_count)
             .map(|_| Stack::from_one(Ordering::AlternatingDown, false, cards.pop().unwrap()))
             .collect();
@@ -401,7 +407,7 @@ impl HandState {
         }
     }
 
-    pub fn generate(players: impl Iterator<Item = u8>) -> Self {
+    pub fn generate(players: impl Iterator<Item = u8>, nerts_stack_size: usize) -> Self {
         let players: Vec<_> = players.collect();
 
         let tableau_stacks_count = match players.len() {
@@ -414,7 +420,12 @@ impl HandState {
             .into_iter()
             .enumerate()
             .map(|(idx, player_id)| {
-                HandPlayerState::generate(player_id, idx as u8, tableau_stacks_count)
+                HandPlayerState::generate(
+                    player_id,
+                    idx as u8,
+                    tableau_stacks_count,
+                    nerts_stack_size,
+                )
             })
             .collect();
         let lake_stacks = (0..(players.len() * 4))
@@ -598,6 +609,7 @@ pub struct GamePlayerState {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GameSettings {
     pub nerts_card_penalty: u8,
+    pub nerts_stack_size: u8,
     pub max_players: u8,
     pub bot_difficulty: f32,
     pub public: bool,
@@ -607,6 +619,7 @@ impl Default for GameSettings {
     fn default() -> Self {
         Self {
             nerts_card_penalty: 2,
+            nerts_stack_size: 13,
             max_players: 6,
             bot_difficulty: 0.1,
             public: false,

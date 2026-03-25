@@ -17,6 +17,7 @@ fn start_hand(server_game_state: &mut ServerGameState, global_state: &Arc<Global
             .iter()
             .filter(|(_, state)| !state.spectating)
             .map(|(id, _)| *id),
+        server_game_state.settings.nerts_stack_size.into(),
     );
     server_game_state.hand = Some(ServerHandState {
         hand: new_hand.clone(),
@@ -654,6 +655,10 @@ where
                                         .games
                                         .get_mut(&game_id)
                                         .ok_or(anyhow::anyhow!("Unknown game"))?;
+
+                                    if settings.nerts_stack_size > 46 {
+                                        anyhow::bail!("Invalid settings");
+                                    }
 
                                     if server_game_state.master_player == Some(player_id) && server_game_state.hand.is_none() {
                                         server_game_state.settings = settings.clone();
