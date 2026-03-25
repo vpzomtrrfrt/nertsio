@@ -559,7 +559,8 @@ impl ViewImpl for MainMenuView {
 
                     let menu_height = button_height * (button_count as f32)
                         + ((button_count - 1) as f32) * ui.spacing().item_spacing.y
-                        + 60.0;
+                        + 60.0
+                        + 5.0;
 
                     let menu_y = ui.max_rect().height() / 2.0 - menu_height / 2.0;
 
@@ -605,12 +606,16 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Practice") {
                                 new_state = Some(PracticeSetupView::default().into());
-                            } else if menu_button(ui, "Settings") {
-                                self.show_settings = true;
-                            } else if menu_button(ui, "Credits") {
-                                new_state = Some(CreditsView.into());
-                            } else if CAN_QUIT && menu_button(ui, "Quit") {
-                                ctx.quit();
+                            } else {
+                                ui.add_space(5.0);
+
+                                if menu_button(ui, "Settings") {
+                                    self.show_settings = true;
+                                } else if menu_button(ui, "Credits") {
+                                    new_state = Some(CreditsView.into());
+                                } else if CAN_QUIT && menu_button(ui, "Quit") {
+                                    ctx.quit();
+                                }
                             }
                         },
                     );
