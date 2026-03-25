@@ -46,6 +46,9 @@ egui = "0.28.1"
 enum_dispatch = "0.3.12"
 percent-encoding = "2.3.1"
 glam = "0.27"
+rand = "0.8.4"
+strum = "0.23.0"
+strum_macros = "0.23.1"
 
 [build-dependencies]
 bureau = "0.2.0"

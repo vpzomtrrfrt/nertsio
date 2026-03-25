@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use strum::IntoEnumIterator;
 
 pub mod protocol;
 
@@ -43,6 +42,10 @@ impl Suit {
             Suit::Diamonds | Suit::Hearts => Color::Red,
         }
     }
+
+    pub fn iter() -> impl Iterator<Item = Self> + Clone {
+        <Self as strum::IntoEnumIterator>::iter()
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -50,13 +53,15 @@ pub struct Rank(u8);
 
 impl Rank {
     pub const ACE: Rank = Rank(1);
+    pub const KING: Rank = Rank(13);
+    pub const COUNT: u8 = 13;
 
     pub fn iter() -> impl Iterator<Item = Rank> + Clone {
-        (1..=13).map(Rank)
+        (1..=Rank::COUNT).map(Rank)
     }
 
     pub fn try_new(src: u8) -> Option<Self> {
-        if (1..=13).contains(&src) {
+        if (1..=Rank::COUNT).contains(&src) {
             Some(Rank(src))
         } else {
             None
@@ -86,10 +91,22 @@ pub struct Card {
     pub rank: Rank,
 }
 
+impl Card {
+    pub fn new(suit: Suit, rank: Rank) -> Self {
+        Self { suit, rank }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub struct CardInstance {
     pub card: Card,
     pub owner_id: u8,
+}
+
+impl CardInstance {
+    pub fn new(card: Card, owner_id: u8) -> Self {
+        Self { card, owner_id }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
@@ -234,6 +251,23 @@ pub struct HandPlayerState {
 }
 
 impl HandPlayerState {
+    pub fn raw(
+        player_id: u8,
+        nerts_stack: Stack,
+        stock_stack: Stack,
+        waste_stack: Stack,
+        tableau_stacks: Vec<Stack>,
+    ) -> Self {
+        Self {
+            player_id,
+
+            nerts_stack,
+            stock_stack,
+            waste_stack,
+            tableau_stacks,
+        }
+    }
+
     pub fn generate(player_id: u8, hand_player_id: u8, tableau_stacks_count: usize) -> Self {
         let mut cards: Vec<_> = FULL_DECK
             .iter()
@@ -358,6 +392,15 @@ pub struct HandState {
 }
 
 impl HandState {
+    pub fn raw(players: Vec<HandPlayerState>, lake_stacks: Vec<Stack>) -> Self {
+        Self {
+            players,
+            lake_stacks,
+            started: false,
+            nerts_called: false,
+        }
+    }
+
     pub fn generate(players: impl Iterator<Item = u8>) -> Self {
         let players: Vec<_> = players.collect();
 

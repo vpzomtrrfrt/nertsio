@@ -11,8 +11,11 @@ use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
 
 mod ingame_hand;
+mod ingame_hand_common;
+mod practice;
 
 use ingame_hand::IngameHandView;
+use practice::{PracticeEndView, PracticeHandView, PracticeSetupView};
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.1, 0.6, 0.1, 1.0);
 const SCREEN_MARGIN: f32 = 5.0;
@@ -40,6 +43,9 @@ pub enum View {
     IngameHandView,
     IngameEndView,
     LostConnectionView,
+    PracticeEndView,
+    PracticeHandView,
+    PracticeSetupView,
 }
 
 #[enum_dispatch::enum_dispatch(View)]
@@ -119,6 +125,11 @@ pub struct GameContext<'a> {
     pub pickup_sound: &'a macroquad::audio::Sound,
     pub place_sound: &'a macroquad::audio::Sound,
     pub shuffle_sound: &'a macroquad::audio::Sound,
+
+    pub suit_callout_spades: &'a macroquad::audio::Sound,
+    pub suit_callout_diamonds: &'a macroquad::audio::Sound,
+    pub suit_callout_clubs: &'a macroquad::audio::Sound,
+    pub suit_callout_hearts: &'a macroquad::audio::Sound,
 }
 
 impl<'a> GameContext<'a> {
@@ -377,6 +388,15 @@ impl<'a> GameContext<'a> {
             macroquad::audio::play_sound_once(sound);
         }
     }
+
+    pub fn play_sound_for_new_lake_stack(&self, card: ni_ty::Card) {
+        macroquad::audio::play_sound_once(match card.suit {
+            ni_ty::Suit::Spades => &self.suit_callout_spades,
+            ni_ty::Suit::Diamonds => &self.suit_callout_diamonds,
+            ni_ty::Suit::Clubs => &self.suit_callout_clubs,
+            ni_ty::Suit::Hearts => &self.suit_callout_hearts,
+        });
+    }
 }
 
 pub fn render_settings_window(egui_ctx: &egui::Context, ctx: &GameContext) -> bool {
@@ -523,7 +543,7 @@ impl ViewImpl for MainMenuView {
 
         let button_height = 20.0;
 
-        let button_count = 6;
+        let button_count = 7;
 
         let menu_width = 150.0;
 
@@ -583,6 +603,8 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(ConnectingView.into());
                             } else if menu_button(ui, "Join Private Game") {
                                 new_state = Some(JoinGameFormView::default().into());
+                            } else if menu_button(ui, "Practice") {
+                                new_state = Some(PracticeSetupView::default().into());
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
                             } else if menu_button(ui, "Credits") {
