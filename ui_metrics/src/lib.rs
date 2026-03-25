@@ -40,11 +40,9 @@ impl HandMetrics {
     }
 
     pub fn player_hand_width(&self) -> f32 {
-        CARD_WIDTH
-            + 10.0
-            + HORIZONTAL_STACK_SPACING * 2.0
+        NERTS_STACK_SPACING * 12.0
             + CARD_WIDTH
-            + 10.0
+            + 20.0
             + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0)
     }
 
@@ -126,11 +124,9 @@ impl HandMetrics {
             ni_ty::PlayerStackLocation::Nerts => position,
             ni_ty::PlayerStackLocation::Tableau(idx) => (
                 position.0
+                    + NERTS_STACK_SPACING * 12.0
                     + CARD_WIDTH
-                    + 10.0
-                    + HORIZONTAL_STACK_SPACING * 2.0
-                    + CARD_WIDTH
-                    + 10.0
+                    + 20.0
                     + (idx as f32) * (CARD_WIDTH + 10.0),
                 position.1,
             ),
