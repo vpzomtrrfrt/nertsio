@@ -223,10 +223,18 @@ impl super::ViewImpl for PracticeHandView {
             }
         }
 
+        let mut do_leave = false;
+
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::none().inner_margin(egui::Margin::same(super::SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                        if ui.button("Leave").clicked() {
+                            do_leave = true;
+                        }
+                    });
+
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         if started {
                             ui.label(format!("{:.2}", self.time));
@@ -243,7 +251,9 @@ impl super::ViewImpl for PracticeHandView {
             self.start_animation_progress += mq::get_frame_time() * START_ANIMATION_SPEED;
         }
 
-        if self.spec.is_done(hand) {
+        if do_leave {
+            super::MainMenuView::init(ctx).into()
+        } else if self.spec.is_done(hand) {
             super::PracticeEndView {
                 time: self.time,
                 spec: self.spec,
