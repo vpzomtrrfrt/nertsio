@@ -4,7 +4,7 @@ use nertsio_types as ni_ty;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
-const START_ANIMATION_SPEED: f32 = 3000.0;
+const START_ANIMATION_SPEED: f32 = 5000.0;
 const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
 
 #[derive(Clone, Copy, PartialEq, strum_macros::EnumIter, strum_macros::Display)]
