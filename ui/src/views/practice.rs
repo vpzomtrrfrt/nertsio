@@ -109,7 +109,7 @@ impl super::ViewImpl for PracticeHandView {
         let hand = &mut self.hand;
         let my_held_state = &mut self.my_held_state;
 
-        let metrics = ingame_hand_common::hand_metrics(&hand);
+        let metrics = ingame_hand_common::hand_metrics(hand);
 
         let real_screen_size = (mq::screen_width(), mq::screen_height());
         let screen_size = ingame_hand_common::screen_size_for_hand(real_screen_size, &metrics);
@@ -149,7 +149,7 @@ impl super::ViewImpl for PracticeHandView {
                 &metrics,
                 screen_center.into(),
                 0,
-                &hand,
+                hand,
                 my_held_state,
                 mouse_pos,
             ) {
@@ -196,7 +196,7 @@ impl super::ViewImpl for PracticeHandView {
         mq::set_camera(&normal_camera);
 
         if let Some(held_info) = held_info {
-            ingame_hand_common::draw_held_state(ctx, &hand, 0, held_info, mouse_pos);
+            ingame_hand_common::draw_held_state(ctx, hand, 0, held_info, mouse_pos);
         }
 
         if !started {
@@ -266,8 +266,6 @@ impl super::ViewImpl for PracticeEndView {
 
         let mut next_view: Option<super::View> = None;
 
-        let spec = self.spec.clone();
-
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::none())
@@ -296,7 +294,7 @@ impl super::ViewImpl for PracticeEndView {
                                 );
 
                                 if ui.button("Play Again").clicked() {
-                                    next_view = Some(PracticeHandView::new(spec).into());
+                                    next_view = Some(PracticeHandView::new(self.spec).into());
                                 } else if ui.button("Main Menu").clicked() {
                                     next_view = Some(super::MainMenuView::init(ctx).into());
                                 }
