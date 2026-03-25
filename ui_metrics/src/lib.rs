@@ -28,21 +28,28 @@ pub struct HandMetrics {
     players: usize,
     tableau_stacks: usize,
     lake_stacks: usize,
+    nerts_pile_size: usize,
 }
 
 impl HandMetrics {
-    pub fn new(players: usize, tableau_stacks: usize, lake_stacks: usize) -> HandMetrics {
+    pub fn new(
+        players: usize,
+        tableau_stacks: usize,
+        lake_stacks: usize,
+        nerts_pile_size: usize,
+    ) -> HandMetrics {
         Self {
             players,
             tableau_stacks,
             lake_stacks,
+            nerts_pile_size,
         }
     }
 
     pub fn player_hand_width(&self) -> f32 {
-        NERTS_STACK_SPACING * 12.0
+        NERTS_STACK_SPACING * (self.nerts_pile_size - 1) as f32
             + CARD_WIDTH
-            + 20.0
+            + if self.tableau_stacks == 0 { 0.0 } else { 20.0 }
             + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0)
     }
 

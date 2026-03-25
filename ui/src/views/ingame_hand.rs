@@ -33,7 +33,7 @@ impl super::ViewImpl for IngameHandView {
                 let started = real_hand_state.started;
                 let hand_extra = shared.hand_extra.as_mut().unwrap();
 
-                let metrics = ingame_hand_common::hand_metrics(real_hand_state);
+                let metrics = ingame_hand_common::hand_metrics(real_hand_state, 13);
 
                 let real_screen_size = (mq::screen_width(), mq::screen_height());
                 let screen_size =

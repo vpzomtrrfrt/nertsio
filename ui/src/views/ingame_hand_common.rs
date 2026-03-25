@@ -7,11 +7,12 @@ use nertsio_ui_metrics as metrics;
 pub const NERTS_OVERLAY_COLOR: mq::Color = mq::Color::new(1.0, 1.0, 1.0, 0.4);
 pub const NERTS_TEXT_COLOR: mq::Color = mq::Color::new(0.0, 0.0, 1.0, 1.0);
 
-pub fn hand_metrics(hand: &ni_ty::HandState) -> metrics::HandMetrics {
+pub fn hand_metrics(hand: &ni_ty::HandState, nerts_pile_size: usize) -> metrics::HandMetrics {
     metrics::HandMetrics::new(
         hand.players().len(),
         hand.players()[0].tableau_stacks().len(),
         hand.lake_stacks().len(),
+        nerts_pile_size,
     )
 }
 

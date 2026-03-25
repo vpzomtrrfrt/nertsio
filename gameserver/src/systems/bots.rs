@@ -30,6 +30,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                 hand.players().len(),
                                 hand.players()[0].tableau_stacks().len(),
                                 hand.lake_stacks().len(),
+                                13,
                             );
 
                             for idx in 0..hand.players().len() {

@@ -109,7 +109,13 @@ impl super::ViewImpl for PracticeHandView {
         let hand = &mut self.hand;
         let my_held_state = &mut self.my_held_state;
 
-        let metrics = ingame_hand_common::hand_metrics(hand);
+        let metrics = ingame_hand_common::hand_metrics(
+            hand,
+            match self.spec {
+                PracticeSpec::Invert => ni_ty::Rank::COUNT.into(),
+                PracticeSpec::Distribute => usize::from(ni_ty::Rank::COUNT) * 4,
+            },
+        );
 
         let real_screen_size = (mq::screen_width(), mq::screen_height());
         let screen_size = ingame_hand_common::screen_size_for_hand(real_screen_size, &metrics);
