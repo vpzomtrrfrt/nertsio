@@ -12,10 +12,10 @@ use std::sync::{Arc, Mutex};
 
 mod ingame_hand;
 mod ingame_hand_common;
-mod practice_hand;
+mod practice;
 
 use ingame_hand::IngameHandView;
-use practice_hand::PracticeHandView;
+use practice::{PracticeEndView, PracticeHandView};
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.1, 0.6, 0.1, 1.0);
 const SCREEN_MARGIN: f32 = 5.0;
@@ -590,8 +590,7 @@ impl ViewImpl for MainMenuView {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Practice") {
                                 new_state = Some(
-                                    PracticeHandView::new(practice_hand::PracticeSpec::Invert)
-                                        .into(),
+                                    PracticeHandView::new(practice::PracticeSpec::Invert).into(),
                                 );
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
@@ -1301,63 +1300,6 @@ impl ViewImpl for LostConnectionView {
         } else {
             self.into()
         }
-    }
-}
-
-pub struct PracticeEndView {
-    spec: practice_hand::PracticeSpec,
-    time: f32,
-}
-
-impl ViewImpl for PracticeEndView {
-    fn tick(self, ctx: &mut GameContext) -> View {
-        mq::clear_background(BACKGROUND_COLOR);
-
-        let mut next_view: Option<View> = None;
-
-        let spec = self.spec.clone();
-
-        egui_macroquad::ui(|egui_ctx| {
-            egui::CentralPanel::default()
-                .frame(egui::Frame::none())
-                .show(egui_ctx, |ui| {
-                    let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
-                    let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
-
-                    let time_size = 30.0;
-
-                    let box_width = 250.0;
-                    let box_height = (25.0 + ui.spacing().item_spacing.y) * 2.0 + time_size;
-
-                    let box_x = ui_screen_width / 2.0 - box_width / 2.0;
-                    let box_y = ui_screen_height / 2.0 - box_height / 2.0;
-
-                    ui.allocate_ui_at_rect(
-                        egui::Rect {
-                            min: egui::Pos2::new(box_x, box_y),
-                            max: egui::Pos2::new(box_x + box_width, box_y + box_height),
-                        },
-                        |ui| {
-                            ui.vertical_centered(|ui| {
-                                ui.label(
-                                    egui::RichText::new(format!("{:.2}", self.time))
-                                        .size(time_size),
-                                );
-
-                                if ui.button("Play Again").clicked() {
-                                    next_view = Some(PracticeHandView::new(spec).into());
-                                } else if ui.button("Main Menu").clicked() {
-                                    next_view = Some(MainMenuView::init(ctx).into());
-                                }
-                            });
-                        },
-                    );
-                });
-        });
-
-        egui_macroquad::draw();
-
-        next_view.unwrap_or_else(|| self.into())
     }
 }
 
