@@ -15,7 +15,7 @@ mod ingame_hand_common;
 mod practice;
 
 use ingame_hand::IngameHandView;
-use practice::{PracticeEndView, PracticeHandView};
+use practice::{PracticeEndView, PracticeHandView, PracticeSetupView};
 
 const BACKGROUND_COLOR: mq::Color = mq::Color::new(0.1, 0.6, 0.1, 1.0);
 const SCREEN_MARGIN: f32 = 5.0;
@@ -45,6 +45,7 @@ pub enum View {
     LostConnectionView,
     PracticeEndView,
     PracticeHandView,
+    PracticeSetupView,
 }
 
 #[enum_dispatch::enum_dispatch(View)]
@@ -589,9 +590,7 @@ impl ViewImpl for MainMenuView {
                             } else if menu_button(ui, "Join Private Game") {
                                 new_state = Some(JoinGameFormView::default().into());
                             } else if menu_button(ui, "Practice") {
-                                new_state = Some(
-                                    PracticeHandView::new(practice::PracticeSpec::Invert).into(),
-                                );
+                                new_state = Some(PracticeSetupView::default().into());
                             } else if menu_button(ui, "Settings") {
                                 self.show_settings = true;
                             } else if menu_button(ui, "Credits") {

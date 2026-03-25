@@ -3762,6 +3762,8 @@ dependencies = [
  "serde",
  "serde_json",
  "splines",
+ "strum",
+ "strum_macros",
  "tokio 1.47.1",
  "tokio-util 0.7.16",
  "wasm-bindgen-futures",

@@ -2,11 +2,12 @@ use super::ingame_hand_common;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use std::collections::HashMap;
+use strum::IntoEnumIterator;
 
 const START_ANIMATION_SPEED: f32 = 3000.0;
 const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
 
-#[derive(Clone)]
+#[derive(Clone, Copy, PartialEq, strum_macros::EnumIter, strum_macros::Display)]
 pub enum PracticeSpec {
     Invert,
     Distribute,
@@ -308,6 +309,71 @@ impl super::ViewImpl for PracticeEndView {
         egui_macroquad::draw();
 
         next_view.unwrap_or_else(|| self.into())
+    }
+}
+
+pub struct PracticeSetupView {
+    spec: PracticeSpec,
+}
+
+impl Default for PracticeSetupView {
+    fn default() -> Self {
+        Self {
+            spec: PracticeSpec::Distribute,
+        }
+    }
+}
+
+impl super::ViewImpl for PracticeSetupView {
+    fn tick(mut self, _ctx: &mut super::GameContext) -> super::View {
+        let mut do_start = false;
+
+        mq::clear_background(super::BACKGROUND_COLOR);
+
+        egui_macroquad::ui(|egui_ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::none())
+                .show(egui_ctx, |ui| {
+                    let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
+                    let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
+
+                    let box_width = 250.0;
+                    let box_height = 25.0 + (25.0 + ui.spacing().item_spacing.y) * 1.0;
+
+                    let box_x = ui_screen_width / 2.0 - box_width / 2.0;
+                    let box_y = ui_screen_height / 2.0 - box_height / 2.0;
+
+                    ui.allocate_ui_at_rect(
+                        egui::Rect {
+                            min: egui::Pos2::new(box_x, box_y),
+                            max: egui::Pos2::new(box_x + box_width, box_y + box_height),
+                        },
+                        |ui| {
+                            egui::ComboBox::from_label("Scenario")
+                                .selected_text(self.spec.to_string())
+                                .show_ui(ui, |ui| {
+                                    for spec in PracticeSpec::iter() {
+                                        ui.selectable_value(&mut self.spec, spec, spec.to_string());
+                                    }
+                                });
+
+                            ui.vertical_centered(|ui| {
+                                if ui.button("Start").clicked() {
+                                    do_start = true;
+                                }
+                            });
+                        },
+                    );
+                });
+        });
+
+        egui_macroquad::draw();
+
+        if do_start {
+            PracticeHandView::new(self.spec).into()
+        } else {
+            self.into()
+        }
     }
 }
 
