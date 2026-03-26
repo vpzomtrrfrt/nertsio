@@ -601,6 +601,8 @@ pub fn handle_input(
     } else if mq::is_key_pressed(mq::KeyCode::Tab)
         || mq::is_key_pressed(mq::KeyCode::Z)
         || mq::is_key_pressed(mq::KeyCode::X)
+        || mq::is_key_pressed(mq::KeyCode::T)
+        || mq::is_key_pressed(mq::KeyCode::F)
     {
         let action = if player_state.stock_stack().is_empty() {
             ni_ty::HandAction::ReturnStock
