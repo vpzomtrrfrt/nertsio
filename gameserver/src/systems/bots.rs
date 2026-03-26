@@ -168,14 +168,39 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                         let stack =
                                                             hand_player.stack_at(src).unwrap();
                                                         if let Some(card) = stack.last() {
-                                                            for (i, stack) in hand
-                                                                .lake_stacks()
-                                                                .iter()
-                                                                .enumerate()
                                                             {
-                                                                if stack.can_add(*card) {
-                                                                    new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: ni_ty::StackLocation::Lake(i as u16), count: 1}.into());
-                                                                    break;
+                                                                let possible_lake_targets = hand
+                                                                    .lake_stacks()
+                                                                    .iter()
+                                                                    .enumerate()
+                                                                    .filter_map(|(i, stack)| {
+                                                                        if stack.can_add(*card) {
+                                                                            Some(ni_ty::StackLocation::Lake(i as u16))
+                                                                        } else {
+                                                                            None
+                                                                        }
+                                                                    });
+
+                                                                // Move to the closest lake stack
+
+                                                                let from =
+                                                                    ni_ty::StackLocation::Player(
+                                                                        idx as u8, src,
+                                                                    );
+                                                                let from_pos =
+                                                                    metrics.stack_pos(from);
+
+                                                                if let Some(to) = possible_lake_targets.min_by_key(|target| {
+                                                                    let to_pos = metrics.stack_pos(*target);
+                                                                    let to_pos = if player_loc.inverted {
+                                                                        (-to_pos.0 - CARD_WIDTH, to_pos.1)
+                                                                    } else {
+                                                                        to_pos
+                                                                    };
+
+                                                                    float_ord::FloatOrd((to_pos.0 - from_pos.0).powf(2.0) + (to_pos.1 - from_pos.1).powf(2.0))
+                                                                }) {
+                                                                    new_plan = Some(ni_ty::HandAction::Move { from, to, count: 1}.into());
                                                                 }
                                                             }
 
