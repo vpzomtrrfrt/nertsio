@@ -382,8 +382,20 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                                                                     Some(current_plan)
                                                                 } else {
-                                                                    *target = dest.center();
-                                                                    None
+                                                                    if hand
+                                                                        .clone()
+                                                                        .apply(
+                                                                            Some(idx as u8),
+                                                                            action,
+                                                                        )
+                                                                        .is_err()
+                                                                    {
+                                                                        *plan = None;
+                                                                        None
+                                                                    } else {
+                                                                        *target = dest.center();
+                                                                        None
+                                                                    }
                                                                 }
                                                             } else {
                                                                 let dest = get_dest_for_stack(
