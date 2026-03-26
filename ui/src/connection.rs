@@ -49,6 +49,7 @@ pub enum ConnectionEvent {
     PlayerHandAction(u8, ni_ty::HandAction),
     ServerHandAction(ni_ty::HandAction),
     NertsCalled,
+    Disconnected,
 }
 
 pub(crate) async fn handle_connection(
@@ -227,415 +228,421 @@ pub(crate) async fn handle_connection(
 
     // required to make this compile
     #[allow(clippy::let_and_return)]
-    let x = if let futures_util::future::Either::Left((Err(err), _)) = futures_util::future::select(
-        Box::pin(futures_util::future::try_join5(
-            async move {
-                while let Some(msg) = game_msg_recv.next().await {
-                    match msg {
-                        ConnectionMessage::Game(msg) => {
-                            log::debug!("sending {:?}", msg);
-                            game_stream_send.send(msg).await?;
-                        }
-                        ConnectionMessage::Leave => {
-                            let _ = send_leave.send(()); // if it's dropped we must have already disconnected?
-                            break;
-                        }
-                    }
-                }
-                Result::<_, anyhow::Error>::Ok(())
-            },
-            async move {
-                let mut interval =
-                    futures_ticker::Ticker::new(std::time::Duration::from_millis(50));
-                let mut seq = 0;
+    let x = {
+        let events_send = events_send.clone();
 
-                loop {
-                    interval.next().await;
-
-                    let mut lock = info_mutex.lock().unwrap();
-
-                    if let Some(shared) = lock.as_info_mut() {
-                        if shared.game.hand.is_some() {
-                            let hand_extra = shared.hand_extra.as_ref().unwrap();
-                            if let Some(mouse_pos) = hand_extra.last_mouse_position {
-                                send_datagram(
-                                    bincode::serialize(
-                                        &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
-                                            seq,
-                                            state: ni_ty::MouseState {
-                                                position: mouse_pos,
-                                                held: hand_extra
-                                                    .my_held_state
-                                                    .as_ref()
-                                                    .map(|x| x.info),
-                                            },
-                                        },
-                                    )
-                                    .unwrap(),
-                                )?;
-
-                                seq += 1;
-                            }
-                        } else {
-                            if let Some(mouse_pos) = shared.my_last_menu_mouse_position {
-                                send_datagram(
-                                    bincode::serialize(
-                                        &ni_ty::protocol::DatagramMessageC2S::UpdateMenuMouseState {
-                                            seq,
-                                            state: ni_ty::MenuMouseState {
-                                                position: mouse_pos,
-                                            },
-                                        },
-                                    )
-                                    .unwrap(),
-                                )?;
-
-                                seq += 1;
-                            }
-                        }
-                    }
-                }
-
-                // allows inferring return type
-                #[allow(unreachable_code)]
-                Ok(())
-            },
-            async {
-                datagrams_recv
-                    .map_err(error_send)
-                    .try_for_each(|bytes| async move {
-                        use ni_ty::protocol::DatagramMessageS2C;
-
-                        let msg: DatagramMessageS2C = bincode::deserialize(bytes.as_ref())?;
+        if let futures_util::future::Either::Left((Err(err), _)) = futures_util::future::select(
+            Box::pin(futures_util::future::try_join5(
+                async move {
+                    while let Some(msg) = game_msg_recv.next().await {
                         match msg {
-                            DatagramMessageS2C::UpdateMouseState {
-                                player_idx,
-                                seq,
-                                state,
-                            } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                if let Some(shared) = (*lock).as_info_mut() {
-                                    if let Some(hand_extra) = shared.hand_extra.as_mut() {
-                                        let mouse_state =
-                                            &mut hand_extra.mouse_states[player_idx as usize];
-                                        match mouse_state {
-                                            Some(current_state) => {
-                                                current_state.receive(seq, state)
-                                            }
-                                            None => {
-                                                *mouse_state =
-                                                    Some(crate::MouseState::new(seq, state));
-                                            }
-                                        }
-                                    }
-                                }
+                            ConnectionMessage::Game(msg) => {
+                                log::debug!("sending {:?}", msg);
+                                game_stream_send.send(msg).await?;
                             }
-                            DatagramMessageS2C::UpdateMenuMouseState {
-                                player_id,
-                                seq,
-                                state,
-                            } => {
-                                let mut lock = info_mutex.lock().unwrap();
-                                if let Some(shared) = (*lock).as_info_mut() {
-                                    match shared.menu_mouse_states.entry(player_id) {
-                                        std::collections::hash_map::Entry::Occupied(mut entry) => {
-                                            entry.get_mut().receive(seq, state)
-                                        }
-                                        std::collections::hash_map::Entry::Vacant(entry) => {
-                                            entry.insert(crate::MenuMouseState::new(seq, state));
-                                        }
-                                    }
+                            ConnectionMessage::Leave => {
+                                let _ = send_leave.send(()); // if it's dropped we must have already disconnected?
+                                break;
+                            }
+                        }
+                    }
+                    Result::<_, anyhow::Error>::Ok(())
+                },
+                async move {
+                    let mut interval =
+                        futures_ticker::Ticker::new(std::time::Duration::from_millis(50));
+                    let mut seq = 0;
+
+                    loop {
+                        interval.next().await;
+
+                        let mut lock = info_mutex.lock().unwrap();
+
+                        if let Some(shared) = lock.as_info_mut() {
+                            if shared.game.hand.is_some() {
+                                let hand_extra = shared.hand_extra.as_ref().unwrap();
+                                if let Some(mouse_pos) = hand_extra.last_mouse_position {
+                                    send_datagram(
+                                        bincode::serialize(
+                                            &ni_ty::protocol::DatagramMessageC2S::UpdateMouseState {
+                                                seq,
+                                                state: ni_ty::MouseState {
+                                                    position: mouse_pos,
+                                                    held: hand_extra
+                                                        .my_held_state
+                                                        .as_ref()
+                                                        .map(|x| x.info),
+                                                },
+                                            },
+                                        )
+                                        .unwrap(),
+                                    )?;
+
+                                    seq += 1;
+                                }
+                            } else {
+                                if let Some(mouse_pos) = shared.my_last_menu_mouse_position {
+                                    send_datagram(
+                                        bincode::serialize(
+                                            &ni_ty::protocol::DatagramMessageC2S::UpdateMenuMouseState {
+                                                seq,
+                                                state: ni_ty::MenuMouseState {
+                                                    position: mouse_pos,
+                                                },
+                                            },
+                                        )
+                                        .unwrap(),
+                                    )?;
+
+                                    seq += 1;
                                 }
                             }
                         }
+                    }
 
-                        Result::<_, anyhow::Error>::Ok(())
-                    })
-                    .await?;
+                    // allows inferring return type
+                    #[allow(unreachable_code)]
+                    Ok(())
+                },
+                async {
+                    datagrams_recv
+                        .map_err(error_send)
+                        .try_for_each(|bytes| async move {
+                            use ni_ty::protocol::DatagramMessageS2C;
 
-                Ok(())
-            },
-            async move {
-                game_stream_recv
-                    .map_err(Into::into)
-                    .try_for_each(|msg| {
-                        let events_send = &events_send;
-                        let region = region.clone();
-                        async move {
-                            use ni_ty::protocol::GameMessageS2C;
-
-                            log::debug!("received {:?}", msg);
-
+                            let msg: DatagramMessageS2C = bincode::deserialize(bytes.as_ref())?;
                             match msg {
-                                GameMessageS2C::Joined {
-                                    info,
-                                    your_player_id,
+                                DatagramMessageS2C::UpdateMouseState {
+                                    player_idx,
+                                    seq,
+                                    state,
                                 } => {
-                                    *info_mutex.lock().unwrap() =
-                                        ConnectionState::Connected(SharedInfo {
-                                            hand_extra: info.hand.as_ref().map(|hand| {
-                                                crate::HandExtra::new(hand.players().len())
-                                            }),
-                                            game: info,
-                                            my_player_id: your_player_id,
-                                            server_id,
-                                            region,
-                                            new_end_scores: None,
-                                            ping: None,
-                                            menu_mouse_states: Default::default(),
-                                            my_last_menu_mouse_position: None,
-                                        });
-                                }
-                                GameMessageS2C::PlayerJoin { id, info } => {
-                                    (*info_mutex.lock().unwrap())
-                                        .as_info_mut()
-                                        .unwrap()
-                                        .game
-                                        .players
-                                        .insert(id, info);
-
-                                    if let Err(err) =
-                                        events_send.unbounded_send(ConnectionEvent::PlayerJoined)
-                                    {
-                                        eprintln!("unable to trigger event: {:?}", err);
-                                    }
-                                }
-                                GameMessageS2C::PlayerLeave { id } => {
                                     let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    shared.game.players.remove(&id);
-
-                                    shared.menu_mouse_states.remove(&id);
-
-                                    if let Err(err) =
-                                        events_send.unbounded_send(ConnectionEvent::PlayerLeft)
-                                    {
-                                        eprintln!("unable to trigger event: {:?}", err);
-                                    }
-                                }
-                                GameMessageS2C::PlayerUpdateReady { id, value } => {
-                                    (*info_mutex.lock().unwrap())
-                                        .as_info_mut()
-                                        .unwrap()
-                                        .game
-                                        .players
-                                        .get_mut(&id)
-                                        .unwrap()
-                                        .ready = value;
-                                }
-                                GameMessageS2C::PlayerUpdateSpectating { id, value } => {
-                                    (*info_mutex.lock().unwrap())
-                                        .as_info_mut()
-                                        .unwrap()
-                                        .game
-                                        .players
-                                        .get_mut(&id)
-                                        .unwrap()
-                                        .spectating = value;
-                                }
-                                GameMessageS2C::HandInit { info, delay } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = (*lock).as_info_mut().unwrap();
-
-                                    let mut hand_extra =
-                                        crate::HandExtra::new(info.players().len());
-                                    hand_extra.expected_start_time =
-                                        Some(web_time::Instant::now() + delay);
-                                    shared.hand_extra = Some(hand_extra);
-
-                                    shared.game.hand = Some(info);
-
-                                    if let Err(err) =
-                                        events_send.unbounded_send(ConnectionEvent::HandInit)
-                                    {
-                                        eprintln!("unable to trigger HandInit event: {:?}", err);
-                                    }
-                                }
-                                GameMessageS2C::PlayerHandAction { player, action } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand = shared.game.hand.as_mut().unwrap();
-                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
-
-                                    if let Some(my_player_idx) =
-                                        hand.players().iter().position(|player| {
-                                            player.player_id() == shared.my_player_id
-                                        })
-                                    {
-                                        if player == my_player_idx as u8 {
-                                            // my move, check if matches expected
-
-                                            while let Some(front) =
-                                                hand_extra.pending_actions.pop_front()
-                                            {
-                                                if front == action {
-                                                    break;
+                                    if let Some(shared) = (*lock).as_info_mut() {
+                                        if let Some(hand_extra) = shared.hand_extra.as_mut() {
+                                            let mouse_state =
+                                                &mut hand_extra.mouse_states[player_idx as usize];
+                                            match mouse_state {
+                                                Some(current_state) => {
+                                                    current_state.receive(seq, state)
+                                                }
+                                                None => {
+                                                    *mouse_state =
+                                                        Some(crate::MouseState::new(seq, state));
                                                 }
                                             }
                                         }
                                     }
-
-                                    hand.apply(Some(player), action).unwrap();
-
-                                    let _ = events_send.unbounded_send(
-                                        ConnectionEvent::PlayerHandAction(player, action),
-                                    );
                                 }
-                                GameMessageS2C::ServerHandAction { action } => {
+                                DatagramMessageS2C::UpdateMenuMouseState {
+                                    player_id,
+                                    seq,
+                                    state,
+                                } => {
                                     let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand = shared.game.hand.as_mut().unwrap();
-
-                                    hand.apply(None, action).unwrap();
-
-                                    if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
-                                        shared.hand_extra.as_mut().unwrap().stalled = false;
-                                    }
-
-                                    let _ = events_send
-                                        .unbounded_send(ConnectionEvent::ServerHandAction(action));
-                                }
-                                GameMessageS2C::NertsCalled { player: _ } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand = shared.game.hand.as_mut().unwrap();
-
-                                    hand.nerts_called = true;
-
-                                    let _ =
-                                        events_send.unbounded_send(ConnectionEvent::NertsCalled);
-                                }
-                                GameMessageS2C::HandEnd { scores } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand_state = shared.game.hand.take().unwrap();
-
-                                    for (player, score) in hand_state.players().iter().zip(scores) {
-                                        if let Some(info) =
-                                            shared.game.players.get_mut(&player.player_id())
-                                        {
-                                            info.score += score;
+                                    if let Some(shared) = (*lock).as_info_mut() {
+                                        match shared.menu_mouse_states.entry(player_id) {
+                                            std::collections::hash_map::Entry::Occupied(mut entry) => {
+                                                entry.get_mut().receive(seq, state)
+                                            }
+                                            std::collections::hash_map::Entry::Vacant(entry) => {
+                                                entry.insert(crate::MenuMouseState::new(seq, state));
+                                            }
                                         }
                                     }
-
-                                    for player in shared.game.players.values_mut() {
-                                        player.ready = false;
-                                    }
-
-                                    shared.hand_extra = None;
-                                }
-                                GameMessageS2C::HandStalled => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
-
-                                    hand_extra.stalled = true;
-                                }
-                                GameMessageS2C::HandStallCancel => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let hand_extra = shared.hand_extra.as_mut().unwrap();
-
-                                    hand_extra.stalled = false;
-                                }
-                                GameMessageS2C::GameEnd => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    let mut scores: Vec<_> = shared
-                                        .game
-                                        .players
-                                        .iter_mut()
-                                        .map(|(key, player)| {
-                                            let score = player.score;
-                                            player.score = 0;
-
-                                            (*key, score)
-                                        })
-                                        .collect();
-
-                                    scores.sort_by_key(|x| -x.1);
-
-                                    shared.new_end_scores = Some(scores);
-                                }
-                                GameMessageS2C::NewMasterPlayer { player } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    shared.game.master_player = player;
-                                }
-                                GameMessageS2C::HandStart => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-                                    let hand = shared.game.hand.as_mut().unwrap();
-
-                                    hand.started = true;
-                                }
-                                GameMessageS2C::SettingsChanged { settings } => {
-                                    let mut lock = info_mutex.lock().unwrap();
-                                    let shared = lock.as_info_mut().unwrap();
-
-                                    shared.game.settings = settings;
                                 }
                             }
 
-                            Ok(())
-                        }
-                    })
-                    .await
-            },
-            async move {
-                loop {
-                    let start_time = web_time::Instant::now();
-                    maintenance_stream_send
-                        .send(ni_ty::protocol::MaintenanceMessageC2S::Ping)
+                            Result::<_, anyhow::Error>::Ok(())
+                        })
                         .await?;
 
-                    let msg = maintenance_stream_recv
-                        .try_next()
-                        .await?
-                        .ok_or(anyhow::anyhow!("maintenance stream ended"))?;
+                    Ok(())
+                },
+                async move {
+                    game_stream_recv
+                        .map_err(Into::into)
+                        .try_for_each(|msg| {
+                            let events_send = &events_send;
+                            let region = region.clone();
+                            async move {
+                                use ni_ty::protocol::GameMessageS2C;
 
-                    if let ni_ty::protocol::MaintenanceMessageS2C::Pong = msg {
-                        let end_time = web_time::Instant::now();
+                                log::debug!("received {:?}", msg);
 
-                        let ping = end_time - start_time;
+                                match msg {
+                                    GameMessageS2C::Joined {
+                                        info,
+                                        your_player_id,
+                                    } => {
+                                        *info_mutex.lock().unwrap() =
+                                            ConnectionState::Connected(SharedInfo {
+                                                hand_extra: info.hand.as_ref().map(|hand| {
+                                                    crate::HandExtra::new(hand.players().len())
+                                                }),
+                                                game: info,
+                                                my_player_id: your_player_id,
+                                                server_id,
+                                                region,
+                                                new_end_scores: None,
+                                                ping: None,
+                                                menu_mouse_states: Default::default(),
+                                                my_last_menu_mouse_position: None,
+                                            });
+                                    }
+                                    GameMessageS2C::PlayerJoin { id, info } => {
+                                        (*info_mutex.lock().unwrap())
+                                            .as_info_mut()
+                                            .unwrap()
+                                            .game
+                                            .players
+                                            .insert(id, info);
 
-                        info_mutex.lock().unwrap().as_info_mut().unwrap().ping = Some(ping);
+                                        if let Err(err) =
+                                            events_send.unbounded_send(ConnectionEvent::PlayerJoined)
+                                        {
+                                            eprintln!("unable to trigger event: {:?}", err);
+                                        }
+                                    }
+                                    GameMessageS2C::PlayerLeave { id } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
 
-                        let delay = if ping >= (PING_LOOP_DELAY_STANDARD - PING_LOOP_DELAY_MINIMUM)
-                        {
-                            PING_LOOP_DELAY_MINIMUM
+                                        shared.game.players.remove(&id);
+
+                                        shared.menu_mouse_states.remove(&id);
+
+                                        if let Err(err) =
+                                            events_send.unbounded_send(ConnectionEvent::PlayerLeft)
+                                        {
+                                            eprintln!("unable to trigger event: {:?}", err);
+                                        }
+                                    }
+                                    GameMessageS2C::PlayerUpdateReady { id, value } => {
+                                        (*info_mutex.lock().unwrap())
+                                            .as_info_mut()
+                                            .unwrap()
+                                            .game
+                                            .players
+                                            .get_mut(&id)
+                                            .unwrap()
+                                            .ready = value;
+                                    }
+                                    GameMessageS2C::PlayerUpdateSpectating { id, value } => {
+                                        (*info_mutex.lock().unwrap())
+                                            .as_info_mut()
+                                            .unwrap()
+                                            .game
+                                            .players
+                                            .get_mut(&id)
+                                            .unwrap()
+                                            .spectating = value;
+                                    }
+                                    GameMessageS2C::HandInit { info, delay } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = (*lock).as_info_mut().unwrap();
+
+                                        let mut hand_extra =
+                                            crate::HandExtra::new(info.players().len());
+                                        hand_extra.expected_start_time =
+                                            Some(web_time::Instant::now() + delay);
+                                        shared.hand_extra = Some(hand_extra);
+
+                                        shared.game.hand = Some(info);
+
+                                        if let Err(err) =
+                                            events_send.unbounded_send(ConnectionEvent::HandInit)
+                                        {
+                                            eprintln!("unable to trigger HandInit event: {:?}", err);
+                                        }
+                                    }
+                                    GameMessageS2C::PlayerHandAction { player, action } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand = shared.game.hand.as_mut().unwrap();
+                                        let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                        if let Some(my_player_idx) =
+                                            hand.players().iter().position(|player| {
+                                                player.player_id() == shared.my_player_id
+                                            })
+                                        {
+                                            if player == my_player_idx as u8 {
+                                                // my move, check if matches expected
+
+                                                while let Some(front) =
+                                                    hand_extra.pending_actions.pop_front()
+                                                {
+                                                    if front == action {
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        hand.apply(Some(player), action).unwrap();
+
+                                        let _ = events_send.unbounded_send(
+                                            ConnectionEvent::PlayerHandAction(player, action),
+                                        );
+                                    }
+                                    GameMessageS2C::ServerHandAction { action } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand = shared.game.hand.as_mut().unwrap();
+
+                                        hand.apply(None, action).unwrap();
+
+                                        if matches!(action, ni_ty::HandAction::ShuffleStock { .. }) {
+                                            shared.hand_extra.as_mut().unwrap().stalled = false;
+                                        }
+
+                                        let _ = events_send
+                                            .unbounded_send(ConnectionEvent::ServerHandAction(action));
+                                    }
+                                    GameMessageS2C::NertsCalled { player: _ } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand = shared.game.hand.as_mut().unwrap();
+
+                                        hand.nerts_called = true;
+
+                                        let _ =
+                                            events_send.unbounded_send(ConnectionEvent::NertsCalled);
+                                    }
+                                    GameMessageS2C::HandEnd { scores } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand_state = shared.game.hand.take().unwrap();
+
+                                        for (player, score) in hand_state.players().iter().zip(scores) {
+                                            if let Some(info) =
+                                                shared.game.players.get_mut(&player.player_id())
+                                            {
+                                                info.score += score;
+                                            }
+                                        }
+
+                                        for player in shared.game.players.values_mut() {
+                                            player.ready = false;
+                                        }
+
+                                        shared.hand_extra = None;
+                                    }
+                                    GameMessageS2C::HandStalled => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                        hand_extra.stalled = true;
+                                    }
+                                    GameMessageS2C::HandStallCancel => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let hand_extra = shared.hand_extra.as_mut().unwrap();
+
+                                        hand_extra.stalled = false;
+                                    }
+                                    GameMessageS2C::GameEnd => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        let mut scores: Vec<_> = shared
+                                            .game
+                                            .players
+                                            .iter_mut()
+                                            .map(|(key, player)| {
+                                                let score = player.score;
+                                                player.score = 0;
+
+                                                (*key, score)
+                                            })
+                                            .collect();
+
+                                        scores.sort_by_key(|x| -x.1);
+
+                                        shared.new_end_scores = Some(scores);
+                                    }
+                                    GameMessageS2C::NewMasterPlayer { player } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        shared.game.master_player = player;
+                                    }
+                                    GameMessageS2C::HandStart => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+                                        let hand = shared.game.hand.as_mut().unwrap();
+
+                                        hand.started = true;
+                                    }
+                                    GameMessageS2C::SettingsChanged { settings } => {
+                                        let mut lock = info_mutex.lock().unwrap();
+                                        let shared = lock.as_info_mut().unwrap();
+
+                                        shared.game.settings = settings;
+                                    }
+                                }
+
+                                Ok(())
+                            }
+                        })
+                        .await
+                },
+                async move {
+                    loop {
+                        let start_time = web_time::Instant::now();
+                        maintenance_stream_send
+                            .send(ni_ty::protocol::MaintenanceMessageC2S::Ping)
+                            .await?;
+
+                        let msg = maintenance_stream_recv
+                            .try_next()
+                            .await?
+                            .ok_or(anyhow::anyhow!("maintenance stream ended"))?;
+
+                        if let ni_ty::protocol::MaintenanceMessageS2C::Pong = msg {
+                            let end_time = web_time::Instant::now();
+
+                            let ping = end_time - start_time;
+
+                            info_mutex.lock().unwrap().as_info_mut().unwrap().ping = Some(ping);
+
+                            let delay = if ping >= (PING_LOOP_DELAY_STANDARD - PING_LOOP_DELAY_MINIMUM)
+                            {
+                                PING_LOOP_DELAY_MINIMUM
+                            } else {
+                                PING_LOOP_DELAY_STANDARD - ping
+                            };
+
+                            futures_timer::Delay::new(delay).await;
                         } else {
-                            PING_LOOP_DELAY_STANDARD - ping
-                        };
-
-                        futures_timer::Delay::new(delay).await;
-                    } else {
-                        anyhow::bail!("unexpected maintenance message");
+                            anyhow::bail!("unexpected maintenance message");
+                        }
                     }
-                }
 
-                // allows inferring return type
-                #[allow(unreachable_code)]
-                Ok(())
-            },
-        )),
-        recv_leave,
-    )
-    .await
-    {
-        Err(err)
-    } else {
-        Ok(())
+                    // allows inferring return type
+                    #[allow(unreachable_code)]
+                    Ok(())
+                },
+            )),
+            recv_leave,
+        )
+        .await
+        {
+            Err(err)
+        } else {
+            Ok(())
+        }
     };
+
+    let _ = events_send.unbounded_send(ConnectionEvent::Disconnected);
 
     x
 }

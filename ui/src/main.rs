@@ -589,6 +589,9 @@ async fn main() {
                         macroquad::audio::play_sound_once(&nerts_callout);
                     }
                 }
+                ConnectionEvent::Disconnected => {
+                    macroquad::audio::stop_sound(&round_start_music);
+                }
             },
             Ok(None) => unreachable!(),
             Err(_) => {
