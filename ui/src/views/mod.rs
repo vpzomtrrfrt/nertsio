@@ -375,7 +375,7 @@ impl<'a> GameContext<'a> {
         );
     }
 
-    pub fn play_sound_for_action(&self, action: ni_ty::HandAction) {
+    pub fn play_sound_for_action(&self, action: ni_ty::HandAction, is_me: bool) {
         #[allow(unreachable_patterns)]
         let sound = match action {
             ni_ty::HandAction::ReturnStock => Some(&self.gather_sound),
@@ -386,7 +386,37 @@ impl<'a> GameContext<'a> {
         };
 
         if let Some(sound) = sound {
-            macroquad::audio::play_sound_once(sound);
+            let volume = match action {
+                ni_ty::HandAction::FlipStock | ni_ty::HandAction::ReturnStock => {
+                    if is_me {
+                        0.5
+                    } else {
+                        0.1
+                    }
+                }
+
+                ni_ty::HandAction::Move {
+                    to: ni_ty::StackLocation::Lake(_),
+                    ..
+                } => 1.0,
+                ni_ty::HandAction::Move { .. } => {
+                    if is_me {
+                        1.0
+                    } else {
+                        0.5
+                    }
+                }
+
+                _ => 1.0,
+            };
+
+            macroquad::audio::play_sound(
+                sound,
+                macroquad::audio::PlaySoundParams {
+                    looped: false,
+                    volume,
+                },
+            );
         }
     }
 

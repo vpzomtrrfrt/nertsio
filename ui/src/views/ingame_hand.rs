@@ -112,7 +112,7 @@ impl super::ViewImpl for IngameHandView {
                                 }
 
                                 if settings.sounds {
-                                    ctx.play_sound_for_action(action);
+                                    ctx.play_sound_for_action(action, true);
                                 }
                             }
                         }

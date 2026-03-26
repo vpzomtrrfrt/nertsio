@@ -538,7 +538,13 @@ async fn main() {
 
                     if settings.music {
                         println!("playing sound");
-                        macroquad::audio::play_sound_once(&round_start_music);
+                        macroquad::audio::play_sound(
+                            &round_start_music,
+                            macroquad::audio::PlaySoundParams {
+                                looped: false,
+                                volume: 0.75,
+                            },
+                        );
                     }
                 }
                 ConnectionEvent::ServerHandAction(action) => {
@@ -546,7 +552,7 @@ async fn main() {
                     let settings = &mut *settings_lock;
 
                     if settings.sounds {
-                        ctx.play_sound_for_action(action);
+                        ctx.play_sound_for_action(action, false);
                     }
                 }
                 ConnectionEvent::PlayerHandAction(player, action) => {
@@ -561,7 +567,7 @@ async fn main() {
 
                                 // my own sounds are triggered when sending them, so only handle others
                                 if player.player_id() != shared.my_player_id {
-                                    ctx.play_sound_for_action(action);
+                                    ctx.play_sound_for_action(action, false);
                                 }
                             }
 

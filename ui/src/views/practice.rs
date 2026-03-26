@@ -273,7 +273,7 @@ impl super::ViewImpl for PracticeHandView {
                     .expect("Failed to apply player action");
 
                 if settings.sounds {
-                    ctx.play_sound_for_action(action);
+                    ctx.play_sound_for_action(action, true);
 
                     if let ni_ty::HandAction::Move { to, .. } = action {
                         if matches!(to, ni_ty::StackLocation::Lake(_)) {
