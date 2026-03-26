@@ -163,12 +163,23 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                         .enumerate()
                                                                     {
                                                                         let dest = ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8));
-                                                                        if dest_stack.can_add(back)
-                                                                            && (!src_is_tableau
-                                                                                || !dest_stack.is_empty())
-                                                                        {
+                                                                        if dest_stack.can_add(back) && !dest_stack.is_empty() {
                                                                             new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: dest, count: count as u8 }.into());
                                                                             break;
+                                                                        }
+                                                                    }
+
+                                                                    if new_plan.is_none() && !src_is_tableau {
+                                                                        for (i, dest_stack) in hand_player
+                                                                            .tableau_stacks()
+                                                                            .iter()
+                                                                            .enumerate()
+                                                                        {
+                                                                            let dest = ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8));
+                                                                            if dest_stack.can_add(back) {
+                                                                                new_plan = Some(ni_ty::HandAction::Move { from: ni_ty::StackLocation::Player(idx as u8, src), to: dest, count: count as u8 }.into());
+                                                                                break;
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
