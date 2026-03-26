@@ -2,6 +2,20 @@ use crate::{BotPlan, GlobalState, PlayerController};
 use nertsio_types as ni_ty;
 use std::sync::Arc;
 
+#[derive(Clone, Copy)]
+struct Rect {
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl Rect {
+    pub fn center(self) -> (f32, f32) {
+        (self.x + self.width / 2.0, self.y + self.height / 2.0)
+    }
+}
+
 pub(crate) async fn run(global_state: Arc<GlobalState>) {
     futures_util::join!(
         {
@@ -39,62 +53,84 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                 {
                                     let player_loc = metrics.player_loc(idx);
 
-                                    let get_dest_for_stack = |loc, take_count| {
+                                    let get_dest_for_card_pos = |pos: (f32, f32)| Rect {
+                                        x: pos.0,
+                                        y: pos.1,
+                                        width: CARD_WIDTH,
+                                        height: CARD_HEIGHT,
+                                    };
+
+                                    let get_dest_for_stack = |loc, take_count| -> Rect {
                                         let stack = hand.stack_at(loc).unwrap();
                                         let remaining_count = stack.len() - take_count;
 
                                         let stack_pos = metrics.stack_pos(loc);
 
-                                        let stack_pos = match loc {
-                                            ni_ty::StackLocation::Lake(_) => stack_pos,
+                                        match loc {
+                                            ni_ty::StackLocation::Lake(_) => {
+                                                let stack_pos =
+                                                    if let ni_ty::StackLocation::Lake(_) = loc {
+                                                        if player_loc.inverted {
+                                                            (-stack_pos.0 - CARD_WIDTH, stack_pos.1)
+                                                        } else {
+                                                            stack_pos
+                                                        }
+                                                    } else {
+                                                        stack_pos
+                                                    };
+
+                                                get_dest_for_card_pos(stack_pos)
+                                            }
                                             ni_ty::StackLocation::Player(_, loc) => match loc {
-                                                ni_ty::PlayerStackLocation::Nerts => (
-                                                    stack_pos.0
-                                                        + (remaining_count as f32)
-                                                            * NERTS_STACK_SPACING,
-                                                    stack_pos.1,
-                                                ),
-                                                ni_ty::PlayerStackLocation::Tableau(_) => (
-                                                    stack_pos.0,
-                                                    stack_pos.1
-                                                        + (remaining_count as f32)
-                                                            * VERTICAL_STACK_SPACING,
-                                                ),
-                                                ni_ty::PlayerStackLocation::Stock => stack_pos,
+                                                ni_ty::PlayerStackLocation::Nerts => {
+                                                    get_dest_for_card_pos((
+                                                        stack_pos.0
+                                                            + (remaining_count as f32)
+                                                                * NERTS_STACK_SPACING,
+                                                        stack_pos.1,
+                                                    ))
+                                                }
+                                                ni_ty::PlayerStackLocation::Tableau(_) => {
+                                                    if take_count < 2 {
+                                                        get_dest_for_card_pos((
+                                                            stack_pos.0,
+                                                            stack_pos.1
+                                                                + (remaining_count as f32)
+                                                                    * VERTICAL_STACK_SPACING,
+                                                        ))
+                                                    } else {
+                                                        Rect {
+                                                            x: stack_pos.0,
+                                                            y: stack_pos.1
+                                                                + (remaining_count as f32)
+                                                                    * VERTICAL_STACK_SPACING,
+                                                            width: CARD_WIDTH,
+                                                            height: VERTICAL_STACK_SPACING,
+                                                        }
+                                                    }
+                                                }
+                                                ni_ty::PlayerStackLocation::Stock => {
+                                                    get_dest_for_card_pos(stack_pos)
+                                                }
                                                 ni_ty::PlayerStackLocation::Waste => {
                                                     let remaining_visible =
                                                         stack.len().min(3) - take_count;
-                                                    (
+                                                    get_dest_for_card_pos((
                                                         stack_pos.0
                                                             + (remaining_visible as f32)
                                                                 * HORIZONTAL_STACK_SPACING,
                                                         stack_pos.1,
-                                                    )
+                                                    ))
                                                 }
                                             },
-                                        };
-
-                                        let stack_pos = if let ni_ty::StackLocation::Lake(_) = loc {
-                                            if player_loc.inverted {
-                                                (-stack_pos.0 - CARD_WIDTH, stack_pos.1)
-                                            } else {
-                                                stack_pos
-                                            }
-                                        } else {
-                                            stack_pos
-                                        };
-
-                                        (
-                                            stack_pos.0 + CARD_WIDTH / 2.0,
-                                            stack_pos.1 + CARD_HEIGHT / 2.0,
-                                        )
+                                        }
                                     };
 
-                                    let reached = |a: (f32, f32), b: (f32, f32)| {
-                                        a.0 > b.0 - CARD_WIDTH / 2.0
-                                            && a.0 < b.0 + CARD_WIDTH / 2.0
-                                            && a.1 > b.1 - CARD_HEIGHT / 2.0
-                                            && a.1 < b.1 + CARD_HEIGHT / 2.0
+                                    let reached = |a: (f32, f32), b: Rect| {
+                                        a.0 > b.x
+                                            && a.0 < b.x + b.width
+                                            && a.1 > b.y
+                                            && a.1 < b.y + b.height
                                     };
 
                                     if let PlayerController::Bot {
@@ -317,7 +353,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                                                             Some(current_plan)
                                                         } else {
-                                                            *target = dest;
+                                                            *target = dest.center();
 
                                                             None
                                                         }
@@ -344,7 +380,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                                                                     Some(current_plan)
                                                                 } else {
-                                                                    *target = dest;
+                                                                    *target = dest.center();
                                                                     None
                                                                 }
                                                             } else {
@@ -370,8 +406,8 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                         },
                                                                         count,
                                                                         offset: (
-                                                                            mouse_state.position.0 - (dest.0 - CARD_WIDTH / 2.0),
-                                                                            mouse_state.position.1 - (dest.1 - CARD_HEIGHT / 2.0),
+                                                                            mouse_state.position.0 - dest.x,
+                                                                            mouse_state.position.1 - dest.y
                                                                         ),
                                                                         top_card: from_stack.cards()[from_stack.len() - usize::from(count)].card,
                                                                     });
@@ -379,12 +415,13 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                         *target =
                                                                             get_dest_for_stack(
                                                                                 to, 0,
-                                                                            );
+                                                                            )
+                                                                            .center();
                                                                     } else {
                                                                         *plan = None;
                                                                     }
                                                                 } else {
-                                                                    *target = dest;
+                                                                    *target = dest.center();
                                                                 }
 
                                                                 None
@@ -405,7 +442,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
 
                                                                 Some(current_plan)
                                                             } else {
-                                                                *target = dest;
+                                                                *target = dest.center();
 
                                                                 None
                                                             }
