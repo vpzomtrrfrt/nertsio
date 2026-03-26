@@ -3,6 +3,7 @@ use crate::storage::Storage;
 use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
+use rand::Rng;
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
 
@@ -13,6 +14,7 @@ const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
 pub enum PracticeSpec {
     Invert,
     Distribute,
+    Stack,
 }
 
 impl PracticeSpec {
@@ -72,12 +74,116 @@ impl PracticeSpec {
                 )],
                 ni_ty::Suit::iter().map(|_| lake_stack()).collect(),
             ),
+            PracticeSpec::Stack => ni_ty::HandState::raw(
+                vec![ni_ty::HandPlayerState::raw(
+                    0,
+                    ni_ty::Stack::from_list_unordered({
+                        let mut stacks: Vec<_> = ni_ty::Suit::iter()
+                            .map(|suit| {
+                                vec![ni_ty::CardInstance::new(
+                                    ni_ty::Card::new(suit, ni_ty::Rank::KING),
+                                    0,
+                                )]
+                            })
+                            .collect();
+
+                        let stacks_count = 5;
+
+                        let mut rng = rand::thread_rng();
+
+                        rand::seq::SliceRandom::shuffle(&mut stacks[..], &mut rng);
+
+                        let mut rank = ni_ty::Rank::KING.decrement().unwrap();
+
+                        loop {
+                            let mut next_red: bool = rng.gen();
+                            let mut next_black: bool = rng.gen();
+
+                            for stack in &mut stacks {
+                                let last = stack.last().unwrap();
+                                let new_suit = match last.card.suit.color() {
+                                    ni_ty::Color::Red => {
+                                        next_black = !next_black;
+
+                                        if next_black {
+                                            ni_ty::Suit::Clubs
+                                        } else {
+                                            ni_ty::Suit::Spades
+                                        }
+                                    }
+                                    ni_ty::Color::Black => {
+                                        next_red = !next_red;
+
+                                        if next_red {
+                                            ni_ty::Suit::Diamonds
+                                        } else {
+                                            ni_ty::Suit::Hearts
+                                        }
+                                    }
+                                };
+
+                                stack.push(ni_ty::CardInstance::new(
+                                    ni_ty::Card::new(new_suit, rank),
+                                    0,
+                                ));
+                            }
+
+                            match rank.decrement() {
+                                Some(value) => {
+                                    rank = value;
+                                }
+                                None => {
+                                    break;
+                                }
+                            }
+                        }
+
+                        let mut nerts_cards = Vec::new();
+
+                        while !stacks.is_empty() {
+                            let idx = rng.gen_range(0..stacks.len());
+
+                            let current_stacks_count = stacks.len();
+
+                            let stack = stacks.get_mut(idx).unwrap();
+                            if current_stacks_count < stacks_count && stack.len() > 1 {
+                                let split_idx = rng.gen_range(0..stack.len());
+
+                                let after = stack.split_off(split_idx + 1);
+
+                                nerts_cards.push(stack.pop().unwrap());
+
+                                if stack.is_empty() {
+                                    stacks.swap_remove(idx);
+                                }
+
+                                if !after.is_empty() {
+                                    stacks.push(after);
+                                }
+                            } else {
+                                nerts_cards.push(stack.pop().unwrap());
+                                if stack.is_empty() {
+                                    stacks.swap_remove(idx);
+                                }
+                            }
+                        }
+
+                        nerts_cards
+                    }),
+                    ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                    ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                    (0..5)
+                        .map(|_| ni_ty::Stack::new(ni_ty::Ordering::AlternatingDown, false))
+                        .collect(),
+                )],
+                vec![],
+            ),
         }
     }
 
     pub fn is_done(&self, hand: &ni_ty::HandState) -> bool {
         match self {
-            PracticeSpec::Invert | PracticeSpec::Distribute => {
+            PracticeSpec::Invert | PracticeSpec::Distribute | PracticeSpec::Stack => {
                 hand.players()[0].nerts_stack().is_empty()
             }
         }
@@ -115,7 +221,9 @@ impl super::ViewImpl for PracticeHandView {
             hand,
             match self.spec {
                 PracticeSpec::Invert => ni_ty::Rank::COUNT.into(),
-                PracticeSpec::Distribute => usize::from(ni_ty::Rank::COUNT) * 4,
+                PracticeSpec::Distribute | PracticeSpec::Stack => {
+                    usize::from(ni_ty::Rank::COUNT) * 4
+                }
             },
         );
 

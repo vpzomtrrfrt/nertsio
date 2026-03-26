@@ -54,7 +54,12 @@ impl HandMetrics {
     }
 
     pub fn lake_width(&self) -> f32 {
-        ((self.lake_stacks as f32) * CARD_WIDTH) + ((self.lake_stacks - 1) as f32) * LAKE_SPACING
+        if self.lake_stacks == 0 {
+            0.0
+        } else {
+            ((self.lake_stacks as f32) * CARD_WIDTH)
+                + ((self.lake_stacks - 1) as f32) * LAKE_SPACING
+        }
     }
 
     pub fn min_side_player_count(&self) -> usize {
