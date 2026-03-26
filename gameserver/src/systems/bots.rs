@@ -179,6 +179,72 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                 }
 
                                                 if new_plan.is_none() {
+                                                    let src_stack = hand_player.waste_stack();
+
+                                                    if let Some(src_card) = src_stack.last() {
+                                                        if let Some(nerts_stack_top) =
+                                                            hand_player.nerts_stack().last()
+                                                        {
+                                                            for (i, dest_stack) in hand_player
+                                                                .tableau_stacks()
+                                                                .iter()
+                                                                .enumerate()
+                                                            {
+                                                                if dest_stack.can_add(*src_card)
+                                                                    && dest_stack.ordering().allows(
+                                                                        src_card.card,
+                                                                        nerts_stack_top.card,
+                                                                    )
+                                                                {
+                                                                    new_plan = Some(ni_ty::HandAction::Move {
+                                                                        from: ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Waste),
+                                                                        to: ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8)),
+                                                                        count: 1,
+                                                                    }.into());
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+
+                                                        if new_plan.is_none() {
+                                                            'outer: for (i, dest_stack) in
+                                                                hand_player
+                                                                    .tableau_stacks()
+                                                                    .iter()
+                                                                    .enumerate()
+                                                            {
+                                                                if dest_stack.can_add(*src_card) {
+                                                                    for purpose_stack in
+                                                                        hand_player.tableau_stacks()
+                                                                    {
+                                                                        if let Some(
+                                                                            purpose_bottom,
+                                                                        ) = purpose_stack.first()
+                                                                        {
+                                                                            if dest_stack
+                                                                                .ordering()
+                                                                                .allows(
+                                                                                    src_card.card,
+                                                                                    purpose_bottom
+                                                                                        .card,
+                                                                                )
+                                                                            {
+                                                                                new_plan = Some(ni_ty::HandAction::Move {
+                                                                                    from: ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Waste),
+                                                                                    to: ni_ty::StackLocation::Player(idx as u8, ni_ty::PlayerStackLocation::Tableau(i as u8)),
+                                                                                    count: 1,
+                                                                                }.into());
+                                                                                break 'outer;
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if new_plan.is_none() {
                                                     if !hand_player.stock_stack().is_empty() {
                                                         new_plan = Some(
                                                             ni_ty::HandAction::FlipStock.into(),

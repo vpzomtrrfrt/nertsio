@@ -170,6 +170,14 @@ impl Stack {
         }
     }
 
+    pub fn ordering(&self) -> &Ordering {
+        &self.ordering
+    }
+
+    pub fn first(&self) -> Option<&CardInstance> {
+        self.cards.first()
+    }
+
     pub fn last(&self) -> Option<&CardInstance> {
         self.cards.last()
     }
