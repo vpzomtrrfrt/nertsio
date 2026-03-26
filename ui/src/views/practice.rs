@@ -528,15 +528,22 @@ impl Default for PracticeSetupView {
 }
 
 impl super::ViewImpl for PracticeSetupView {
-    fn tick(mut self, _ctx: &mut super::GameContext) -> super::View {
+    fn tick(mut self, ctx: &mut super::GameContext) -> super::View {
         let mut do_start = false;
+        let mut do_leave = false;
 
         mq::clear_background(super::BACKGROUND_COLOR);
 
         egui_macroquad::ui(|egui_ctx| {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none())
+                .frame(egui::Frame::none().inner_margin(egui::Margin::same(super::SCREEN_MARGIN)))
                 .show(egui_ctx, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
+                        if ui.button("Leave").clicked() {
+                            do_leave = true;
+                        }
+                    });
+
                     let ui_screen_width = mq::screen_width() / egui_ctx.zoom_factor();
                     let ui_screen_height = mq::screen_height() / egui_ctx.zoom_factor();
 
@@ -572,7 +579,11 @@ impl super::ViewImpl for PracticeSetupView {
 
         egui_macroquad::draw();
 
-        if do_start {
+        do_leave = do_leave || mq::is_key_pressed(mq::KeyCode::Escape);
+
+        if do_leave {
+            super::MainMenuView::init(ctx).into()
+        } else if do_start {
             PracticeHandView::new(self.spec).into()
         } else {
             self.into()
