@@ -7,5 +7,6 @@ build_gameserver:
       buildctl-daemonless.sh build \
         --frontend dockerfile.v0 \
         --local context=. \
-        --opt filename=docker/gameserver.Dockerfile \
+        --local dockerfile=. \
+        --opt filename=./docker/gameserver.Dockerfile \
         --output type=image,name=$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG,push=true
