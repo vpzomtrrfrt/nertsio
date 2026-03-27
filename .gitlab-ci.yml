@@ -1,27 +1,39 @@
 build_gameserver:
   stage: build
-  image: docker:20
-  services:
-    - docker:20-dind
+  image: moby/buildkit:v0.28.1-rootless
+
+  variables:
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
 
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - mkdir -p ~/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
 
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG -t $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA -f docker/gameserver.Dockerfile .
-    - docker push $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA
-    - docker push $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG
+    - |
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 \
+        --local context=. \
+        --local dockerfile=. \
+        --opt filename=./docker/gameserver.Dockerfile \
+        --output type=image,\"name=$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG,$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA\",push=true
 
 build_overseer:
   stage: build
-  image: docker:20
-  services:
-    - docker:20-dind
+  image: moby/buildkit:v0.28.1-rootless
+
+  variables:
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
 
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - mkdir -p ~/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
 
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_REF_SLUG -t $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_SHA -f docker/overseer.Dockerfile .
-    - docker push $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_SHA
-    - docker push $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_REF_SLUG
+    - |
+      buildctl-daemonless.sh build \
+        --frontend dockerfile.v0 \
+        --local context=. \
+        --local dockerfile=. \
+        --opt filename=./docker/overseer.Dockerfile \
+        --output type=image,\"name=$CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_REF_SLUG,$CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_SHA\",push=true
