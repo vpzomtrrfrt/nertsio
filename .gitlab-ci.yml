@@ -2,6 +2,9 @@ build_gameserver:
   stage: build
   image: moby/buildkit:v0.28.1-rootless
 
+  variables:
+    BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
+
   script:
     - |
       buildctl-daemonless.sh build \
