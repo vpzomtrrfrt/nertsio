@@ -16,4 +16,4 @@ build_gameserver:
         --local context=. \
         --local dockerfile=. \
         --opt filename=./docker/gameserver.Dockerfile \
-        --output type=image,name=$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG,push=true
+        --output type=image,name=\"$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG,$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA\",push=true
