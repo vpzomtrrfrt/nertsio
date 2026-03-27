@@ -1,27 +1,11 @@
 build_gameserver:
   stage: build
-  image: docker:20
-  services:
-    - docker:20-dind
-
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  image: moby/buildkit:v0.28.1-rootless
 
   script:
-    - docker build -t $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG -t $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA -f docker/gameserver.Dockerfile .
-    - docker push $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_SHA
-    - docker push $CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG
-
-build_overseer:
-  stage: build
-  image: docker:20
-  services:
-    - docker:20-dind
-
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-
-  script:
-    - docker build -t $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_REF_SLUG -t $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_SHA -f docker/overseer.Dockerfile .
-    - docker push $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_SHA
-    - docker push $CI_REGISTRY_IMAGE/overseer:$CI_COMMIT_REF_SLUG
+    - |
+      buildctl-daemonless.sh build
+        --frontend dockerfile.v0
+        --local context=.
+        --local dockerfile=docker/gameserver.Dockerfile
+        --output type=image,name=$CI_REGISTRY_IMAGE/gameserver:$CI_COMMIT_REF_SLUG,push=true
