@@ -5,6 +5,10 @@ build_gameserver:
   variables:
     BUILDKITD_FLAGS: --oci-worker-no-process-sandbox
 
+  before_script:
+    - mkdir -p ~/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > ~/.docker/config.json
+
   script:
     - |
       buildctl-daemonless.sh build \
