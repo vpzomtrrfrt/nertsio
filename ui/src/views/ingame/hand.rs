@@ -1,9 +1,10 @@
-use super::ingame_hand_common;
+use crate::views;
 use crate::ConnectionMessage;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
 use nertsio_ui_metrics as metrics;
 use std::borrow::Cow;
+use views::ingame_hand_common;
 
 const START_ANIMATION_SPEED: f32 = 1500.0;
 
@@ -23,8 +24,8 @@ impl IngameHandView {
     }
 }
 
-impl super::ViewImpl for IngameHandView {
-    fn tick(mut self, ctx: &mut super::GameContext) -> super::View {
+impl views::ViewImpl for IngameHandView {
+    fn tick(mut self, ctx: &mut views::GameContext) -> views::View {
         let interaction_enabled = !self.show_settings;
 
         let mut lock = ctx.game_info_mutex.lock().unwrap();
@@ -128,7 +129,7 @@ impl super::ViewImpl for IngameHandView {
                     };
                 let _ = real_hand_state;
 
-                mq::clear_background(super::BACKGROUND_COLOR);
+                mq::clear_background(views::BACKGROUND_COLOR);
 
                 let hand_scores = pred_hand_state.calculate_hand_scores(&shared.game.settings);
 
@@ -402,7 +403,7 @@ impl super::ViewImpl for IngameHandView {
                     egui::CentralPanel::default()
                         .frame(
                             egui::Frame::none()
-                                .inner_margin(egui::Margin::same(super::SCREEN_MARGIN)),
+                                .inner_margin(egui::Margin::same(views::SCREEN_MARGIN)),
                         )
                         .show(egui_ctx, |ui| {
                             if !interaction_enabled {
@@ -476,7 +477,7 @@ impl super::ViewImpl for IngameHandView {
                         });
 
                     if self.show_settings {
-                        if !super::render_settings_window(egui_ctx, ctx) {
+                        if !views::render_settings_window(egui_ctx, ctx) {
                             self.show_settings = false;
                         }
                     }
@@ -490,14 +491,14 @@ impl super::ViewImpl for IngameHandView {
 
                 self.into()
             } else {
-                super::IngameNeutralView {
+                views::IngameNeutralView {
                     show_settings: self.show_settings,
                     editing_game_settings: None,
                 }
                 .into()
             }
         } else {
-            super::View::from_connection_state(&lock, ctx)
+            views::View::from_connection_state(&lock, ctx)
         }
     }
 }
