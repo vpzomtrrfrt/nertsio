@@ -192,7 +192,16 @@ impl PracticeSpec {
                             ni_ty::Stack::new(ni_ty::Ordering::Any, false),
                             ni_ty::Stack::from_list_unordered({
                                 let mut result: Vec<_> = ni_ty::gen_player_deck(0).collect();
-                                rand::seq::SliceRandom::shuffle(&mut result[..], &mut rng);
+
+                                let count = result.len() / 2;
+
+                                rand::seq::SliceRandom::partial_shuffle(
+                                    &mut result[..],
+                                    &mut rng,
+                                    count,
+                                );
+                                result.truncate(count);
+
                                 result
                             }),
                             ni_ty::Stack::new(ni_ty::Ordering::Any, false),
