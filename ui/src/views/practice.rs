@@ -3,18 +3,22 @@ use crate::storage::Storage;
 use macroquad::logging as log;
 use macroquad::prelude as mq;
 use nertsio_types as ni_ty;
+use nertsio_ui_metrics as metrics;
 use rand::Rng;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use strum::IntoEnumIterator;
 
 const START_ANIMATION_SPEED: f32 = 5000.0;
 const START_TIME: std::time::Duration = std::time::Duration::from_secs(3);
+
+const FEEDER_SPEED: f32 = 65.0;
 
 #[derive(Clone, Copy, PartialEq, Debug, strum_macros::EnumIter, strum_macros::Display)]
 pub enum PracticeSpec {
     Invert,
     Distribute,
     Stack,
+    Flip,
 }
 
 impl PracticeSpec {
@@ -178,6 +182,44 @@ impl PracticeSpec {
                 )],
                 vec![],
             ),
+            PracticeSpec::Flip => {
+                let mut rng = rand::thread_rng();
+
+                ni_ty::HandState::raw(
+                    vec![
+                        ni_ty::HandPlayerState::raw(
+                            0,
+                            ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                            ni_ty::Stack::from_list_unordered({
+                                let mut result: Vec<_> = ni_ty::gen_player_deck(0).collect();
+                                rand::seq::SliceRandom::shuffle(&mut result[..], &mut rng);
+                                result
+                            }),
+                            ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                            vec![],
+                        ),
+                        ni_ty::HandPlayerState::raw(
+                            1,
+                            ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                            ni_ty::Stack::from_list_unordered({
+                                let mut result: Vec<_> = ni_ty::Suit::iter()
+                                    .map(|suit| {
+                                        ni_ty::CardInstance::new(
+                                            ni_ty::Card::new(suit, ni_ty::Rank::ACE),
+                                            1,
+                                        )
+                                    })
+                                    .collect();
+                                rand::seq::SliceRandom::shuffle(&mut result[..], &mut rng);
+                                result
+                            }),
+                            ni_ty::Stack::new(ni_ty::Ordering::Any, false),
+                            vec![],
+                        ),
+                    ],
+                    (0..(2 * 4)).map(|_| lake_stack()).collect(),
+                )
+            }
         }
     }
 
@@ -186,8 +228,34 @@ impl PracticeSpec {
             PracticeSpec::Invert | PracticeSpec::Distribute | PracticeSpec::Stack => {
                 hand.players()[0].nerts_stack().is_empty()
             }
+            PracticeSpec::Flip => {
+                let player = &hand.players()[0];
+
+                player.stock_stack().is_empty() && player.waste_stack().is_empty()
+            }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum FeederPlan {
+    Summon,
+    Retract {
+        from: ni_ty::StackLocation,
+        count: u8,
+    },
+    HandAction(ni_ty::HandAction),
+}
+
+enum FeederPlanStep {
+    Move(nertsio_ui_metrics::Rect),
+    Action(FeederPlan),
+    None,
+}
+
+struct FeederState {
+    mouse: ni_ty::MouseState,
+    plan: Option<FeederPlan>,
 }
 
 pub struct PracticeHandView {
@@ -197,6 +265,7 @@ pub struct PracticeHandView {
     start_animation_progress: f32,
     started_at: web_time::Instant,
     time: f32,
+    feeder_state: FeederState,
 }
 
 impl PracticeHandView {
@@ -208,6 +277,13 @@ impl PracticeHandView {
             start_animation_progress: 0.0,
             started_at: web_time::Instant::now(),
             time: 0.0,
+            feeder_state: FeederState {
+                mouse: ni_ty::MouseState {
+                    position: (0.0, 0.0),
+                    held: None,
+                },
+                plan: None,
+            },
         }
     }
 }
@@ -224,6 +300,7 @@ impl super::ViewImpl for PracticeHandView {
                 PracticeSpec::Distribute | PracticeSpec::Stack => {
                     usize::from(ni_ty::Rank::COUNT) * 4
                 }
+                PracticeSpec::Flip => 0,
             },
         );
 
@@ -246,8 +323,6 @@ impl super::ViewImpl for PracticeHandView {
         let started = hand.started;
 
         mq::clear_background(super::BACKGROUND_COLOR);
-
-        let location = metrics.player_loc(0);
 
         let mouse_pos = mq::mouse_position();
         let mouse_pos = mq::Vec2::new(
@@ -292,18 +367,37 @@ impl super::ViewImpl for PracticeHandView {
 
         let held_info = my_held_state.as_ref().map(|x| x.info);
 
+        let my_location = metrics.player_loc(0);
+
         ingame_hand_common::draw_player_stacks(
             ctx,
             &hand.players()[0],
             &held_info,
             &metrics,
-            location,
+            my_location,
             screen_center.into(),
             started,
             self.start_animation_progress,
         );
 
-        let my_location = metrics.player_loc(0);
+        if let Some(feeder_player) = hand.players().get(1) {
+            let location = metrics.player_loc(1);
+
+            if location.inverted != my_location.inverted {
+                mq::set_camera(&inverted_camera);
+            }
+
+            ingame_hand_common::draw_player_stacks(
+                ctx,
+                feeder_player,
+                &self.feeder_state.mouse.held,
+                &metrics,
+                location,
+                screen_center.into(),
+                started,
+                self.start_animation_progress,
+            );
+        }
 
         if my_location.inverted {
             mq::set_camera(&inverted_camera);
@@ -315,7 +409,23 @@ impl super::ViewImpl for PracticeHandView {
             let loc = ni_ty::StackLocation::Lake(i as u16);
             let pos = mq::Vec2::from(metrics.stack_pos(loc)) + mq::Vec2::from(screen_center);
 
-            match stack.cards().last() {
+            let cards = stack.cards();
+            let cards = match self.feeder_state.mouse.held {
+                Some(ni_ty::HeldInfo {
+                    src: ni_ty::StackLocation::Lake(stack_idx),
+                    count,
+                    ..
+                }) => {
+                    if i == usize::from(stack_idx) && usize::from(count) <= cards.len() {
+                        &cards[..(cards.len() - usize::from(count))]
+                    } else {
+                        cards
+                    }
+                }
+                _ => cards,
+            };
+
+            match cards.last() {
                 None => {
                     ctx.draw_placeholder(pos[0], pos[1]);
                 }
@@ -323,6 +433,33 @@ impl super::ViewImpl for PracticeHandView {
                     ctx.draw_card(card.card, pos[0], pos[1]);
                 }
             }
+        }
+
+        if let Some(feeder_player) = hand.players().get(1) {
+            let location = metrics.player_loc(1);
+
+            if location.inverted != my_location.inverted {
+                mq::set_camera(&inverted_camera);
+            } else {
+                mq::set_camera(&normal_camera);
+            }
+
+            if let Some(held) = self.feeder_state.mouse.held {
+                ingame_hand_common::draw_held_state(
+                    ctx,
+                    &hand,
+                    1,
+                    held,
+                    mq::Vec2::from(screen_center)
+                        + mq::Vec2::from(self.feeder_state.mouse.position),
+                );
+            }
+
+            ctx.draw_cursor(
+                screen_center.0 + self.feeder_state.mouse.position.0 - 1.0,
+                screen_center.1 + self.feeder_state.mouse.position.1 - 1.0,
+                feeder_player.player_id(),
+            );
         }
 
         mq::set_camera(&normal_camera);
@@ -381,6 +518,454 @@ impl super::ViewImpl for PracticeHandView {
             self.time += mq::get_frame_time();
         } else {
             self.start_animation_progress += mq::get_frame_time() * START_ANIMATION_SPEED;
+        }
+
+        match self.spec {
+            PracticeSpec::Flip => {
+                let stock_pos = metrics.stack_pos(ni_ty::StackLocation::Player(
+                    1,
+                    ni_ty::PlayerStackLocation::Stock,
+                ));
+
+                if self.feeder_state.plan.is_none() {
+                    if !(mq::Rect {
+                        x: stock_pos.0,
+                        y: stock_pos.1,
+                        w: metrics::CARD_WIDTH,
+                        h: metrics::CARD_HEIGHT,
+                    })
+                    .contains(self.feeder_state.mouse.position.into())
+                    {
+                        log::debug!("setting plan to summon");
+                        self.feeder_state.plan = Some(FeederPlan::Summon);
+                    } else if started {
+                        let my_player = &hand.players()[0];
+
+                        let my_available_cards: HashSet<_> = (
+                            // cards on the next pass
+                            my_player
+                                .waste_stack()
+                                .cards()
+                                .iter()
+                                .chain(my_player.stock_stack().cards().iter().rev())
+                                .skip(2)
+                                .step_by(3)
+                        )
+                        .chain(
+                            // remaining cards on this pass
+                            my_player
+                                .stock_stack()
+                                .cards()
+                                .iter()
+                                .rev()
+                                .skip(2)
+                                .step_by(3),
+                        )
+                        .chain(
+                            // currently available waste card
+                            my_player.waste_stack().last(),
+                        )
+                        .chain(
+                            // last card in stock
+                            my_player.stock_stack().first(),
+                        )
+                        .map(|x| x.card)
+                        .collect();
+
+                        let mut playable_count = my_available_cards
+                            .iter()
+                            .filter(|x| x.rank == ni_ty::Rank::ACE)
+                            .count();
+                        for stack in hand.lake_stacks() {
+                            if let Some(last) = stack.last() {
+                                if let Some(next) = last.card.rank.increment() {
+                                    if my_available_cards
+                                        .contains(&ni_ty::Card::new(last.card.suit, next))
+                                    {
+                                        playable_count += 1;
+                                    }
+                                }
+                            }
+                        }
+
+                        log::debug!(
+                            "feeder: {}/{} playable",
+                            playable_count,
+                            my_available_cards.len()
+                        );
+
+                        if playable_count < my_available_cards.len() / 3 || playable_count < 2 {
+                            // not enough playable, feed one
+
+                            let mut aces = hand.players()[1]
+                                .stock_stack()
+                                .cards()
+                                .iter()
+                                .filter(|x| x.card.rank == ni_ty::Rank::ACE);
+
+                            let current_tops: HashSet<_> = hand
+                                .lake_stacks()
+                                .iter()
+                                .filter_map(|x| x.last().map(|x| x.card))
+                                .collect();
+
+                            let has_empty = hand.lake_stacks().iter().any(|x| x.is_empty());
+
+                            {
+                                let mut state: Vec<_> = hand
+                                    .lake_stacks()
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(idx, x)| match x.last() {
+                                        Some(x) => x.card.rank.increment().and_then(|rank| {
+                                            rank.increment().map(|following_rank| {
+                                                (
+                                                    idx,
+                                                    ni_ty::Card::new(x.card.suit, rank),
+                                                    ni_ty::Card::new(x.card.suit, following_rank),
+                                                )
+                                            })
+                                        }),
+                                        None => aces.next().map(|card| {
+                                            (
+                                                idx,
+                                                card.card,
+                                                ni_ty::Card::new(
+                                                    card.card.suit,
+                                                    card.card.rank.increment().unwrap(),
+                                                ),
+                                            )
+                                        }),
+                                    })
+                                    .filter(|(_, card, _)| !my_available_cards.contains(card))
+                                    .collect();
+
+                                let feeder_player = hand.players_mut().get_mut(1).unwrap();
+
+                                'outer: while !state.is_empty() {
+                                    log::debug!("new state: {:?}", state);
+
+                                    for (target_idx, play_card, target_card) in &state {
+                                        if my_available_cards.contains(target_card) {
+                                            // remove used aces
+                                            let stock_stack = feeder_player.stock_stack_mut();
+                                            if let Some(idx) = stock_stack
+                                                .cards()
+                                                .iter()
+                                                .position(|x| x.card == *play_card)
+                                            {
+                                                stock_stack.cards_mut().swap_remove(idx);
+                                            }
+
+                                            feeder_player
+                                                .waste_stack_mut()
+                                                .try_add(ni_ty::CardInstance::new(*play_card, 1))
+                                                .unwrap();
+
+                                            log::debug!(
+                                                "summoned a card {:?} {:?}",
+                                                play_card,
+                                                target_card
+                                            );
+
+                                            self.feeder_state.plan = Some(FeederPlan::HandAction(
+                                                ni_ty::HandAction::Move {
+                                                    from: ni_ty::StackLocation::Player(
+                                                        1,
+                                                        ni_ty::PlayerStackLocation::Waste,
+                                                    ),
+                                                    count: 1,
+                                                    to: ni_ty::StackLocation::Lake(
+                                                        *target_idx as u16,
+                                                    ),
+                                                },
+                                            ));
+
+                                            break 'outer;
+                                        }
+                                    }
+
+                                    state = state
+                                        .into_iter()
+                                        .filter_map(|(idx, play_card, target_card)| {
+                                            // don't try to bring up a duplicate stack
+                                            if match target_card.rank.decrement() {
+                                                Some(next_rank) => current_tops.contains(
+                                                    &ni_ty::Card::new(target_card.suit, next_rank),
+                                                ),
+                                                None => false,
+                                            } {
+                                                None
+                                            } else {
+                                                target_card.rank.increment().map(|rank| {
+                                                    (
+                                                        idx,
+                                                        play_card,
+                                                        ni_ty::Card {
+                                                            suit: target_card.suit,
+                                                            rank,
+                                                        },
+                                                    )
+                                                })
+                                            }
+                                        })
+                                        .collect();
+                                }
+                            }
+
+                            if self.feeder_state.plan.is_none() {
+                                // No plan to add cards, maybe remove some
+
+                                let mut state: Vec<_> = hand
+                                    .lake_stacks()
+                                    .iter()
+                                    .enumerate()
+                                    .filter_map(|(idx, stack)| {
+                                        stack.last().map(|card| (idx, 1, card.card))
+                                    })
+                                    .collect();
+
+                                'outer: while !state.is_empty() {
+                                    for (target_idx, take_count, target_card) in &state {
+                                        if my_available_cards.contains(target_card) {
+                                            // Removing these would allow the player to play a card
+
+                                            // Make sure the current state isn't *also* needed for
+                                            // an available card
+                                            if let Some(next_rank) = target_card.rank.increment() {
+                                                if my_available_cards.contains(&ni_ty::Card::new(
+                                                    target_card.suit,
+                                                    next_rank,
+                                                )) {
+                                                    continue;
+                                                }
+                                            }
+
+                                            // Make sure the resulting stack isn't a duplicate
+                                            if match target_card.rank.decrement() {
+                                                Some(prev_rank) => current_tops.contains(
+                                                    &ni_ty::Card::new(target_card.suit, prev_rank),
+                                                ),
+                                                None => has_empty,
+                                            } {
+                                                continue;
+                                            }
+
+                                            self.feeder_state.plan = Some(FeederPlan::Retract {
+                                                from: ni_ty::StackLocation::Lake(
+                                                    *target_idx as u16,
+                                                ),
+                                                count: *take_count,
+                                            });
+
+                                            break 'outer;
+                                        }
+                                    }
+
+                                    state = state
+                                        .into_iter()
+                                        .filter_map(|(target_idx, take_count, target_card)| {
+                                            target_card.rank.decrement().map(|rank| {
+                                                (
+                                                    target_idx,
+                                                    take_count + 1,
+                                                    ni_ty::Card::new(target_card.suit, rank),
+                                                )
+                                            })
+                                        })
+                                        .collect();
+                                }
+                            }
+
+                            match self.feeder_state.plan {
+                                Some(plan) => {
+                                    log::debug!("Got a plan: {:?}", plan);
+                                }
+                                None => {
+                                    log::debug!("still no plan");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if hand.players().len() > 1 {
+            let feeder_loc = metrics.player_loc(1);
+
+            if let Some(plan) = self.feeder_state.plan {
+                let get_dest_for_stack = |loc, take_count| {
+                    metrics.get_dest_for_stack(&hand, loc, take_count, feeder_loc.inverted)
+                };
+
+                let result = match plan {
+                    FeederPlan::Retract { from, count } => {
+                        if self.feeder_state.mouse.held.is_some() {
+                            let dest = get_dest_for_stack(
+                                ni_ty::StackLocation::Player(1, ni_ty::PlayerStackLocation::Stock),
+                                0,
+                            );
+
+                            if dest.contains(self.feeder_state.mouse.position) {
+                                FeederPlanStep::Action(plan)
+                            } else {
+                                FeederPlanStep::Move(dest)
+                            }
+                        } else {
+                            let dest = get_dest_for_stack(from, count.into());
+
+                            if dest.contains(self.feeder_state.mouse.position) {
+                                let from_stack = hand.stack_at(from).unwrap();
+                                if from_stack.len() >= count.into() {
+                                    self.feeder_state.mouse.held = Some(ni_ty::HeldInfo {
+                                        src: from,
+                                        count,
+                                        offset: (
+                                            self.feeder_state.mouse.position.0 - dest.x,
+                                            self.feeder_state.mouse.position.1 - dest.y,
+                                        ),
+                                        top_card: from_stack.cards()
+                                            [from_stack.len() - usize::from(count)]
+                                        .card,
+                                    });
+
+                                    FeederPlanStep::Move(get_dest_for_stack(
+                                        ni_ty::StackLocation::Player(
+                                            1,
+                                            ni_ty::PlayerStackLocation::Stock,
+                                        ),
+                                        0,
+                                    ))
+                                } else {
+                                    log::debug!("clearing plan because it's impossible");
+                                    self.feeder_state.plan = None;
+                                    FeederPlanStep::None
+                                }
+                            } else {
+                                FeederPlanStep::Move(dest)
+                            }
+                        }
+                    }
+                    FeederPlan::Summon
+                    | FeederPlan::HandAction(
+                        ni_ty::HandAction::FlipStock | ni_ty::HandAction::ReturnStock,
+                    ) => {
+                        let dest = get_dest_for_stack(
+                            ni_ty::StackLocation::Player(1, ni_ty::PlayerStackLocation::Stock),
+                            0,
+                        );
+
+                        if dest.contains(self.feeder_state.mouse.position) {
+                            FeederPlanStep::Action(plan)
+                        } else {
+                            FeederPlanStep::Move(dest)
+                        }
+                    }
+                    FeederPlan::HandAction(ni_ty::HandAction::Move { from, count, to }) => {
+                        if self.feeder_state.mouse.held.is_some() {
+                            log::debug!("there is a held");
+                            let dest = get_dest_for_stack(to, 0);
+
+                            if dest.contains(self.feeder_state.mouse.position) {
+                                log::debug!("got to destination");
+                                FeederPlanStep::Action(plan)
+                            } else {
+                                FeederPlanStep::Move(dest)
+                            }
+                        } else {
+                            let dest = get_dest_for_stack(from, count.into());
+
+                            if dest.contains(self.feeder_state.mouse.position) {
+                                log::debug!("got to source");
+                                let from_stack = hand.stack_at(from).unwrap();
+                                if from_stack.len() >= count.into() {
+                                    self.feeder_state.mouse.held = Some(ni_ty::HeldInfo {
+                                        src: from,
+                                        count,
+                                        offset: (
+                                            self.feeder_state.mouse.position.0 - dest.x,
+                                            self.feeder_state.mouse.position.1 - dest.y,
+                                        ),
+                                        top_card: from_stack.cards()
+                                            [from_stack.len() - usize::from(count)]
+                                        .card,
+                                    });
+
+                                    FeederPlanStep::Move(get_dest_for_stack(to, 0))
+                                } else {
+                                    log::debug!("clearing plan because it's impossible");
+                                    self.feeder_state.plan = None;
+                                    FeederPlanStep::None
+                                }
+                            } else {
+                                FeederPlanStep::Move(dest)
+                            }
+                        }
+                    }
+                    FeederPlan::HandAction(_) => unimplemented!(),
+                };
+
+                match result {
+                    FeederPlanStep::Move(target_rect) => {
+                        let target = target_rect.center();
+
+                        let dist = ((self.feeder_state.mouse.position.0 - target.0).powf(2.0)
+                            + (self.feeder_state.mouse.position.1 - target.1).powf(2.0))
+                        .sqrt();
+
+                        let speed = FEEDER_SPEED * mq::get_frame_time() * 20.0;
+
+                        if dist <= speed {
+                            self.feeder_state.mouse.position = target;
+                        } else {
+                            self.feeder_state.mouse.position = (
+                                self.feeder_state.mouse.position.0
+                                    + (target.0 - self.feeder_state.mouse.position.0) / dist
+                                        * speed,
+                                self.feeder_state.mouse.position.1
+                                    + (target.1 - self.feeder_state.mouse.position.1) / dist
+                                        * speed,
+                            );
+                        }
+                    }
+                    FeederPlanStep::Action(action) => {
+                        log::debug!("clearing plan because it's done");
+                        self.feeder_state.plan = None;
+
+                        match action {
+                            FeederPlan::Summon => {
+                                // Summon isn't a real action, and will be handled elsewhere.
+                                // Do nothing.
+                            }
+                            FeederPlan::Retract { from, count } => {
+                                let stack = hand.stack_at_mut(from).unwrap();
+                                if let Some(cards) = stack.pop_many(count.into()) {
+                                    let target = hand
+                                        .stack_at_mut(ni_ty::StackLocation::Player(
+                                            1,
+                                            ni_ty::PlayerStackLocation::Stock,
+                                        ))
+                                        .unwrap();
+                                    for card in cards {
+                                        target.try_add(card).unwrap();
+                                    }
+                                }
+                                self.feeder_state.mouse.held = None;
+                            }
+                            FeederPlan::HandAction(action) => {
+                                // Attempt to apply the action
+                                let _ = hand.apply(Some(1), action);
+
+                                // Regardless of whether it succeeded, clear out held info
+                                self.feeder_state.mouse.held = None;
+                            }
+                        }
+                    }
+                    FeederPlanStep::None => {}
+                }
+            }
         }
 
         if do_leave {

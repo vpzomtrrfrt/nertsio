@@ -204,7 +204,7 @@ impl views::ViewImpl for IngameHandView {
                             .as_ref()
                             .and_then(|state| state.inner.held)
                             .and_then(|held| {
-                                let stack = player_state.stack_at(held.src);
+                                let stack = pred_hand_state.stack_at(held.src);
                                 if let Some(stack) = stack {
                                     let cards = stack.cards();
                                     if (held.count as usize) <= cards.len() {
@@ -333,7 +333,6 @@ impl views::ViewImpl for IngameHandView {
                 }
 
                 if let Some(my_player_idx) = self.my_player_idx {
-                    let my_player_state = &pred_hand_state.players()[my_player_idx];
                     if let Some(ref held) = hand_extra.my_held_state {
                         ingame_hand_common::draw_held_state(
                             ctx,
@@ -343,7 +342,7 @@ impl views::ViewImpl for IngameHandView {
                             mouse_pos,
                         );
 
-                        let stack = my_player_state.stack_at(held.info.src);
+                        let stack = pred_hand_state.stack_at(held.info.src);
                         if let Some(stack) = stack {
                             let stack_cards = stack.cards();
                             if stack_cards.len() < held.info.count as usize {

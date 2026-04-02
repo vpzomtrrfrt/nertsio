@@ -2,20 +2,6 @@ use crate::{BotPlan, GlobalState, PlayerController};
 use nertsio_types as ni_ty;
 use std::sync::Arc;
 
-#[derive(Clone, Copy)]
-struct Rect {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl Rect {
-    pub fn center(self) -> (f32, f32) {
-        (self.x + self.width / 2.0, self.y + self.height / 2.0)
-    }
-}
-
 pub(crate) async fn run(global_state: Arc<GlobalState>) {
     futures_util::join!(
         {
@@ -25,10 +11,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                 let mut interval = tokio::time::interval(std::time::Duration::from_millis(100));
 
                 loop {
-                    use nertsio_ui_metrics::{
-                        CARD_HEIGHT, CARD_WIDTH, HORIZONTAL_STACK_SPACING, NERTS_STACK_SPACING,
-                        VERTICAL_STACK_SPACING,
-                    };
+                    use nertsio_ui_metrics::CARD_WIDTH;
 
                     interval.tick().await;
 
@@ -52,86 +35,6 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                 if let Some(player) = game.players.get_mut(&hand_player.player_id())
                                 {
                                     let player_loc = metrics.player_loc(idx);
-
-                                    let get_dest_for_card_pos = |pos: (f32, f32)| Rect {
-                                        x: pos.0,
-                                        y: pos.1,
-                                        width: CARD_WIDTH,
-                                        height: CARD_HEIGHT,
-                                    };
-
-                                    let get_dest_for_stack = |loc, take_count| -> Rect {
-                                        let stack = hand.stack_at(loc).unwrap();
-                                        let remaining_count = stack.len() - take_count;
-
-                                        let stack_pos = metrics.stack_pos(loc);
-
-                                        match loc {
-                                            ni_ty::StackLocation::Lake(_) => {
-                                                let stack_pos =
-                                                    if let ni_ty::StackLocation::Lake(_) = loc {
-                                                        if player_loc.inverted {
-                                                            (-stack_pos.0 - CARD_WIDTH, stack_pos.1)
-                                                        } else {
-                                                            stack_pos
-                                                        }
-                                                    } else {
-                                                        stack_pos
-                                                    };
-
-                                                get_dest_for_card_pos(stack_pos)
-                                            }
-                                            ni_ty::StackLocation::Player(_, loc) => match loc {
-                                                ni_ty::PlayerStackLocation::Nerts => {
-                                                    get_dest_for_card_pos((
-                                                        stack_pos.0
-                                                            + (remaining_count as f32)
-                                                                * NERTS_STACK_SPACING,
-                                                        stack_pos.1,
-                                                    ))
-                                                }
-                                                ni_ty::PlayerStackLocation::Tableau(_) => {
-                                                    if take_count < 2 {
-                                                        get_dest_for_card_pos((
-                                                            stack_pos.0,
-                                                            stack_pos.1
-                                                                + (remaining_count as f32)
-                                                                    * VERTICAL_STACK_SPACING,
-                                                        ))
-                                                    } else {
-                                                        Rect {
-                                                            x: stack_pos.0,
-                                                            y: stack_pos.1
-                                                                + (remaining_count as f32)
-                                                                    * VERTICAL_STACK_SPACING,
-                                                            width: CARD_WIDTH,
-                                                            height: VERTICAL_STACK_SPACING,
-                                                        }
-                                                    }
-                                                }
-                                                ni_ty::PlayerStackLocation::Stock => {
-                                                    get_dest_for_card_pos(stack_pos)
-                                                }
-                                                ni_ty::PlayerStackLocation::Waste => {
-                                                    let remaining_visible =
-                                                        stack.len().min(3) - take_count;
-                                                    get_dest_for_card_pos((
-                                                        stack_pos.0
-                                                            + (remaining_visible as f32)
-                                                                * HORIZONTAL_STACK_SPACING,
-                                                        stack_pos.1,
-                                                    ))
-                                                }
-                                            },
-                                        }
-                                    };
-
-                                    let reached = |a: (f32, f32), b: Rect| {
-                                        a.0 > b.x
-                                            && a.0 < b.x + b.width
-                                            && a.1 > b.y
-                                            && a.1 < b.y + b.height
-                                    };
 
                                     if let PlayerController::Bot {
                                         ref mut plan,
@@ -348,9 +251,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                     count,
                                                                     ..
                                                                 } => {
-                                                                    ni_ty::StackLocation::Player(
-                                                                        idx as u8, held.src,
-                                                                    ) != from
+                                                                    held.src != from
                                                                         || held.count != count
                                                                 }
                                                             }
@@ -365,6 +266,15 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                 None
                                             }
                                             Some(current_plan) => {
+                                                let get_dest_for_stack = |loc, take_count| {
+                                                    metrics.get_dest_for_stack(
+                                                        &hand,
+                                                        loc,
+                                                        take_count,
+                                                        player_loc.inverted,
+                                                    )
+                                                };
+
                                                 let current_plan = current_plan.clone();
                                                 match current_plan {
                                                     BotPlan::CallNerts => {
@@ -375,7 +285,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                             ),
                                                             0,
                                                         );
-                                                        if reached(mouse_state.position, dest) {
+                                                        if dest.contains(mouse_state.position) {
                                                             *plan = None;
 
                                                             Some(current_plan)
@@ -399,10 +309,9 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                             if mouse_state.held.is_some() {
                                                                 let dest =
                                                                     get_dest_for_stack(to, 0);
-                                                                if reached(
-                                                                    mouse_state.position,
-                                                                    dest,
-                                                                ) {
+                                                                if dest
+                                                                    .contains(mouse_state.position)
+                                                                {
                                                                     *plan = None;
 
                                                                     Some(current_plan)
@@ -427,10 +336,9 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                     from,
                                                                     count.into(),
                                                                 );
-                                                                if reached(
-                                                                    mouse_state.position,
-                                                                    dest,
-                                                                ) {
+                                                                if dest
+                                                                    .contains(mouse_state.position)
+                                                                {
                                                                     let from_stack = hand
                                                                         .stack_at(from)
                                                                         .unwrap();
@@ -438,11 +346,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                         >= count.into()
                                                                     {
                                                                         mouse_state.held = Some(ni_ty::HeldInfo {
-                                                                        src: if let ni_ty::StackLocation::Player(_, loc) = from {
-                                                                            loc
-                                                                        } else {
-                                                                            panic!("somehow picked up a non-player stack")
-                                                                        },
+                                                                        src: from,
                                                                         count,
                                                                         offset: (
                                                                             mouse_state.position.0 - dest.x,
@@ -476,7 +380,7 @@ pub(crate) async fn run(global_state: Arc<GlobalState>) {
                                                                 0,
                                                             );
 
-                                                            if reached(mouse_state.position, dest) {
+                                                            if dest.contains(mouse_state.position) {
                                                                 *plan = None;
 
                                                                 Some(current_plan)

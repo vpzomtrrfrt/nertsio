@@ -74,7 +74,7 @@ pub fn draw_player_stacks(
             if !matches!(
                 held_info,
                 Some(ni_ty::HeldInfo {
-                    src: ni_ty::PlayerStackLocation::Nerts,
+                    src: ni_ty::StackLocation::Player(_, ni_ty::PlayerStackLocation::Nerts),
                     ..
                 })
             ) {
@@ -112,7 +112,7 @@ pub fn draw_player_stacks(
     for (i, stack) in player_state.tableau_stacks().iter().enumerate() {
         let cards = stack.cards();
         let cards = if let Some(ni_ty::HeldInfo {
-            src: ni_ty::PlayerStackLocation::Tableau(stack_idx),
+            src: ni_ty::StackLocation::Player(_, ni_ty::PlayerStackLocation::Tableau(stack_idx)),
             count,
             ..
         }) = held_info
@@ -159,7 +159,7 @@ pub fn draw_player_stacks(
         waste_cards
     };
     let waste_cards = if let Some(ni_ty::HeldInfo {
-        src: ni_ty::PlayerStackLocation::Waste,
+        src: ni_ty::StackLocation::Player(_, ni_ty::PlayerStackLocation::Waste),
         count,
         ..
     }) = held_info
@@ -185,11 +185,11 @@ pub fn draw_player_stacks(
 pub fn draw_held_state(
     ctx: &super::GameContext,
     hand: &ni_ty::HandState,
-    player_idx: usize,
+    _player_idx: usize,
     held: ni_ty::HeldInfo,
     mouse_pos: mq::Vec2,
 ) {
-    let stack = hand.players()[player_idx].stack_at(held.src);
+    let stack = hand.stack_at(held.src);
     if let Some(stack) = stack {
         let cards = stack.cards();
         if (held.count as usize) <= cards.len() {
@@ -457,7 +457,7 @@ pub fn handle_input(
                         // count & offset should also be guaranteed
 
                         if let Some(found) = found.first() {
-                            if let ni_ty::StackLocation::Player(_, src) = found.location {
+                            if let ni_ty::StackLocation::Player(_, _) = found.location {
                                 let stack = hand.stack_at(found.location).unwrap();
                                 if !stack.is_empty() {
                                     let (count, offset) = found.pickup_details.unwrap();
@@ -466,7 +466,7 @@ pub fn handle_input(
 
                                     *my_held_state = Some(crate::HeldState {
                                         info: ni_ty::HeldInfo {
-                                            src,
+                                            src: found.location,
                                             count: count as u8,
                                             offset: (offset[0], offset[1]),
                                             top_card,
@@ -486,7 +486,7 @@ pub fn handle_input(
                     }
                 }
                 Some(ref mut held) => {
-                    let src_loc = ni_ty::StackLocation::Player(my_player_idx_u8, held.info.src);
+                    let src_loc = held.info.src;
 
                     let found = {
                         let mut found = found;

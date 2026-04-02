@@ -234,6 +234,10 @@ impl Stack {
         &self.cards
     }
 
+    pub fn cards_mut(&mut self) -> &mut Vec<CardInstance> {
+        &mut self.cards
+    }
+
     pub fn shuffle(&mut self, rng: &mut impl rand::Rng) {
         use rand::seq::SliceRandom;
         self.cards.shuffle(rng);
@@ -282,13 +286,7 @@ impl HandPlayerState {
         tableau_stacks_count: usize,
         nerts_stack_size: usize,
     ) -> Self {
-        let mut cards: Vec<_> = FULL_DECK
-            .iter()
-            .map(|card| CardInstance {
-                owner_id: hand_player_id,
-                card: *card,
-            })
-            .collect();
+        let mut cards: Vec<_> = gen_player_deck(hand_player_id).collect();
         rand::seq::SliceRandom::shuffle(&mut cards[..], &mut rand::thread_rng());
 
         let nerts_stack =
@@ -358,6 +356,13 @@ impl HandPlayerState {
     }
     pub fn player_id(&self) -> u8 {
         self.player_id
+    }
+
+    pub fn stock_stack_mut(&mut self) -> &mut Stack {
+        &mut self.stock_stack
+    }
+    pub fn waste_stack_mut(&mut self) -> &mut Stack {
+        &mut self.waste_stack
     }
 }
 
@@ -541,7 +546,7 @@ impl HandState {
                             .unwrap()
                             .pop_many(count as usize)
                         {
-                            let dest_stack = self.mut_stack_at(to).unwrap();
+                            let dest_stack = self.stack_at_mut(to).unwrap();
                             for card in cards {
                                 dest_stack.try_add(card).unwrap();
                             }
@@ -577,7 +582,11 @@ impl HandState {
         &self.lake_stacks
     }
 
-    fn mut_stack_at(&mut self, loc: StackLocation) -> Option<&mut Stack> {
+    pub fn players_mut(&mut self) -> &mut Vec<HandPlayerState> {
+        &mut self.players
+    }
+
+    pub fn stack_at_mut(&mut self, loc: StackLocation) -> Option<&mut Stack> {
         match loc {
             StackLocation::Lake(idx) => self.lake_stacks.get_mut(idx as usize),
             StackLocation::Player(player, loc) => self
@@ -646,7 +655,7 @@ pub struct GameState {
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct HeldInfo {
-    pub src: PlayerStackLocation,
+    pub src: StackLocation,
     pub count: u8,
     pub offset: (f32, f32),
     pub top_card: Card,
@@ -667,6 +676,13 @@ pub struct MenuMouseState {
 pub struct RegionInfo<'a> {
     pub id: Cow<'a, str>,
     pub name: Cow<'a, str>,
+}
+
+pub fn gen_player_deck(owner_id: u8) -> impl Iterator<Item = CardInstance> {
+    FULL_DECK.iter().map(move |card| CardInstance {
+        owner_id,
+        card: *card,
+    })
 }
 
 #[test]
