@@ -65,7 +65,7 @@ pub fn draw_player_stacks(
         if started {
             for i in 0..(player_state.nerts_stack().len() - 1) {
                 ctx.draw_back(
-                    nerts_stack_pos[0] + (i as f32) * metrics::NERTS_STACK_SPACING,
+                    nerts_stack_pos[0] + (i as f32) * metrics.nerts_stack_spacing(),
                     nerts_stack_pos[1],
                     player_state.player_id(),
                 );
@@ -82,14 +82,14 @@ pub fn draw_player_stacks(
                     card.card,
                     nerts_stack_pos[0]
                         + ((player_state.nerts_stack().len() - 1) as f32)
-                            * metrics::NERTS_STACK_SPACING,
+                            * metrics.nerts_stack_spacing(),
                     nerts_stack_pos[1],
                 );
             }
         } else {
             for i in 0..player_state.nerts_stack().len() {
                 let target_pos = mq::Vec2::new(
-                    nerts_stack_pos[0] + (i as f32) * metrics::NERTS_STACK_SPACING,
+                    nerts_stack_pos[0] + (i as f32) * metrics.nerts_stack_spacing(),
                     nerts_stack_pos[1],
                 );
 
@@ -328,7 +328,7 @@ pub fn handle_input(
                     mq::Rect::new(
                         nerts_stack_pos[0]
                             + ((player_state.nerts_stack().len() - 1) as f32)
-                                * metrics::NERTS_STACK_SPACING,
+                                * metrics.nerts_stack_spacing(),
                         nerts_stack_pos[1],
                         metrics::CARD_WIDTH,
                         metrics::CARD_HEIGHT,
@@ -344,7 +344,7 @@ pub fn handle_input(
                                 - mq::Vec2::new(
                                     nerts_stack_pos[0]
                                         + ((player_state.nerts_stack().len() - 1) as f32)
-                                            * metrics::NERTS_STACK_SPACING,
+                                            * metrics.nerts_stack_spacing(),
                                     nerts_stack_pos[1],
                                 ),
                         )

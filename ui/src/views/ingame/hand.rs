@@ -444,7 +444,7 @@ impl views::ViewImpl for IngameHandView {
                                         egui::Rect {
                                             min: egui::Pos2::new(position[0], position[1]),
                                             max: egui::Pos2::new(
-                                                position[0] + 12.0 * metrics::NERTS_STACK_SPACING + metrics::CARD_WIDTH,
+                                                position[0] + 12.0 * metrics.nerts_stack_spacing() + metrics::CARD_WIDTH,
                                                 position[1] + metrics::CARD_HEIGHT,
                                             )
                                         } * ui_scale,

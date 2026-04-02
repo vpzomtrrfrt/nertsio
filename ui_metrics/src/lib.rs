@@ -3,7 +3,8 @@ use nertsio_types as ni_ty;
 pub const CARD_WIDTH: f32 = 90.0;
 pub const CARD_HEIGHT: f32 = 135.0;
 pub const LAKE_SPACING: f32 = 10.0;
-pub const NERTS_STACK_SPACING: f32 = 10.0;
+pub const MAX_NERTS_STACK_SPACING: f32 = 10.0;
+pub const MIN_NERTS_STACK_SPACING: f32 = 3.0;
 pub const HORIZONTAL_STACK_SPACING: f32 = 15.0;
 pub const VERTICAL_STACK_SPACING: f32 = 25.0;
 pub const PLAYER_SPACING: f32 = 20.0;
@@ -67,14 +68,32 @@ impl HandMetrics {
         }
     }
 
-    pub fn player_hand_width(&self) -> f32 {
-        ((if self.nerts_pile_size > 0 {
-            NERTS_STACK_SPACING * (self.nerts_pile_size - 1) as f32 + CARD_WIDTH
+    pub fn left_side_width(&self) -> f32 {
+        let bottom = CARD_WIDTH + 10.0 + HORIZONTAL_STACK_SPACING * 2.0 + CARD_WIDTH;
+
+        if self.nerts_pile_size > 0 {
+            (self.nerts_stack_spacing() * (self.nerts_pile_size - 1) as f32 + CARD_WIDTH)
+                .max(bottom)
         } else {
-            0.0
-        }) + if self.tableau_stacks == 0 { 0.0 } else { 20.0 }
-            + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0))
-            .max(CARD_WIDTH + 10.0 + VERTICAL_STACK_SPACING * 2.0 + CARD_WIDTH)
+            bottom
+        }
+    }
+
+    pub fn nerts_stack_spacing(&self) -> f32 {
+        if self.nerts_pile_size > 0 {
+            ((CARD_WIDTH + 10.0 + HORIZONTAL_STACK_SPACING * 2.0 + CARD_WIDTH - CARD_WIDTH
+                + HORIZONTAL_STACK_SPACING)
+                / (self.nerts_pile_size - 1) as f32)
+                .min(MAX_NERTS_STACK_SPACING)
+        } else {
+            MIN_NERTS_STACK_SPACING
+        }
+    }
+
+    pub fn player_hand_width(&self) -> f32 {
+        self.left_side_width()
+            + if self.tableau_stacks == 0 { 0.0 } else { 20.0 }
+            + (self.tableau_stacks as f32) * (CARD_WIDTH + 10.0)
     }
 
     pub fn lake_width(&self) -> f32 {
@@ -159,11 +178,7 @@ impl HandMetrics {
         match loc {
             ni_ty::PlayerStackLocation::Nerts => position,
             ni_ty::PlayerStackLocation::Tableau(idx) => (
-                position.0
-                    + NERTS_STACK_SPACING * (self.nerts_pile_size - 1) as f32
-                    + CARD_WIDTH
-                    + 20.0
-                    + (idx as f32) * (CARD_WIDTH + 10.0),
+                position.0 + self.left_side_width() + 20.0 + (idx as f32) * (CARD_WIDTH + 10.0),
                 position.1,
             ),
             ni_ty::PlayerStackLocation::Stock => (position.0, position.1 + CARD_HEIGHT + 10.0),
@@ -211,7 +226,7 @@ impl HandMetrics {
             }
             ni_ty::StackLocation::Player(_, loc) => match loc {
                 ni_ty::PlayerStackLocation::Nerts => get_dest_for_card_pos((
-                    stack_pos.0 + (remaining_count as f32) * NERTS_STACK_SPACING,
+                    stack_pos.0 + (remaining_count as f32) * self.nerts_stack_spacing(),
                     stack_pos.1,
                 )),
                 ni_ty::PlayerStackLocation::Tableau(_) => {
