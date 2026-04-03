@@ -688,8 +688,14 @@ async fn main() {
                     .gameservers
                     .write()
                     .unwrap()
-                    .retain(|_key, value| {
-                        value.0.elapsed() < nertsio_common::GAMESERVER_PUBLISH_TIMEOUT
+                    .retain(|key, value| {
+                        if value.0.elapsed() < nertsio_common::GAMESERVER_PUBLISH_TIMEOUT {
+                            true
+                        } else {
+                            println!("Lost connection to server {}", key);
+
+                            false
+                        }
                     });
             }
 
