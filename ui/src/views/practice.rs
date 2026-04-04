@@ -821,7 +821,11 @@ impl super::ViewImpl for PracticeHandView {
                             );
 
                             if dest.contains(self.feeder_state.mouse.position) {
-                                FeederPlanStep::Action(plan)
+                                log::debug!("clearing plan because it's done");
+                                self.feeder_state.plan = None;
+                                self.feeder_state.mouse.held = None;
+
+                                FeederPlanStep::None
                             } else {
                                 FeederPlanStep::Move(dest)
                             }
@@ -829,26 +833,38 @@ impl super::ViewImpl for PracticeHandView {
                             let dest = get_dest_for_stack(from, count.into());
 
                             if dest.contains(self.feeder_state.mouse.position) {
-                                let from_stack = hand.stack_at(from).unwrap();
-                                if from_stack.len() >= count.into() {
+                                let from_stack = hand.stack_at_mut(from).unwrap();
+                                if let Some(cards) = from_stack.pop_many(count.into()) {
+                                    let top_card = cards[0].card;
+
+                                    // Move cards immediately to make interactions make sense for
+                                    // the player
+
+                                    let target = ni_ty::StackLocation::Player(
+                                        1,
+                                        ni_ty::PlayerStackLocation::Stock,
+                                    );
+
+                                    let target_stack = hand.stack_at_mut(target).unwrap();
+                                    for card in cards {
+                                        target_stack.try_add(card).unwrap();
+                                    }
+
                                     self.feeder_state.mouse.held = Some(ni_ty::HeldInfo {
-                                        src: from,
+                                        src: target,
                                         count,
                                         offset: (
                                             self.feeder_state.mouse.position.0 - dest.x,
                                             self.feeder_state.mouse.position.1 - dest.y,
                                         ),
-                                        top_card: from_stack.cards()
-                                            [from_stack.len() - usize::from(count)]
-                                        .card,
+                                        top_card,
                                     });
 
-                                    FeederPlanStep::Move(get_dest_for_stack(
-                                        ni_ty::StackLocation::Player(
-                                            1,
-                                            ni_ty::PlayerStackLocation::Stock,
-                                        ),
+                                    FeederPlanStep::Move(metrics.get_dest_for_stack(
+                                        hand,
+                                        target,
                                         0,
+                                        feeder_loc.inverted,
                                     ))
                                 } else {
                                     log::debug!("clearing plan because it's impossible");
