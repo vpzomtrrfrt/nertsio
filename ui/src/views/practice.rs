@@ -191,9 +191,11 @@ impl PracticeSpec {
                             0,
                             ni_ty::Stack::new(ni_ty::Ordering::Any, false),
                             ni_ty::Stack::from_list_unordered({
-                                let mut result: Vec<_> = ni_ty::gen_player_deck(0).collect();
+                                let mut result: Vec<_> = ni_ty::gen_player_deck(0)
+                                    .filter(|x| x.card.rank != ni_ty::Rank::ACE)
+                                    .collect();
 
-                                let count = result.len() / 2;
+                                let count = 32;
 
                                 rand::seq::SliceRandom::partial_shuffle(
                                     &mut result[..],
@@ -212,6 +214,7 @@ impl PracticeSpec {
                             ni_ty::Stack::new(ni_ty::Ordering::Any, false),
                             ni_ty::Stack::from_list_unordered({
                                 let mut result: Vec<_> = ni_ty::Suit::iter()
+                                    .chain(ni_ty::Suit::iter())
                                     .map(|suit| {
                                         ni_ty::CardInstance::new(
                                             ni_ty::Card::new(suit, ni_ty::Rank::ACE),
