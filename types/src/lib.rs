@@ -532,6 +532,10 @@ impl HandState {
 
                             println!("src_stack = {:?}", src_stack);
 
+                            if src_stack.len() < count as usize {
+                                return Err(CannotApplyAction);
+                            }
+
                             let first_card = &src_stack.cards()[src_stack.len() - count as usize];
 
                             let dest_stack = self.stack_at(to).ok_or(CannotApplyAction)?;
@@ -688,4 +692,61 @@ pub fn gen_player_deck(owner_id: u8) -> impl Iterator<Item = CardInstance> {
 #[test]
 fn sanity_test() {
     assert_eq!(FULL_DECK.len(), 52);
+}
+
+#[test]
+fn move_from_nerts_to_tableau() {
+    let mut hand = HandState::raw(
+        vec![{
+            let mut player = HandPlayerState::generate(0, 0, 0, 2);
+            player
+                .tableau_stacks
+                .push(Stack::new(Ordering::AlternatingDown, false));
+            player
+        }],
+        vec![],
+    );
+
+    let card = *hand.players()[0].nerts_stack().last().unwrap();
+
+    assert!(matches!(
+        hand.apply(
+            Some(0),
+            HandAction::Move {
+                from: StackLocation::Player(0, PlayerStackLocation::Nerts),
+                count: 1,
+                to: StackLocation::Player(0, PlayerStackLocation::Tableau(0))
+            }
+        ),
+        Ok(())
+    ));
+
+    assert_ne!(hand.players()[0].nerts_stack().last().unwrap(), &card);
+    assert_eq!(hand.players()[0].tableau_stacks()[0].last().unwrap(), &card);
+}
+
+#[test]
+fn no_move_from_nothing() {
+    let mut hand = HandState::raw(
+        vec![{
+            let mut player = HandPlayerState::generate(0, 0, 0, 0);
+            player
+                .tableau_stacks
+                .push(Stack::new(Ordering::AlternatingDown, false));
+            player
+        }],
+        vec![],
+    );
+
+    assert!(matches!(
+        hand.apply(
+            Some(0),
+            HandAction::Move {
+                from: StackLocation::Player(0, PlayerStackLocation::Waste),
+                count: 1,
+                to: StackLocation::Player(0, PlayerStackLocation::Tableau(0))
+            }
+        ),
+        Err(CannotApplyAction)
+    ));
 }
